@@ -19,6 +19,7 @@ const BT_GRENADE = 4;
 const BT_PROXIMITYGRENADE = 5;
 
 const ROOT_KEYS = new Set(['schemaVersion', 'turn', 'side', 'selectedUnitId', 'map', 'units']);
+const ROOT_KEYS_V4 = new Set([...ROOT_KEYS, 'eventLog']);
 const MAP_KEYS = new Set(['width', 'height', 'depth']);
 const UNIT_BASE_KEYS = new Set(['id', 'faction', 'originalFaction', 'position']);
 const UNIT_FRIENDLY_V2_KEYS = new Set(['name', 'health', 'timeUnits']);
@@ -34,6 +35,21 @@ const MAX_ACTIONS_PER_HAND = 16;
 const EQUIPMENT_ITEM_KEYS = new Set(['itemType', 'battleType', 'loaded', 'empty', 'primed']);
 const LOADED_KEYS = new Set(['ammoType', 'rounds']);
 const INVENTORY_ENTRY_KEYS = new Set(['slot', 'itemType', 'battleType', 'loaded', 'empty', 'primed']);
+const MAX_EVENT_LOG_EVENTS = 256;
+const MAX_SESSION_ID_LENGTH = 32;
+const EVENT_LOG_KEYS = new Set(['sessionId', 'oldestSeq', 'latestSeq', 'droppedCount', 'events']);
+const EVENT_ENTRY_KEYS = new Set([
+  'seq',
+  'type',
+  'turn',
+  'actorUnitId',
+  'weaponItemType',
+  'actionType',
+  'target',
+  'autoShotIndex',
+]);
+const ALLOWED_EVENT_TYPES = new Set(['weapon_fired']);
+const ALLOWED_WEAPON_FIRE_ACTION_TYPES = new Set(['snap', 'aimed', 'auto', 'launch']);
 
 class ValidationError extends Error {
   constructor(message) {
@@ -371,17 +387,134 @@ function validateUnit(raw, index, schemaVersion = 2) {
   return unit;
 }
 
+function allowedRootKeys(schemaVersion) {
+  if (schemaVersion === 4) return ROOT_KEYS_V4;
+  return ROOT_KEYS;
+}
+
+function validateWeaponFireEvent(raw, index, friendlyUnitIds) {
+  assert(isPlainObject(raw), `eventLog.events[${index}] must be an object`);
+  for (const key of Object.keys(raw)) {
+    if (!EVENT_ENTRY_KEYS.has(key)) {
+      throw new ValidationError(`eventLog.events[${index}] unknown field: ${key}`);
+    }
+  }
+  for (const key of ['seq', 'type', 'turn', 'actorUnitId', 'weaponItemType', 'actionType', 'target']) {
+    assert(Object.prototype.hasOwnProperty.call(raw, key), `eventLog.events[${index}].${key} required`);
+  }
+  const seq = requireInt(raw.seq, `eventLog.events[${index}].seq`, { min: 1, allowNegative: false });
+  const type = requireString(raw.type, `eventLog.events[${index}].type`, { maxLength: 64 });
+  assert(ALLOWED_EVENT_TYPES.has(type), `eventLog.events[${index}].type invalid`);
+  requireInt(raw.turn, `eventLog.events[${index}].turn`, { min: 1, allowNegative: false });
+  const actorUnitId = requireInt(raw.actorUnitId, `eventLog.events[${index}].actorUnitId`);
+  assert(friendlyUnitIds.has(actorUnitId), `eventLog.events[${index}].actorUnitId must be a friendly soldier`);
+  requireString(raw.weaponItemType, `eventLog.events[${index}].weaponItemType`, {
+    maxLength: MAX_ITEM_TYPE_LENGTH,
+  });
+  const actionType = requireString(raw.actionType, `eventLog.events[${index}].actionType`, { maxLength: 16 });
+  assert(
+    ALLOWED_WEAPON_FIRE_ACTION_TYPES.has(actionType),
+    `eventLog.events[${index}].actionType invalid`
+  );
+  const target = normalizePosition(raw.target, `eventLog.events[${index}].target`);
+  let autoShotIndex;
+  if (actionType === 'auto') {
+    assert(
+      Object.prototype.hasOwnProperty.call(raw, 'autoShotIndex'),
+      `eventLog.events[${index}].autoShotIndex required for auto fire`
+    );
+    autoShotIndex = requireInt(raw.autoShotIndex, `eventLog.events[${index}].autoShotIndex`, {
+      min: 1,
+      allowNegative: false,
+    });
+  } else {
+    assert(
+      !Object.prototype.hasOwnProperty.call(raw, 'autoShotIndex'),
+      `eventLog.events[${index}] must not include autoShotIndex`
+    );
+  }
+  return {
+    seq,
+    type,
+    turn: raw.turn,
+    actorUnitId,
+    weaponItemType: raw.weaponItemType,
+    actionType,
+    target,
+    ...(autoShotIndex !== undefined ? { autoShotIndex } : {}),
+  };
+}
+
+function validateEventLog(root, units, schemaVersion) {
+  if (schemaVersion < 4) {
+    assert(!Object.prototype.hasOwnProperty.call(root, 'eventLog'), 'eventLog must not appear before schemaVersion 4');
+    return undefined;
+  }
+  assert(Object.prototype.hasOwnProperty.call(root, 'eventLog'), 'eventLog required');
+  const raw = root.eventLog;
+  assert(isPlainObject(raw), 'eventLog must be a mapping');
+  for (const key of Object.keys(raw)) {
+    if (!EVENT_LOG_KEYS.has(key)) throw new ValidationError(`eventLog unknown field: ${key}`);
+  }
+  for (const key of EVENT_LOG_KEYS) {
+    assert(Object.prototype.hasOwnProperty.call(raw, key), `eventLog.${key} required`);
+  }
+  const sessionId = requireString(raw.sessionId, 'eventLog.sessionId', { maxLength: MAX_SESSION_ID_LENGTH });
+  assert(/^[0-9a-f]{32}$/.test(sessionId), 'eventLog.sessionId must be 32 lowercase hex characters');
+  const oldestSeq = requireInt(raw.oldestSeq, 'eventLog.oldestSeq', { min: 0, allowNegative: false });
+  const latestSeq = requireInt(raw.latestSeq, 'eventLog.latestSeq', { min: 0, allowNegative: false });
+  const droppedCount = requireInt(raw.droppedCount, 'eventLog.droppedCount', { min: 0, allowNegative: false });
+  assert(Array.isArray(raw.events), 'eventLog.events must be an array');
+  assert(raw.events.length <= MAX_EVENT_LOG_EVENTS, 'eventLog.events exceeds 256 event limit');
+  if (raw.events.length === 0) {
+    assert(oldestSeq === 0 && latestSeq === 0, 'eventLog oldestSeq/latestSeq must be 0 when events is empty');
+  } else {
+    assert(oldestSeq >= 1, 'eventLog.oldestSeq must be >= 1 when events is non-empty');
+    assert(latestSeq >= oldestSeq, 'eventLog.latestSeq must be >= oldestSeq');
+  }
+
+  const friendlyUnitIds = new Set(
+    units.filter((unit) => isFriendlyPlayerControlled(unit)).map((unit) => unit.id)
+  );
+  const events = raw.events.map((event, index) => validateWeaponFireEvent(event, index, friendlyUnitIds));
+  let prevSeq = 0;
+  for (let i = 0; i < events.length; i += 1) {
+    const event = events[i];
+    if (i === 0) {
+      assert(event.seq === oldestSeq, 'eventLog.events[0].seq must equal oldestSeq');
+    } else {
+      assert(event.seq === prevSeq + 1, `eventLog.events[${i}].seq must increase by 1`);
+    }
+    prevSeq = event.seq;
+    if (i === events.length - 1) {
+      assert(event.seq === latestSeq, 'eventLog.events last seq must equal latestSeq');
+    }
+  }
+  return {
+    sessionId,
+    oldestSeq,
+    latestSeq,
+    droppedCount,
+    events,
+  };
+}
+
 function parseAndValidate(raw) {
   assert(isPlainObject(raw), 'root must be a mapping');
 
+  assert(Object.prototype.hasOwnProperty.call(raw, 'schemaVersion'), 'schemaVersion required');
+  const schemaVersion = requireInt(raw.schemaVersion, 'schemaVersion', { min: 2, allowNegative: false });
+  assert(
+    schemaVersion === 2 || schemaVersion === 3 || schemaVersion === 4,
+    'schemaVersion must be 2, 3, or 4'
+  );
+
+  const allowedRoot = allowedRootKeys(schemaVersion);
   for (const key of Object.keys(raw)) {
-    if (!ROOT_KEYS.has(key)) {
+    if (!allowedRoot.has(key)) {
       throw new ValidationError(`unknown root field: ${key}`);
     }
   }
-
-  const schemaVersion = requireInt(raw.schemaVersion, 'schemaVersion', { min: 2, allowNegative: false });
-  assert(schemaVersion === 2 || schemaVersion === 3, 'schemaVersion must be 2 or 3');
 
   const turn = requireInt(raw.turn, 'turn', { min: 1, allowNegative: false });
   const side = requireFaction(raw.side, 'side');
@@ -402,6 +535,7 @@ function parseAndValidate(raw) {
 
   assert(Array.isArray(raw.units), 'units must be an array');
   const units = raw.units.map((u, i) => validateUnit(u, i, schemaVersion));
+  const eventLog = validateEventLog(raw, units, schemaVersion);
 
   return {
     schemaVersion,
@@ -410,6 +544,7 @@ function parseAndValidate(raw) {
     selectedUnitId,
     map,
     units,
+    ...(eventLog !== undefined ? { eventLog } : {}),
   };
 }
 
@@ -476,6 +611,7 @@ module.exports = {
   FACTION_NEUTRAL,
   MAX_INPUT_BYTES,
   MAX_INVENTORY_ENTRIES,
+  MAX_EVENT_LOG_EVENTS,
   BT_FIREARM,
   BT_AMMO,
   BT_GRENADE,
@@ -485,6 +621,7 @@ module.exports = {
   validateActionCosts,
   validateUnit,
   validateEquipmentItem,
+  validateEventLog,
   isFriendlyPlayerControlled,
   canonicalTacticalJson,
   computeSnapshotId,
