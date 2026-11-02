@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Secrets and local environment
+.env
+.env.*
+*.pem
+*.key
+
+# Ping worker local state
+.aster-ping-state/
+**/.aster-ping-state/
+
+# Publisher / worker runtime output
+*.log
+logs/
+*.journal.json
+**/journal.json
+
+# Caches and temp files
+.cache/
+.tmp/
+*.tmp
+.DS_Store
+Thumbs.db

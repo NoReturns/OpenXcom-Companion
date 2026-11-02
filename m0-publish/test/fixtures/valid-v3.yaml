@@ -1,0 +1,56 @@
+schemaVersion: 3
+turn: 1
+side: 0
+selectedUnitId: 1
+map:
+  width: 10
+  height: 10
+  depth: 1
+units:
+  - id: 1
+    faction: 0
+    originalFaction: 0
+    position: [1, 2, 0]
+    name: Test Soldier
+    health: 40
+    timeUnits: 50
+    kneeled: false
+    activeHand: STR_RIGHT_HAND
+    hands:
+      right:
+        itemType: STR_RIFLE
+        battleType: 1
+        loaded:
+          ammoType: STR_RIFLE_CLIP
+          rounds: 25
+      left: null
+    inventory: []
+  - id: 2
+    faction: 0
+    originalFaction: 0
+    position: [2, 2, 0]
+    name: Other Soldier
+    health: 35
+    timeUnits: 45
+    kneeled: true
+    activeHand: STR_RIGHT_HAND
+    hands:
+      right:
+        itemType: STR_HEAVY_CANNON
+        battleType: 1
+        loaded:
+          ammoType: STR_HC_AP_AMMO
+          rounds: 4
+      left: null
+    inventory:
+      - slot: STR_BELT
+        itemType: STR_GRENADE
+        battleType: 4
+        primed: false
+      - slot: STR_BACK_PACK
+        itemType: STR_RIFLE_CLIP
+        battleType: 2
+  - id: 1000000
+    faction: 1
+    originalFaction: 1
+    position: [5, 5, 0]

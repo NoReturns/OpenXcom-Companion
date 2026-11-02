@@ -1,0 +1,27 @@
+schemaVersion: 2
+turn: 1
+side: 0
+selectedUnitId: 1
+map:
+  width: 10
+  height: 10
+  depth: 1
+units:
+  - id: 1
+    faction: 0
+    originalFaction: 0
+    position: [1, 2, 0]
+    name: Test Soldier
+    health: 40
+    timeUnits: 50
+  - id: 2
+    faction: 0
+    originalFaction: 0
+    position: [2, 2, 0]
+    name: Other Soldier
+    health: 35
+    timeUnits: 45
+  - id: 1000000
+    faction: 1
+    originalFaction: 1
+    position: [5, 5, 0]
