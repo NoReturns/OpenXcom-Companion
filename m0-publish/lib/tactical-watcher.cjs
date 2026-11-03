@@ -8,6 +8,7 @@ const {
   loadAndValidateSnapshotFromText,
   ValidationError,
 } = require('./tactical-publish.cjs');
+const { sha256HexLower } = require('./briefing-snapshot.cjs');
 
 const DEFAULT_POLL_MS = 1000;
 const DEFAULT_MIN_PUBLISH_MS = 15000;
@@ -117,7 +118,10 @@ class TacticalWatcher {
     }
 
     this.log('Snapshot validated.');
-    this.pendingRelay = buildRelayPayload(tactical, new Date(this.now()).toISOString());
+    const digest = sha256HexLower(Buffer.from(text, 'utf8'));
+    this.pendingRelay = buildRelayPayload(tactical, new Date(this.now()).toISOString(), null, {
+      snapshotSha256: digest,
+    });
     await this._maybeFlushPending(true);
   }
 

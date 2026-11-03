@@ -11,6 +11,14 @@ node_modules/
 .aster-ping-state/
 **/.aster-ping-state/
 
+# Briefing sidecar local state
+.briefing-sidecar-state/
+**/.briefing-sidecar-state/
+
+# Command relay sidecar local state
+.command-relay-sidecar-state/
+**/.command-relay-sidecar-state/
+
 # Publisher / worker runtime output
 *.log
 logs/

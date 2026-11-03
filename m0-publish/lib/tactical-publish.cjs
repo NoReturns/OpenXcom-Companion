@@ -1,6 +1,9 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { decodePackedV1Base64, maxPackedTerrainDataBase64Length } = require('./terrain-packed-v1.cjs');
+const { buildTerrainBrief } = require('./terrain-brief.cjs');
+const { buildCommandBinding } = require('./command-binding.cjs');
 
 const FACTION_PLAYER = 0;
 const FACTION_HOSTILE = 1;
@@ -20,6 +23,17 @@ const BT_PROXIMITYGRENADE = 5;
 
 const ROOT_KEYS = new Set(['schemaVersion', 'turn', 'side', 'selectedUnitId', 'map', 'units']);
 const ROOT_KEYS_V4 = new Set([...ROOT_KEYS, 'eventLog']);
+const ROOT_KEYS_V5 = new Set([...ROOT_KEYS_V4, 'terrain']);
+const TERRAIN_KEYS_VERBOSE = new Set(['memoryNote', 'tiles']);
+const TERRAIN_KEYS_PACKED = new Set(['memoryNote', 'encoding', 'recordCount', 'data']);
+const TERRAIN_TILE_KEYS = new Set(['p', 'disc', 'inLos', 'body', 'west', 'north']);
+const TERRAIN_BODY_KEYS = new Set(['air', 'noFloor', 'elev', 'walkF', 'walkO', 'blockSightF', 'blockSightO']);
+const TERRAIN_WALL_KEYS = new Set(['walk', 'blockSight']);
+const MIN_WALK_TU = 0;
+const MAX_WALK_TU = 255;
+const DISC_WEST = 1;
+const DISC_NORTH = 2;
+const DISC_BODY = 4;
 const MAP_KEYS = new Set(['width', 'height', 'depth']);
 const UNIT_BASE_KEYS = new Set(['id', 'faction', 'originalFaction', 'position']);
 const UNIT_FRIENDLY_V2_KEYS = new Set(['name', 'health', 'timeUnits']);
@@ -66,10 +80,11 @@ function isPlainObject(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function requireInt(value, label, { min = Number.MIN_SAFE_INTEGER, allowNegative = true } = {}) {
+function requireInt(value, label, { min = Number.MIN_SAFE_INTEGER, max = Number.MAX_SAFE_INTEGER, allowNegative = true } = {}) {
   assert(typeof value === 'number' && Number.isInteger(value), `${label} must be an integer`);
   if (!allowNegative) assert(value >= min, `${label} must be >= ${min}`);
   else assert(value >= min, `${label} out of range`);
+  assert(value <= max, `${label} must be <= ${max}`);
   return value;
 }
 
@@ -388,8 +403,166 @@ function validateUnit(raw, index, schemaVersion = 2) {
 }
 
 function allowedRootKeys(schemaVersion) {
+  if (schemaVersion === 5) return ROOT_KEYS_V5;
   if (schemaVersion === 4) return ROOT_KEYS_V4;
   return ROOT_KEYS;
+}
+
+function requireWalkTu(value, label) {
+  return requireInt(value, label, { min: MIN_WALK_TU, max: MAX_WALK_TU, allowNegative: false });
+}
+
+function validateTerrainWall(raw, label) {
+  assert(isPlainObject(raw), `${label} must be a mapping`);
+  for (const key of Object.keys(raw)) {
+    if (!TERRAIN_WALL_KEYS.has(key)) throw new ValidationError(`${label} unknown field: ${key}`);
+  }
+  assert(Object.prototype.hasOwnProperty.call(raw, 'walk'), `${label}.walk required`);
+  requireWalkTu(raw.walk, `${label}.walk`);
+  if (Object.prototype.hasOwnProperty.call(raw, 'blockSight')) {
+    requireBool(raw.blockSight, `${label}.blockSight`);
+  }
+  return raw;
+}
+
+function validateTerrainBody(raw, label) {
+  assert(isPlainObject(raw), `${label} must be a mapping`);
+  for (const key of Object.keys(raw)) {
+    if (!TERRAIN_BODY_KEYS.has(key)) throw new ValidationError(`${label} unknown field: ${key}`);
+  }
+  const hasAir = Object.prototype.hasOwnProperty.call(raw, 'air');
+  if (hasAir) {
+    requireBool(raw.air, `${label}.air`);
+    assert(raw.air === true, `${label}.air must be true when present`);
+    assert(Object.prototype.hasOwnProperty.call(raw, 'noFloor'), `${label}.noFloor required for air`);
+    requireBool(raw.noFloor, `${label}.noFloor`);
+    assert(
+      !Object.prototype.hasOwnProperty.call(raw, 'walkF')
+        && !Object.prototype.hasOwnProperty.call(raw, 'walkO')
+        && !Object.prototype.hasOwnProperty.call(raw, 'elev'),
+      `${label} air tiles must not include walkF, walkO, or elev`
+    );
+    return raw;
+  }
+  assert(Object.prototype.hasOwnProperty.call(raw, 'noFloor'), `${label}.noFloor required`);
+  requireBool(raw.noFloor, `${label}.noFloor`);
+  assert(Object.prototype.hasOwnProperty.call(raw, 'elev'), `${label}.elev required`);
+  requireInt(raw.elev, `${label}.elev`);
+  if (Object.prototype.hasOwnProperty.call(raw, 'walkF')) {
+    requireWalkTu(raw.walkF, `${label}.walkF`);
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'walkO')) {
+    requireWalkTu(raw.walkO, `${label}.walkO`);
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'blockSightF')) {
+    requireBool(raw.blockSightF, `${label}.blockSightF`);
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'blockSightO')) {
+    requireBool(raw.blockSightO, `${label}.blockSightO`);
+  }
+  return raw;
+}
+
+function validateTerrainTile(raw, index, map) {
+  assert(isPlainObject(raw), `terrain.tiles[${index}] must be a mapping`);
+  for (const key of Object.keys(raw)) {
+    if (!TERRAIN_TILE_KEYS.has(key)) throw new ValidationError(`terrain.tiles[${index}] unknown field: ${key}`);
+  }
+  for (const key of ['p', 'disc', 'inLos']) {
+    assert(Object.prototype.hasOwnProperty.call(raw, key), `terrain.tiles[${index}].${key} required`);
+  }
+  const p = normalizePosition(raw.p, `terrain.tiles[${index}].p`);
+  assert(p[0] < map.width, `terrain.tiles[${index}].p.x out of map bounds`);
+  assert(p[1] < map.height, `terrain.tiles[${index}].p.y out of map bounds`);
+  assert(p[2] < map.depth, `terrain.tiles[${index}].p.z out of map bounds`);
+  const disc = requireInt(raw.disc, `terrain.tiles[${index}].disc`, { min: 1, max: 7, allowNegative: false });
+  const inLos = requireBool(raw.inLos, `terrain.tiles[${index}].inLos`);
+  if ((disc & DISC_BODY) !== 0) {
+    assert(Object.prototype.hasOwnProperty.call(raw, 'body'), `terrain.tiles[${index}].body required when disc includes body`);
+    validateTerrainBody(raw.body, `terrain.tiles[${index}].body`);
+  } else {
+    assert(!Object.prototype.hasOwnProperty.call(raw, 'body'), `terrain.tiles[${index}] must not include body without body discovery`);
+  }
+  if ((disc & DISC_WEST) !== 0 && Object.prototype.hasOwnProperty.call(raw, 'west')) {
+    validateTerrainWall(raw.west, `terrain.tiles[${index}].west`);
+  }
+  if ((disc & DISC_NORTH) !== 0 && Object.prototype.hasOwnProperty.call(raw, 'north')) {
+    validateTerrainWall(raw.north, `terrain.tiles[${index}].north`);
+  }
+  if ((disc & DISC_WEST) === 0) {
+    assert(!Object.prototype.hasOwnProperty.call(raw, 'west'), `terrain.tiles[${index}] must not include west without west discovery`);
+  }
+  if ((disc & DISC_NORTH) === 0) {
+    assert(!Object.prototype.hasOwnProperty.call(raw, 'north'), `terrain.tiles[${index}] must not include north without north discovery`);
+  }
+  return { p, disc, inLos, body: raw.body, west: raw.west, north: raw.north };
+}
+
+function validateTerrainVerbose(terrain, map) {
+  assert(isPlainObject(terrain), 'terrain must be a mapping');
+  for (const key of Object.keys(terrain)) {
+    if (!TERRAIN_KEYS_VERBOSE.has(key)) throw new ValidationError(`terrain unknown field: ${key}`);
+  }
+  for (const key of TERRAIN_KEYS_VERBOSE) {
+    assert(Object.prototype.hasOwnProperty.call(terrain, key), `terrain.${key} required`);
+  }
+  const memoryNote = requireString(terrain.memoryNote, 'terrain.memoryNote', { maxLength: 512 });
+  assert(Array.isArray(terrain.tiles), 'terrain.tiles must be an array');
+  const maxTiles = map.width * map.height * map.depth;
+  assert(terrain.tiles.length <= maxTiles, 'terrain.tiles exceeds map volume');
+  const seen = new Set();
+  let prevKey = null;
+  const tiles = terrain.tiles.map((tile, index) => {
+    const parsed = validateTerrainTile(tile, index, map);
+    const key = `${parsed.p[0]},${parsed.p[1]},${parsed.p[2]}`;
+    assert(!seen.has(key), `terrain.tiles[${index}] duplicate position`);
+    seen.add(key);
+    const sortKey = parsed.p[2] * map.width * map.height + parsed.p[1] * map.width + parsed.p[0];
+    if (prevKey !== null) {
+      assert(sortKey >= prevKey, 'terrain.tiles must be sorted by z, then y, then x');
+    }
+    prevKey = sortKey;
+    return parsed;
+  });
+  return { memoryNote, tiles };
+}
+
+function validateTerrainPacked(terrain, map) {
+  assert(isPlainObject(terrain), 'terrain must be a mapping');
+  for (const key of Object.keys(terrain)) {
+    if (!TERRAIN_KEYS_PACKED.has(key)) throw new ValidationError(`terrain unknown field: ${key}`);
+  }
+  for (const key of TERRAIN_KEYS_PACKED) {
+    assert(Object.prototype.hasOwnProperty.call(terrain, key), `terrain.${key} required`);
+  }
+  const memoryNote = requireString(terrain.memoryNote, 'terrain.memoryNote', { maxLength: 512 });
+  const encoding = requireString(terrain.encoding, 'terrain.encoding', { maxLength: 32 });
+  assert(encoding === 'packed-v1', 'terrain.encoding must be packed-v1');
+  const recordCount = requireInt(terrain.recordCount, 'terrain.recordCount', { min: 0, allowNegative: false });
+  const maxDataLength = maxPackedTerrainDataBase64Length(map);
+  const data = requireString(terrain.data, 'terrain.data', { maxLength: maxDataLength });
+  const maxTiles = map.width * map.height * map.depth;
+  assert(recordCount <= maxTiles, 'terrain.recordCount exceeds map volume');
+  decodePackedV1Base64(data, map, { expectedRecordCount: recordCount });
+  return { memoryNote, encoding, recordCount, data };
+}
+
+function validateTerrain(root, map, schemaVersion) {
+  if (schemaVersion < 5) {
+    assert(!Object.prototype.hasOwnProperty.call(root, 'terrain'), 'terrain must not appear before schemaVersion 5');
+    return undefined;
+  }
+  assert(Object.prototype.hasOwnProperty.call(root, 'terrain'), 'terrain required');
+  const terrain = root.terrain;
+  const hasTiles = Object.prototype.hasOwnProperty.call(terrain, 'tiles');
+  const hasPacked = Object.prototype.hasOwnProperty.call(terrain, 'encoding')
+    || Object.prototype.hasOwnProperty.call(terrain, 'recordCount')
+    || Object.prototype.hasOwnProperty.call(terrain, 'data');
+  assert(!(hasTiles && hasPacked), 'terrain.tiles and packed-v1 fields are mutually exclusive');
+  if (hasPacked) {
+    return validateTerrainPacked(terrain, map);
+  }
+  return validateTerrainVerbose(terrain, map);
 }
 
 function validateWeaponFireEvent(raw, index, friendlyUnitIds) {
@@ -505,8 +678,8 @@ function parseAndValidate(raw) {
   assert(Object.prototype.hasOwnProperty.call(raw, 'schemaVersion'), 'schemaVersion required');
   const schemaVersion = requireInt(raw.schemaVersion, 'schemaVersion', { min: 2, allowNegative: false });
   assert(
-    schemaVersion === 2 || schemaVersion === 3 || schemaVersion === 4,
-    'schemaVersion must be 2, 3, or 4'
+    schemaVersion === 2 || schemaVersion === 3 || schemaVersion === 4 || schemaVersion === 5,
+    'schemaVersion must be 2, 3, 4, or 5'
   );
 
   const allowedRoot = allowedRootKeys(schemaVersion);
@@ -536,6 +709,7 @@ function parseAndValidate(raw) {
   assert(Array.isArray(raw.units), 'units must be an array');
   const units = raw.units.map((u, i) => validateUnit(u, i, schemaVersion));
   const eventLog = validateEventLog(raw, units, schemaVersion);
+  const terrain = validateTerrain(raw, map, schemaVersion);
 
   return {
     schemaVersion,
@@ -545,6 +719,7 @@ function parseAndValidate(raw) {
     map,
     units,
     ...(eventLog !== undefined ? { eventLog } : {}),
+    ...(terrain !== undefined ? { terrain } : {}),
   };
 }
 
@@ -570,9 +745,9 @@ function computeSnapshotId(tactical) {
   return crypto.createHash('sha256').update(canonicalTacticalJson(tactical), 'utf8').digest('hex');
 }
 
-function buildRelayPayload(tactical, publishedAt) {
+function buildRelayPayload(tactical, publishedAt, briefingMeta = null, options = {}) {
   const snapshotId = computeSnapshotId(tactical);
-  return {
+  const payload = {
     schema_version: 1,
     type: 'tactical_snapshot',
     snapshot_id: snapshotId,
@@ -584,6 +759,20 @@ function buildRelayPayload(tactical, publishedAt) {
     },
     tactical,
   };
+  if (briefingMeta) {
+    payload.request_id = briefingMeta.request_id;
+    payload.session_id = briefingMeta.session_id;
+    payload.turn = briefingMeta.turn;
+  }
+  if (options.terrainBrief !== undefined && options.terrainBrief !== null) {
+    payload.terrainBrief = options.terrainBrief;
+  } else if (tactical.schemaVersion >= 5 && tactical.terrain) {
+    payload.terrainBrief = buildTerrainBrief(tactical);
+  }
+  if (options.snapshotSha256 && tactical.eventLog && typeof tactical.eventLog.sessionId === 'string') {
+    payload.commandBinding = buildCommandBinding(tactical, options.snapshotSha256);
+  }
+  return payload;
 }
 
 function parseYamlDocument(yaml, text) {
@@ -622,9 +811,11 @@ module.exports = {
   validateUnit,
   validateEquipmentItem,
   validateEventLog,
+  validateTerrain,
   isFriendlyPlayerControlled,
   canonicalTacticalJson,
   computeSnapshotId,
   buildRelayPayload,
   loadAndValidateSnapshotFromText,
+  maxPackedTerrainDataBase64Length,
 };

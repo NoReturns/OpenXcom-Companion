@@ -14,23 +14,49 @@ const {
   createRelayPublisher,
 } = require('./lib/github-relay.cjs');
 const { TacticalWatcher } = require('./lib/tactical-watcher.cjs');
+const { BriefingWatcher } = require('./lib/briefing-watcher.cjs');
+const { startTacticalRelaySidecar } = require('./lib/tactical-relay-sidecar.cjs');
+const { sha256HexLower, readSnapshotByteBuffer } = require('./lib/briefing-snapshot.cjs');
+const { createNotifyEmitter } = require('./lib/companion-relay-notify.cjs');
+
+function resolveStructuredSidecarNotify(customNotify) {
+  if (typeof customNotify === 'function') {
+    return customNotify;
+  }
+  if (process.env.COMPANION_RELAY_STRUCTURED_NOTIFY === '1') {
+    return createNotifyEmitter({ alsoPrintConsole: false }).emit;
+  }
+  return undefined;
+}
 
 const DEFAULT_SNAPSHOT = path.resolve(__dirname, '../../local/m0/tactical-m1-04.yaml');
+const DEFAULT_LIVE_SNAPSHOT = path.resolve(__dirname, '../../local/m0/tactical-live.yaml');
+const DEFAULT_BRIEFING_REQUEST = path.resolve(__dirname, '../../local/m0/briefing-request.json');
+const DEFAULT_BRIEFING_STATE_DIR = path.resolve(__dirname, '.briefing-sidecar-state');
+const DEFAULT_COMMAND_RELAY_STATE_DIR = path.resolve(__dirname, '.command-relay-sidecar-state');
 
 function usage() {
-  console.log(`Usage: node publish-tactical-once.cjs [--dry-run] [--publish] [--watch] [--path <file>]
+  console.log(`Usage: node publish-tactical-once.cjs [options]
 
-  --dry-run   Parse/validate locally, or watch without remote writes (default)
-  --publish   Publish to ${DEFAULTS.repo}:${DEFAULTS.statePath} on branch ${DEFAULTS.branch}
-  --watch     Poll snapshot file every 1s and publish on tactical changes
-  --path      Tactical YAML input (default: ${DEFAULT_SNAPSHOT})`);
+  --dry-run            Parse/validate locally, or watch without remote writes (default)
+  --publish            Publish to ${DEFAULTS.repo}:${DEFAULTS.statePath} on branch ${DEFAULTS.branch}
+  --watch              Dev mode: poll snapshot file every 1s and publish on YAML changes
+  --briefing-watch     F6 mode: poll briefing-request.json and publish verified snapshots
+  --command-relay-watch  Poll GitHub tactical-command/terrain-query and mirror local engine files
+  --path               Tactical YAML input (default: ${DEFAULT_LIVE_SNAPSHOT} with --briefing-watch, else ${DEFAULT_SNAPSHOT})
+  --request-path       Briefing request file (default: ${DEFAULT_BRIEFING_REQUEST})
+  --state-dir          Sidecar journal directory (briefing default: ${DEFAULT_BRIEFING_STATE_DIR}, command relay: ${DEFAULT_COMMAND_RELAY_STATE_DIR})`);
 }
 
 function parseArgs(argv) {
   let publish = false;
   let dryRun = false;
   let watch = false;
-  let inputPath = DEFAULT_SNAPSHOT;
+  let briefingWatch = false;
+  let commandRelayWatch = false;
+  let inputPath = null;
+  let requestPath = DEFAULT_BRIEFING_REQUEST;
+  let stateDir = null;
 
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
@@ -50,15 +76,41 @@ function parseArgs(argv) {
       watch = true;
       continue;
     }
+    if (arg === '--command-relay-watch') {
+      commandRelayWatch = true;
+      continue;
+    }
+    if (arg === '--briefing-watch') {
+      briefingWatch = true;
+      continue;
+    }
     if (arg === '--path') {
       i += 1;
       if (i >= argv.length) throw new Error('--path requires a value');
       inputPath = path.resolve(argv[i]);
       continue;
     }
+    if (arg === '--request-path') {
+      i += 1;
+      if (i >= argv.length) throw new Error('--request-path requires a value');
+      requestPath = path.resolve(argv[i]);
+      continue;
+    }
+    if (arg === '--state-dir') {
+      i += 1;
+      if (i >= argv.length) throw new Error('--state-dir requires a value');
+      stateDir = path.resolve(argv[i]);
+      continue;
+    }
     throw new Error(`Unknown argument: ${arg}`);
   }
 
+  if (watch && briefingWatch) {
+    throw new Error('Use either --watch or --briefing-watch, not both');
+  }
+  if (commandRelayWatch && (watch || briefingWatch)) {
+    throw new Error('--command-relay-watch cannot combine with --watch or --briefing-watch');
+  }
   if (publish && dryRun) {
     throw new Error('Use either --dry-run or --publish, not both');
   }
@@ -66,7 +118,19 @@ function parseArgs(argv) {
     dryRun = true;
   }
 
-  return { publish, dryRun, watch, inputPath };
+  if (inputPath === null) {
+    inputPath = (briefingWatch || commandRelayWatch) ? DEFAULT_LIVE_SNAPSHOT : DEFAULT_SNAPSHOT;
+  }
+
+  if (stateDir === null) {
+    if (commandRelayWatch) {
+      stateDir = DEFAULT_COMMAND_RELAY_STATE_DIR;
+    } else {
+      stateDir = DEFAULT_BRIEFING_STATE_DIR;
+    }
+  }
+
+  return { publish, dryRun, watch, briefingWatch, commandRelayWatch, inputPath, requestPath, stateDir };
 }
 
 function reportDryRun({ inputPath, tactical, relay, ghReady }) {
@@ -109,6 +173,37 @@ async function runWatch({ dryRun, inputPath }) {
   });
 }
 
+async function runBriefingWatch({ dryRun, inputPath, requestPath, stateDir }) {
+  if (!dryRun) {
+    const ghReady = checkGhAuthReadiness();
+    if (!ghReady) {
+      console.error('GitHub CLI is not authenticated; run gh auth login first.');
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  const publisher = createRelayPublisher();
+  const controller = new AbortController();
+  process.on('SIGINT', () => controller.abort());
+  process.on('SIGTERM', () => controller.abort());
+
+  const watcher = new BriefingWatcher({
+    requestPath,
+    snapshotPath: inputPath,
+    stateDir,
+    dryRun,
+    publishRelayState: (relay) => publisher.publishRelayState(relay),
+    signal: controller.signal,
+    notify: resolveStructuredSidecarNotify(),
+  });
+  watcher.start();
+
+  await new Promise((resolve) => {
+    controller.signal.addEventListener('abort', resolve, { once: true });
+  });
+}
+
 function runOnce({ publish, dryRun, inputPath }) {
   if (!fs.existsSync(inputPath)) {
     console.error(`Input not found: ${inputPath}`);
@@ -128,7 +223,9 @@ function runOnce({ publish, dryRun, inputPath }) {
   }
 
   const publishedAt = new Date().toISOString();
-  const relay = buildRelayPayload(tactical, publishedAt);
+  const snapshotBytes = readSnapshotByteBuffer(fs.readFileSync, inputPath);
+  const digest = sha256HexLower(snapshotBytes);
+  const relay = buildRelayPayload(tactical, publishedAt, null, { snapshotSha256: digest });
   const ghReady = checkGhAuthReadiness();
 
   if (dryRun) {
@@ -153,8 +250,44 @@ function runOnce({ publish, dryRun, inputPath }) {
     });
 }
 
+async function runCommandRelayWatch({ dryRun, inputPath, stateDir }) {
+  if (!dryRun) {
+    const ghReady = checkGhAuthReadiness();
+    if (!ghReady) {
+      console.error('GitHub CLI is not authenticated; run gh auth login first.');
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  const controller = new AbortController();
+  process.on('SIGINT', () => controller.abort());
+  process.on('SIGTERM', () => controller.abort());
+
+  const sidecar = startTacticalRelaySidecar({
+    snapshotPath: inputPath,
+    stateDir,
+    dryRun,
+    signal: controller.signal,
+    notify: resolveStructuredSidecarNotify(),
+  });
+
+  await new Promise((resolve) => {
+    controller.signal.addEventListener('abort', resolve, { once: true });
+  });
+  sidecar.stop();
+}
+
 async function main() {
   const args = parseArgs(process.argv);
+  if (args.commandRelayWatch) {
+    await runCommandRelayWatch(args);
+    return;
+  }
+  if (args.briefingWatch) {
+    await runBriefingWatch(args);
+    return;
+  }
   if (args.watch) {
     await runWatch(args);
     return;
@@ -166,3 +299,11 @@ main().catch((error) => {
   console.error(error.message || String(error));
   process.exitCode = 1;
 });
+
+module.exports = {
+  DEFAULT_LIVE_SNAPSHOT,
+  DEFAULT_BRIEFING_REQUEST,
+  DEFAULT_BRIEFING_STATE_DIR,
+  DEFAULT_COMMAND_RELAY_STATE_DIR,
+  parseArgs,
+};

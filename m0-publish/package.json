@@ -5,7 +5,9 @@
   "description": "One-shot tactical snapshot publisher for OpenXcom-Aster-Relay",
   "scripts": {
     "test": "node --test test/*.test.cjs",
-    "dry-run": "node publish-tactical-once.cjs --dry-run"
+    "dry-run": "node publish-tactical-once.cjs --dry-run",
+    "briefing-watch-dry-run": "node publish-tactical-once.cjs --briefing-watch --dry-run",
+    "command-relay-watch-dry-run": "node publish-tactical-once.cjs --command-relay-watch --dry-run"
   },
   "dependencies": {
     "yaml": "2.7.0"
