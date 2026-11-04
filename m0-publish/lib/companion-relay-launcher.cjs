@@ -20,13 +20,14 @@ const {
   getCommandRecord,
 } = require('./command-journal.cjs');
 const {
-  parseMoveCommand,
-  validateMoveAgainstSnapshotFile,
+  parseTacticalCommand,
+  validateTacticalCommandAgainstSnapshotFile,
   isTerminalStatus,
   canAcceptNewCommand,
 } = require('./tactical-command.cjs');
 const { loadAndValidateSnapshotFromText } = require('./tactical-publish.cjs');
 const { readSnapshotByteBuffer, sha256HexLower } = require('./briefing-snapshot.cjs');
+const { execFileSyncHidden } = require('./exec-file-sync.cjs');
 
 const DEFAULT_LIVE_SNAPSHOT = path.resolve(__dirname, '../../../local/m0/tactical-live.yaml');
 const DEFAULT_BRIEFING_STATE_DIR = path.resolve(__dirname, '../.briefing-sidecar-state');
@@ -203,8 +204,8 @@ function validateRemoteAgainstSnapshot(parsedCommand, snapshotPath, io = {}) {
     return { valid: false, reason: 'snapshot_missing' };
   }
   try {
-    parseMoveCommand(parsedCommand);
-    validateMoveAgainstSnapshotFile(parsedCommand, snapshotPath, YAML, readFileSync);
+    parseTacticalCommand(parsedCommand);
+    validateTacticalCommandAgainstSnapshotFile(parsedCommand, snapshotPath, YAML, readFileSync);
     return { valid: true, reason: null };
   } catch (error) {
     return { valid: false, reason: error.message || String(error) };
@@ -310,9 +311,8 @@ function defaultListProcesses() {
     return [];
   }
   try {
-    const { execFileSync } = require('node:child_process');
     const script = 'Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like "*publish-tactical-once.cjs*" } | Select-Object ProcessId, CommandLine | ConvertTo-Json -Compress';
-    const out = execFileSync('powershell.exe', ['-NoProfile', '-Command', script], {
+    const out = execFileSyncHidden('powershell.exe', ['-NoProfile', '-Command', script], {
       encoding: 'utf8',
       maxBuffer: 4 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'pipe'],

@@ -1,7 +1,8 @@
 'use strict';
 
-const { execFileSync } = require('node:child_process');
+const { execFileSyncHidden } = require('./exec-file-sync.cjs');
 const { isRateLimitBlob } = require('./relay-rate-limit-gate.cjs');
+const { parseGhApiIncludeStdout } = require('./github-quota-telemetry.cjs');
 
 const DEFAULTS = {
   repo: 'NoReturns/OpenXcom-Aster-Relay',
@@ -23,10 +24,16 @@ const DEFAULT_TERRAIN_QUERY_MAX_BYTES = 4 * 1024;
 const DEFAULT_TERRAIN_QUERY_RESULT_MAX_BYTES = 12 * 1024;
 
 function createGhApiExec(options = {}) {
-  const execFileSyncImpl = options.execFileSync ?? execFileSync;
+  let execFileSyncImpl = options.execFileSync ?? execFileSyncHidden;
+  if (options.apiCallLog && typeof options.apiCallLog.wrapExecFileSync === 'function') {
+    execFileSyncImpl = options.apiCallLog.wrapExecFileSync(execFileSyncImpl);
+  }
   const rateLimitGate = options.rateLimitGate ?? null;
+  const quotaTelemetryStore = options.quotaTelemetryStore ?? null;
+  const nowFn = options.now ?? (() => Date.now());
+  const apiCallLog = options.apiCallLog ?? null;
   const baseGhApi = function ghApi(method, apiPath, body) {
-    const args = ['api', '--method', method, apiPath, '-H', 'Accept: application/vnd.github+json'];
+    const args = ['api', '--method', method, apiPath, '-H', 'Accept: application/vnd.github+json', '--include'];
     if (body !== undefined) {
       args.push('--input', '-');
     }
@@ -37,10 +44,20 @@ function createGhApiExec(options = {}) {
         maxBuffer: 1024 * 1024,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
-      if (!stdout.trim()) return null;
-      return JSON.parse(stdout);
+      const parsed = parseGhApiIncludeStdout(stdout);
+      if (quotaTelemetryStore && typeof quotaTelemetryStore.recordFromHeaders === 'function') {
+        quotaTelemetryStore.recordFromHeaders(parsed.headers, { method, apiPath, now: nowFn() });
+      }
+      if (!parsed.body.trim()) {
+        return null;
+      }
+      return JSON.parse(parsed.body);
     } catch (error) {
-      throw normalizeGhApiExecError(error);
+      const normalized = normalizeGhApiExecError(error);
+      if (quotaTelemetryStore && typeof quotaTelemetryStore.recordFromGhError === 'function') {
+        quotaTelemetryStore.recordFromGhError(normalized, nowFn());
+      }
+      throw normalized;
     }
   };
   if (rateLimitGate && typeof rateLimitGate.wrapGhApiExec === 'function') {
@@ -89,7 +106,7 @@ function normalizeGhApiExecError(error) {
 
 function checkGhAuthReadiness(ghApiExec = createGhApiExec()) {
   try {
-    execFileSync('gh', ['auth', 'status', '--hostname', 'github.com'], {
+    execFileSyncHidden('gh', ['auth', 'status', '--hostname', 'github.com'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       encoding: 'utf8',
     });
@@ -239,7 +256,11 @@ function createRelayContentClient(options = {}) {
     maxRemoteBytes: options.maxRemoteBytes ?? DEFAULTS.maxRemoteBytes,
     ghApi: options.ghApi ?? createGhApiExec({
       rateLimitGate: options.rateLimitGate,
+      quotaTelemetryStore: options.quotaTelemetryStore,
       execFileSync: options.execFileSync,
+      now: options.now,
+      apiCallLog: options.apiCallLog,
+      transactionId: options.transactionId,
     }),
   };
 
@@ -271,7 +292,11 @@ function createRelayPublisher(options = {}) {
     maxRemoteBytes: options.maxRemoteBytes ?? DEFAULTS.maxRemoteBytes,
     ghApi: options.ghApi ?? createGhApiExec({
       rateLimitGate: options.rateLimitGate,
+      quotaTelemetryStore: options.quotaTelemetryStore,
       execFileSync: options.execFileSync,
+      now: options.now,
+      apiCallLog: options.apiCallLog,
+      transactionId: options.transactionId,
     }),
   };
 
@@ -356,4 +381,5 @@ module.exports = {
   decodeRemoteFileContent,
   isNotFoundError,
   normalizeGhApiExecError,
+  execFileSyncHidden,
 };

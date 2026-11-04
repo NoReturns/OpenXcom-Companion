@@ -20,6 +20,9 @@ const {
   acquireCommandRelaySidecarLock,
 } = require('./lib/command-relay-process-lock.cjs');
 const { createRelayRateLimitGate, resolveSharedRelayRateLimitGatePath } = require('./lib/relay-rate-limit-gate.cjs');
+const { createGithubQuotaTelemetryStore } = require('./lib/github-quota-telemetry.cjs');
+const { createGithubQuotaConsoleMonitor } = require('./lib/github-quota-console.cjs');
+const { removeCompanionGithubQuotaHudFile } = require('./lib/github-quota-hud-file.cjs');
 const { sha256HexLower, readSnapshotByteBuffer } = require('./lib/briefing-snapshot.cjs');
 const { createNotifyEmitter } = require('./lib/companion-relay-notify.cjs');
 
@@ -176,7 +179,9 @@ async function runWatch({ dryRun, inputPath }) {
     }
   }
 
-  const publisher = createRelayPublisher();
+  const quotaTelemetryStore = createGithubQuotaTelemetryStore();
+  const quotaConsoleMonitor = createGithubQuotaConsoleMonitor({ store: quotaTelemetryStore });
+  const publisherWithTelemetry = createRelayPublisher({ quotaTelemetryStore });
   const controller = new AbortController();
   process.on('SIGINT', () => controller.abort());
   process.on('SIGTERM', () => controller.abort());
@@ -184,7 +189,8 @@ async function runWatch({ dryRun, inputPath }) {
   const watcher = new TacticalWatcher({
     inputPath,
     dryRun,
-    publishRelayState: (relay) => publisher.publishRelayState(relay),
+    publishRelayState: (relay) => publisherWithTelemetry.publishRelayState(relay),
+    githubQuotaMonitor: quotaConsoleMonitor,
     signal: controller.signal,
   });
   watcher.start();
@@ -205,7 +211,12 @@ async function runBriefingWatch({ dryRun, inputPath, requestPath, stateDir }) {
   }
 
   const rateLimitGate = createSharedRateLimitGate();
-  const publisher = createRelayPublisher({ rateLimitGate });
+  const quotaTelemetryStore = createGithubQuotaTelemetryStore();
+  const quotaConsoleMonitor = createGithubQuotaConsoleMonitor({
+    store: quotaTelemetryStore,
+    rateLimitGate,
+  });
+  const publisher = createRelayPublisher({ rateLimitGate, quotaTelemetryStore });
   const controller = new AbortController();
   process.on('SIGINT', () => controller.abort());
   process.on('SIGTERM', () => controller.abort());
@@ -217,6 +228,7 @@ async function runBriefingWatch({ dryRun, inputPath, requestPath, stateDir }) {
     dryRun,
     publishRelayState: (relay) => publisher.publishRelayState(relay),
     rateLimitGate,
+    githubQuotaMonitor: quotaConsoleMonitor,
     signal: controller.signal,
     notify: resolveStructuredSidecarNotify(),
   });
@@ -225,6 +237,8 @@ async function runBriefingWatch({ dryRun, inputPath, requestPath, stateDir }) {
   await new Promise((resolve) => {
     controller.signal.addEventListener('abort', resolve, { once: true });
   });
+  watcher.stop();
+  removeCompanionGithubQuotaHudFile();
 }
 
 function runOnce({ publish, dryRun, inputPath }) {

@@ -34,6 +34,20 @@ function makeMoveCommand(tactical, digest, overrides = {}) {
   };
 }
 
+function makeKneelCommand(tactical, digest, overrides = {}) {
+  return {
+    schema_version: 1,
+    command_id: overrides.command_id ?? 'kneel-relay-1',
+    command_type: 'KNEEL',
+    actor_unit_id: 1,
+    snapshot_sha256: digest,
+    session_id: tactical.eventLog.sessionId,
+    turn: tactical.turn,
+    state_version: tactical.eventLog.latestSeq,
+    ...overrides,
+  };
+}
+
 function makeHarness(options = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'command-relay-'));
   const fixtureText = fs.readFileSync(FIXTURE_V5, 'utf8');
@@ -113,6 +127,17 @@ describe('CommandRelayWatcher', () => {
     assert.equal(local.command_id, 'move-relay-1');
     assert.equal(local.actor_unit_id, 1);
     assert.ok(!fs.existsSync(path.join(path.dirname(h.local.command), 'companion-soldier-control.json')));
+    fs.rmSync(h.root, { recursive: true, force: true });
+  });
+
+  it('delivers valid remote KNEEL to local inbox atomically', async () => {
+    const h = makeHarness();
+    h.setRemoteCommand(makeKneelCommand(h.tactical, h.digest));
+    await pollUntil(h, () => fs.existsSync(h.local.command));
+    const local = JSON.parse(fs.readFileSync(h.local.command, 'utf8'));
+    assert.equal(local.command_type, 'KNEEL');
+    assert.equal(local.command_id, 'kneel-relay-1');
+    assert.equal(local.destination, undefined);
     fs.rmSync(h.root, { recursive: true, force: true });
   });
 

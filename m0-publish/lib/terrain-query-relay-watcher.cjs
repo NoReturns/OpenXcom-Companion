@@ -29,6 +29,7 @@ class TerrainQueryRelayWatcher {
     this.dryRun = options.dryRun;
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_IDLE_POLL_MS;
     this.rateLimitGate = options.rateLimitGate ?? null;
+    this.githubQuotaMonitor = options.githubQuotaMonitor ?? null;
     this.readRemoteQuery = options.readRemoteQuery;
     this.publishRemoteQueryResult = options.publishRemoteQueryResult;
     this.log = options.log ?? ((line) => console.log(line));
@@ -166,6 +167,9 @@ class TerrainQueryRelayWatcher {
         return;
       }
       await this._pollOnce();
+      if (this.githubQuotaMonitor && typeof this.githubQuotaMonitor.tick === 'function') {
+        this.githubQuotaMonitor.tick();
+      }
       if (this.running) {
         this._timer = setTimeout(tick, this._msUntilNextPoll());
       }

@@ -40,7 +40,9 @@ function getCommandRecord(journal, commandId) {
 
 function isTerminalRelayRecord(record) {
   if (!record) return false;
-  return record.phase === 'published_terminal' || record.phase === 'retired_remote';
+  return record.phase === 'published_terminal'
+    || record.phase === 'retired_remote'
+    || record.phase === 'retirement_closed';
 }
 
 function isRetiredRemoteRecord(record) {

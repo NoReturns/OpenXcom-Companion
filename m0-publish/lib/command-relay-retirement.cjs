@@ -95,8 +95,19 @@ function evaluateRemoteCommandRetirement(input) {
   };
 }
 
+const RETIREMENT_CLOSE_ON_SKIP = new Set([
+  'result_command_id_mismatch',
+  'result_not_terminal',
+  'result_status_mismatch',
+  'replacement_command_id',
+  'replacement_command_sha',
+  'not_published_terminal',
+  'already_retired',
+]);
+
 module.exports = {
   RETIREMENT_OPERATOR_MESSAGES,
+  RETIREMENT_CLOSE_ON_SKIP,
   journaledRemoteSha,
   remoteResultMatchesCommand,
   evaluateRemoteCommandRetirement,

@@ -37,6 +37,7 @@ class BriefingWatcher {
     this.signal = options.signal;
     this.notify = options.notify;
     this.rateLimitGate = options.rateLimitGate ?? null;
+    this.githubQuotaMonitor = options.githubQuotaMonitor ?? null;
 
     this.running = false;
     this.publishInFlight = false;
@@ -306,9 +307,15 @@ class BriefingWatcher {
     if (!this.running || this.signal?.aborted) {
       return;
     }
-    this._pollOnce().catch((error) => {
-      this.log(`Briefing watcher error: ${error.message || String(error)}`);
-    });
+    this._pollOnce()
+      .catch((error) => {
+        this.log(`Briefing watcher error: ${error.message || String(error)}`);
+      })
+      .finally(() => {
+        if (this.githubQuotaMonitor && typeof this.githubQuotaMonitor.tick === 'function') {
+          this.githubQuotaMonitor.tick();
+        }
+      });
   }
 
   start() {

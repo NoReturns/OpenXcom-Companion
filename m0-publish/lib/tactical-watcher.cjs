@@ -22,6 +22,7 @@ class TacticalWatcher {
     this.minPublishIntervalMs = options.minPublishIntervalMs ?? DEFAULT_MIN_PUBLISH_MS;
     this.maxPublishes = options.maxPublishes ?? DEFAULT_MAX_PUBLISHES;
     this.publishRelayState = options.publishRelayState;
+    this.githubQuotaMonitor = options.githubQuotaMonitor ?? null;
     this.log = options.log ?? ((line) => console.log(line));
     this.now = options.now ?? (() => Date.now());
     this.readFileSync = options.readFileSync ?? fs.readFileSync;
@@ -73,6 +74,9 @@ class TacticalWatcher {
   async _tickAsync() {
     await this._pollOnce();
     await this._maybeFlushPending(false);
+    if (this.githubQuotaMonitor && typeof this.githubQuotaMonitor.tick === 'function') {
+      this.githubQuotaMonitor.tick();
+    }
   }
 
   async _pollOnce() {

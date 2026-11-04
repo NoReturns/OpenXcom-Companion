@@ -5,8 +5,8 @@ const path = require('node:path');
 const YAML = require('yaml');
 const { ValidationError } = require('./tactical-publish.cjs');
 const {
-  parseMoveCommand,
-  validateMoveAgainstSnapshotFile,
+  parseTacticalCommand,
+  validateTacticalCommandAgainstSnapshotFile,
   buildResultEnvelope,
   isTerminalStatus,
   canAcceptNewCommand,
@@ -18,7 +18,7 @@ const {
   isTerminalRelayRecord,
   markCommandRecord,
 } = require('./command-journal.cjs');
-const { evaluateRemoteCommandRetirement } = require('./command-relay-retirement.cjs');
+const { evaluateRemoteCommandRetirement, RETIREMENT_CLOSE_ON_SKIP } = require('./command-relay-retirement.cjs');
 const { tryPublishPostCommandTacticalState } = require('./post-command-tactical-publish.cjs');
 const { writeJsonAtomic, writeTextAtomic, removeFileIfExists } = require('./local-atomic.cjs');
 const {
@@ -66,7 +66,7 @@ function sidecarRejectEnvelope(command, rejectCode, publicReason) {
     ? command
     : {
       command_id: 'unknown',
-      command_type: 'MOVE',
+      command_type: (command && command.command_type) || 'MOVE',
       session_id: '00000000000000000000000000000000',
       turn: 1,
     };
@@ -84,6 +84,7 @@ class CommandRelayWatcher {
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_IDLE_POLL_MS;
     this.activePollIntervalMs = options.activePollIntervalMs ?? DEFAULT_ACTIVE_POLL_MS;
     this.rateLimitGate = options.rateLimitGate ?? null;
+    this.githubQuotaMonitor = options.githubQuotaMonitor ?? null;
     this.readRemoteCommand = options.readRemoteCommand;
     this.publishRemoteResult = options.publishRemoteResult;
     this.log = options.log ?? ((line) => console.log(line));
@@ -101,6 +102,8 @@ class CommandRelayWatcher {
     this._relayReachable = true;
     this._lastRemoteCommandSha = null;
     this._loggedRetirementBlocked = new Set();
+    this._retrieveTransaction = null;
+    this._lastRetrievePollSnapshot = null;
 
     this.local = localRelayPaths(this.snapshotPath);
     this.running = false;
@@ -225,6 +228,7 @@ class CommandRelayWatcher {
           this.persistJournal(journal);
           this.log(`Remote result already ${result.status} for ${commandId.slice(0, 8)}; skipping publish.`);
           await publishPostCommand();
+          this._noteRetrievePublished();
           await this._maybeRetireRemoteCommand(journal, commandId, result);
           return;
         }
@@ -253,6 +257,7 @@ class CommandRelayWatcher {
     });
     journal.active = null;
     this.persistJournal(journal);
+    this._noteRetrievePublished();
     this.log(`Published result ${commandId.slice(0, 8)} status ${result.status}.`);
     await publishPostCommand();
     await this._maybeRetireRemoteCommand(journal, commandId, result);
@@ -283,6 +288,112 @@ class CommandRelayWatcher {
     this.persistJournal(journal);
   }
 
+  beginRetrieveTransaction(transactionId) {
+    this._retrieveTransaction = {
+      transactionId: transactionId ?? null,
+      deliveredCommandId: null,
+      publishedResult: false,
+      completedExecution: false,
+    };
+    this._lastRetrievePollSnapshot = null;
+  }
+
+  getLastRetrievePollSnapshot() {
+    return this._lastRetrievePollSnapshot;
+  }
+
+  _recordNeedsRetirementRetry(record) {
+    if (!record || record.phase !== 'published_terminal') {
+      return false;
+    }
+    if (record.remote_retired_at) {
+      return false;
+    }
+    if (record.retirement_closed_at) {
+      return false;
+    }
+    if (record.retirement_next_attempt_at) {
+      const nextAt = Date.parse(record.retirement_next_attempt_at);
+      if (Number.isFinite(nextAt) && this.now() < nextAt) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  _closeRetirementRecord(journal, commandId, reason) {
+    markCommandRecord(journal, commandId, {
+      phase: 'retirement_closed',
+      retirement_closed_reason: reason,
+      retirement_closed_at: new Date(this.now()).toISOString(),
+    });
+    this.persistJournal(journal);
+    this.log(`Closed retirement follow-up for ${commandId.slice(0, 8)} (${reason}).`);
+  }
+
+  _buildRemoteCommandValue(remoteCommand) {
+    if (!remoteCommand || !remoteCommand.text) {
+      return null;
+    }
+    try {
+      return JSON.parse(remoteCommand.text);
+    } catch {
+      return null;
+    }
+  }
+
+  _noteRetrieveDelivered(commandId) {
+    if (this._retrieveTransaction) {
+      this._retrieveTransaction.deliveredCommandId = commandId;
+    }
+  }
+
+  _noteRetrievePublished() {
+    if (this._retrieveTransaction) {
+      this._retrieveTransaction.publishedResult = true;
+    }
+  }
+
+  _noteRetrieveCompletedExecution() {
+    if (this._retrieveTransaction) {
+      this._retrieveTransaction.completedExecution = true;
+    }
+  }
+
+  _finalizeRetrievePollSnapshot(journal, remote) {
+    const inboxEmpty = !remote || !remote.text;
+    const localResult = this.readLocalResult();
+    const openLocal = localResult && !localResult.__parseError ? localResult : null;
+    const pendingRetirement = Object.values(journal.records)
+      .some((record) => this._recordNeedsRetirementRetry(record));
+    const localExecuting = openLocal && (openLocal.status === 'EXECUTING' || openLocal.status === 'ACCEPTED');
+    const deliveredThisTx = Boolean(this._retrieveTransaction && this._retrieveTransaction.deliveredCommandId);
+    const publishedThisTx = Boolean(this._retrieveTransaction && this._retrieveTransaction.publishedResult);
+    const activeCommand = journal.active && journal.active.command_id ? journal.active.command_id : null;
+    const pendingPublish = Boolean(
+      openLocal
+      && isTerminalStatus(openLocal.status)
+      && activeCommand
+      && openLocal.command_id === activeCommand,
+    );
+    const needsSecondPoll = Boolean(
+      deliveredThisTx
+      || localExecuting
+      || pendingPublish
+      || pendingRetirement
+      || publishedThisTx
+      || (activeCommand && !inboxEmpty),
+    );
+    this._lastRetrievePollSnapshot = {
+      inboxEmpty,
+      pendingRetirement,
+      needsSecondPoll,
+      deliveredThisTx,
+      publishedThisTx,
+      completedExecutionThisTx: Boolean(this._retrieveTransaction && this._retrieveTransaction.completedExecution),
+    };
+  }
+
   async _loadRemoteRetirementContext() {
     let remoteCommand = null;
     try {
@@ -310,7 +421,7 @@ class CommandRelayWatcher {
     return { remoteCommand, remoteCommandValue, remoteResultValue };
   }
 
-  async _maybeRetireRemoteCommand(journal, commandId, result) {
+  async _maybeRetireRemoteCommand(journal, commandId, result, sharedContext = null) {
     const record = getCommandRecord(journal, commandId);
     if (!record || record.phase !== 'published_terminal') {
       return;
@@ -319,12 +430,14 @@ class CommandRelayWatcher {
       return;
     }
 
-    let context;
-    try {
-      context = await this._loadRemoteRetirementContext();
-    } catch (error) {
-      this.log(`Remote command retirement deferred: ${error.message || String(error)}`);
-      return;
+    let context = sharedContext;
+    if (!context) {
+      try {
+        context = await this._loadRemoteRetirementContext();
+      } catch (error) {
+        this.log(`Remote command retirement deferred: ${error.message || String(error)}`);
+        return;
+      }
     }
 
     const decision = evaluateRemoteCommandRetirement({
@@ -336,6 +449,14 @@ class CommandRelayWatcher {
     });
 
     if (decision.action === 'skip') {
+      if (RETIREMENT_CLOSE_ON_SKIP.has(decision.reason)) {
+        this._closeRetirementRecord(journal, commandId, decision.reason);
+      } else if (
+        decision.reason === 'missing_remote_result'
+        && (!context.remoteCommand || !context.remoteCommand.text)
+      ) {
+        this._closeRetirementRecord(journal, commandId, 'missing_remote_result_remote_inbox_empty');
+      }
       return;
     }
 
@@ -389,15 +510,100 @@ class CommandRelayWatcher {
     }
   }
 
-  async _retryPendingRemoteRetirements(journal) {
-    const pending = Object.values(journal.records)
-      .filter((record) => record && record.phase === 'published_terminal' && record.command_id);
-    for (const record of pending) {
-      const localResult = this.readLocalResult();
-      const resultFromLocal = localResult && !localResult.__parseError && localResult.command_id === record.command_id
+  _buildResultForRetirementEval(record, localResult, remoteCommand, remoteResultValue) {
+    const local = localResult && !localResult.__parseError && localResult.command_id === record.command_id
+      ? localResult
+      : null;
+    const inboxEmpty = !remoteCommand || !remoteCommand.text;
+    if (local) {
+      return local;
+    }
+    if (inboxEmpty) {
+      return { command_id: record.command_id, status: record.status };
+    }
+    if (remoteResultValue && typeof remoteResultValue === 'object') {
+      return remoteResultValue;
+    }
+    return { command_id: record.command_id, status: record.status };
+  }
+
+  async _retryPendingRemoteRetirements(journal, inboxRemoteMeta = undefined) {
+    let pending = Object.values(journal.records)
+      .filter((record) => this._recordNeedsRetirementRetry(record));
+    if (pending.length === 0) {
+      return;
+    }
+
+    const localResult = this.readLocalResult();
+    const inboxKnownEmpty = inboxRemoteMeta !== undefined
+      && (!inboxRemoteMeta || !inboxRemoteMeta.text);
+    if (inboxKnownEmpty) {
+      for (const record of pending) {
+        if (
+          localResult
+          && !localResult.__parseError
+          && localResult.command_id !== record.command_id
+        ) {
+          this._closeRetirementRecord(
+            journal,
+            record.command_id,
+            'unrelated_local_result_remote_inbox_empty',
+          );
+        }
+      }
+      journal = this.loadJournal();
+      pending = Object.values(journal.records)
+        .filter((record) => this._recordNeedsRetirementRetry(record));
+      if (pending.length === 0) {
+        return;
+      }
+    }
+
+    let remoteCommand = inboxRemoteMeta;
+    if (remoteCommand === undefined) {
+      try {
+        remoteCommand = await this.readRemoteCommand();
+      } catch (error) {
+        this.log(`Remote command retirement deferred: ${error.message || String(error)}`);
+        return;
+      }
+    }
+
+    const remoteCommandValue = this._buildRemoteCommandValue(remoteCommand);
+
+    let remoteResultValue = null;
+    const needsRemoteResult = pending.some((record) => {
+      if (!remoteCommand || !remoteCommand.text) {
+        return false;
+      }
+      if (remoteCommandValue && remoteCommandValue.command_id === record.command_id) {
+        return true;
+      }
+      const local = localResult && !localResult.__parseError && localResult.command_id === record.command_id
         ? localResult
-        : { command_id: record.command_id, status: record.status };
-      await this._maybeRetireRemoteCommand(journal, record.command_id, resultFromLocal);
+        : null;
+      return Boolean(local);
+    });
+
+    if (needsRemoteResult && this.fetchRemoteResult) {
+      try {
+        const remoteResult = await this.fetchRemoteResult();
+        remoteResultValue = remoteResult && remoteResult.value ? remoteResult.value : null;
+      } catch (error) {
+        this.log(`Remote result retirement probe deferred: ${error.message || String(error)}`);
+      }
+    }
+
+    const context = { remoteCommand, remoteCommandValue, remoteResultValue };
+    for (const record of pending) {
+      const resultForEval = this._buildResultForRetirementEval(
+        record,
+        localResult,
+        remoteCommand,
+        remoteResultValue,
+      );
+      await this._maybeRetireRemoteCommand(journal, record.command_id, resultForEval, context);
+      journal = this.loadJournal();
     }
   }
 
@@ -442,6 +648,7 @@ class CommandRelayWatcher {
     };
     this.persistJournal(journal);
     this.log(`Delivered command ${command.command_id.slice(0, 8)} to local inbox.`);
+    this._noteRetrieveDelivered(command.command_id);
     this._emitNotify(notificationFromMoveCommand(command, {
       code: NOTIFICATION_CODES.COMMAND_DELIVERED,
       remote_sha256: remoteSha,
@@ -471,18 +678,24 @@ class CommandRelayWatcher {
     return true;
   }
 
+  getRetrieveTransactionState() {
+    if (!this._retrieveTransaction) {
+      return null;
+    }
+    return { ...this._retrieveTransaction };
+  }
+
   async _pollOnce() {
     if (this._inFlight) {
       return;
     }
     this._inFlight = true;
+    let inboxRemote = undefined;
     try {
       let journal = this.loadJournal();
       if (await this._resumeActive(journal)) {
         journal = this.loadJournal();
       }
-      await this._retryPendingRemoteRetirements(journal);
-      journal = this.loadJournal();
 
       let remote;
       try {
@@ -498,6 +711,11 @@ class CommandRelayWatcher {
         this._markRelayDisconnected(message);
         return;
       }
+      inboxRemote = remote;
+
+      await this._retryPendingRemoteRetirements(journal, remote);
+      journal = this.loadJournal();
+
       if (!remote || !remote.text) {
         return;
       }
@@ -546,8 +764,8 @@ class CommandRelayWatcher {
       }
 
       try {
-        parseMoveCommand(command);
-        validateMoveAgainstSnapshotFile(command, this.snapshotPath, YAML, this.readFileSync);
+        parseTacticalCommand(command);
+        validateTacticalCommandAgainstSnapshotFile(command, this.snapshotPath, YAML, this.readFileSync);
       } catch (error) {
         const message = error instanceof ValidationError ? error.message : String(error);
         await this.rejectRemote(command, 'SIDECAR_VALIDATION', message, journal, remote.sha ?? '');
@@ -560,6 +778,13 @@ class CommandRelayWatcher {
 
       this.deliverLocal(command, remote.sha ?? '', journal);
     } finally {
+      if (inboxRemote !== undefined) {
+        try {
+          this._finalizeRetrievePollSnapshot(this.loadJournal(), inboxRemote);
+        } catch {
+          // journal unreadable; skip retrieve snapshot
+        }
+      }
       this._inFlight = false;
     }
   }
@@ -575,6 +800,9 @@ class CommandRelayWatcher {
         return;
       }
       await this._pollOnce();
+      if (this.githubQuotaMonitor && typeof this.githubQuotaMonitor.tick === 'function') {
+        this.githubQuotaMonitor.tick();
+      }
       if (this.running) {
         let journal;
         try {

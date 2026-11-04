@@ -13,6 +13,9 @@ const {
   DEFAULT_TERRAIN_QUERY_RESULT_MAX_BYTES,
 } = require('./github-relay.cjs');
 const { createRelayRateLimitGate, resolveSharedRelayRateLimitGatePath } = require('./relay-rate-limit-gate.cjs');
+const { createGithubQuotaTelemetryStore } = require('./github-quota-telemetry.cjs');
+const { createGithubQuotaConsoleMonitor } = require('./github-quota-console.cjs');
+const { removeCompanionGithubQuotaHudFile } = require('./github-quota-hud-file.cjs');
 
 const M0_PUBLISH_ROOT = path.resolve(__dirname, '..');
 
@@ -21,9 +24,21 @@ function createTacticalRelaySidecar(options) {
     ?? resolveSharedRelayRateLimitGatePath(M0_PUBLISH_ROOT);
   const rateLimitGate = options.rateLimitGate
     ?? createRelayRateLimitGate({ gatePath, now: options.now });
+  const quotaTelemetryStore = options.quotaTelemetryStore
+    ?? createGithubQuotaTelemetryStore({ now: options.now });
+  const baseLog = options.log ?? ((line) => console.log(line));
+  const quotaConsoleMonitor = options.quotaConsoleMonitor
+    ?? createGithubQuotaConsoleMonitor({
+      store: quotaTelemetryStore,
+      rateLimitGate,
+      log: baseLog,
+      now: options.now,
+    });
   const relayOptions = {
     ...(options.relayOptions ?? {}),
     rateLimitGate,
+    quotaTelemetryStore,
+    now: options.now,
   };
 
   const content = options.contentClient ?? createRelayContentClient(relayOptions);
@@ -43,7 +58,8 @@ function createTacticalRelaySidecar(options) {
     pollIntervalMs: commandPollIntervalMs,
     activePollIntervalMs: options.activePollIntervalMs,
     rateLimitGate,
-    log: options.log,
+    log: baseLog,
+    githubQuotaMonitor: quotaConsoleMonitor,
     signal: options.signal,
     notify: options.notify,
     now: options.now,
@@ -81,7 +97,8 @@ function createTacticalRelaySidecar(options) {
     dryRun: options.dryRun,
     pollIntervalMs: terrainPollIntervalMs,
     rateLimitGate,
-    log: options.log,
+    log: baseLog,
+    githubQuotaMonitor: quotaConsoleMonitor,
     signal: options.signal,
     now: options.now,
     readRemoteQuery: () => Promise.resolve(
@@ -97,17 +114,22 @@ function createTacticalRelaySidecar(options) {
     },
   });
 
-  return { commandWatcher, queryWatcher, rateLimitGate };
+  return { commandWatcher, queryWatcher, rateLimitGate, quotaTelemetryStore, quotaConsoleMonitor };
 }
 
 function startTacticalRelaySidecar(options) {
-  const { commandWatcher, queryWatcher } = createTacticalRelaySidecar(options);
+  const created = createTacticalRelaySidecar(options);
+  const { commandWatcher, queryWatcher } = created;
   commandWatcher.start();
   queryWatcher.start();
   return {
     stop() {
       commandWatcher.stop();
       queryWatcher.stop();
+      removeCompanionGithubQuotaHudFile({
+        snapshotPathEnv: process.env.OPENXCOM_COMPANION_SNAPSHOT_PATH,
+        m0PublishRoot: M0_PUBLISH_ROOT,
+      });
     },
     commandWatcher,
     queryWatcher,
