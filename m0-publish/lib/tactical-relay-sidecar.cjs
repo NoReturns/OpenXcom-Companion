@@ -1,29 +1,53 @@
 'use strict';
 
-const { CommandRelayWatcher } = require('./command-relay-watcher.cjs');
-const { TerrainQueryRelayWatcher } = require('./terrain-query-relay-watcher.cjs');
+const path = require('node:path');
+const { CommandRelayWatcher, DEFAULT_IDLE_POLL_MS: COMMAND_IDLE_POLL_MS } = require('./command-relay-watcher.cjs');
+const { TerrainQueryRelayWatcher, DEFAULT_IDLE_POLL_MS: TERRAIN_IDLE_POLL_MS } = require('./terrain-query-relay-watcher.cjs');
 const {
   createRelayContentClient,
+  createRelayPublisher,
   RELAY_CONTENT_PATHS,
   DEFAULT_COMMAND_MAX_BYTES,
   DEFAULT_RESULT_MAX_BYTES,
   DEFAULT_TERRAIN_QUERY_MAX_BYTES,
   DEFAULT_TERRAIN_QUERY_RESULT_MAX_BYTES,
 } = require('./github-relay.cjs');
+const { createRelayRateLimitGate, resolveSharedRelayRateLimitGatePath } = require('./relay-rate-limit-gate.cjs');
+
+const M0_PUBLISH_ROOT = path.resolve(__dirname, '..');
 
 function createTacticalRelaySidecar(options) {
-  const content = options.contentClient ?? createRelayContentClient(options.relayOptions);
+  const gatePath = options.rateLimitGatePath
+    ?? resolveSharedRelayRateLimitGatePath(M0_PUBLISH_ROOT);
+  const rateLimitGate = options.rateLimitGate
+    ?? createRelayRateLimitGate({ gatePath, now: options.now });
+  const relayOptions = {
+    ...(options.relayOptions ?? {}),
+    rateLimitGate,
+  };
+
+  const content = options.contentClient ?? createRelayContentClient(relayOptions);
   const paths = content.paths;
+  const relayPublisher = options.relayPublisher ?? createRelayPublisher(relayOptions);
+
+  const commandPollIntervalMs = options.commandPollIntervalMs
+    ?? options.pollIntervalMs
+    ?? COMMAND_IDLE_POLL_MS;
+  const terrainPollIntervalMs = options.terrainPollIntervalMs
+    ?? TERRAIN_IDLE_POLL_MS;
 
   const commandWatcher = new CommandRelayWatcher({
     snapshotPath: options.snapshotPath,
     stateDir: options.stateDir,
     dryRun: options.dryRun,
-    pollIntervalMs: options.pollIntervalMs,
+    pollIntervalMs: commandPollIntervalMs,
+    activePollIntervalMs: options.activePollIntervalMs,
+    rateLimitGate,
     log: options.log,
     signal: options.signal,
     notify: options.notify,
-    notify: options.notify,
+    now: options.now,
+    publishRemoteRelayState: (relay) => relayPublisher.publishRelayState(relay),
     readRemoteCommand: () => Promise.resolve(
       content.readFile(paths.tacticalCommand, DEFAULT_COMMAND_MAX_BYTES),
     ),
@@ -55,9 +79,11 @@ function createTacticalRelaySidecar(options) {
     snapshotPath: options.snapshotPath,
     stateDir: options.stateDir,
     dryRun: options.dryRun,
-    pollIntervalMs: options.pollIntervalMs,
+    pollIntervalMs: terrainPollIntervalMs,
+    rateLimitGate,
     log: options.log,
     signal: options.signal,
+    now: options.now,
     readRemoteQuery: () => Promise.resolve(
       content.readFile(paths.terrainQuery, DEFAULT_TERRAIN_QUERY_MAX_BYTES),
     ),
@@ -71,7 +97,7 @@ function createTacticalRelaySidecar(options) {
     },
   });
 
-  return { commandWatcher, queryWatcher };
+  return { commandWatcher, queryWatcher, rateLimitGate };
 }
 
 function startTacticalRelaySidecar(options) {
@@ -91,5 +117,6 @@ function startTacticalRelaySidecar(options) {
 module.exports = {
   createTacticalRelaySidecar,
   startTacticalRelaySidecar,
+  M0_PUBLISH_ROOT,
   RELAY_CONTENT_PATHS,
 };

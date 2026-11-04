@@ -403,7 +403,7 @@ function buildSidecarArgs(mode, paths, dryRun = false) {
   const publishFlag = dryRun ? '--dry-run' : '--publish';
   const base = [paths.publishOnce, publishFlag, '--path', paths.snapshotPath];
   if (mode === MODES.OUTBOUND || mode === 'outbound') {
-    return [...base, '--briefing-watch'];
+    return [...base, '--request-path', paths.briefingRequest, '--briefing-watch'];
   }
   if (mode === MODES.FULL || mode === 'full') {
     return [...base, '--command-relay-watch'];

@@ -1,6 +1,7 @@
 'use strict';
 
 const { execFileSync } = require('node:child_process');
+const { isRateLimitBlob } = require('./relay-rate-limit-gate.cjs');
 
 const DEFAULTS = {
   repo: 'NoReturns/OpenXcom-Aster-Relay',
@@ -23,7 +24,8 @@ const DEFAULT_TERRAIN_QUERY_RESULT_MAX_BYTES = 12 * 1024;
 
 function createGhApiExec(options = {}) {
   const execFileSyncImpl = options.execFileSync ?? execFileSync;
-  return function ghApi(method, apiPath, body) {
+  const rateLimitGate = options.rateLimitGate ?? null;
+  const baseGhApi = function ghApi(method, apiPath, body) {
     const args = ['api', '--method', method, apiPath, '-H', 'Accept: application/vnd.github+json'];
     if (body !== undefined) {
       args.push('--input', '-');
@@ -41,6 +43,10 @@ function createGhApiExec(options = {}) {
       throw normalizeGhApiExecError(error);
     }
   };
+  if (rateLimitGate && typeof rateLimitGate.wrapGhApiExec === 'function') {
+    return rateLimitGate.wrapGhApiExec(baseGhApi);
+  }
+  return baseGhApi;
 }
 
 function normalizeGhApiExecError(error) {
@@ -54,17 +60,23 @@ function normalizeGhApiExecError(error) {
     notFound.stderr = stderr;
     return notFound;
   }
-  if (/401|403|authentication|Bad credentials/i.test(blob)) {
+  if (isRateLimitBlob(blob)) {
+    const rate = new Error('GitHub API rate limit exceeded.');
+    rate.code = 'RATE_LIMIT';
+    rate.stderr = stderr;
+    return rate;
+  }
+  if (/401|authentication|Bad credentials/i.test(blob)) {
     const auth = new Error('GitHub authentication failed.');
     auth.code = 'AUTH_FAILED';
     auth.stderr = stderr;
     return auth;
   }
-  if (/rate limit|429|secondary rate limit/i.test(blob)) {
-    const rate = new Error('GitHub API rate limit exceeded.');
-    rate.code = 'RATE_LIMIT';
-    rate.stderr = stderr;
-    return rate;
+  if (/403/.test(blob) && !/rate limit/i.test(blob)) {
+    const auth = new Error('GitHub authentication failed.');
+    auth.code = 'AUTH_FAILED';
+    auth.stderr = stderr;
+    return auth;
   }
   if (/ECONNREFUSED|ENOTFOUND|ETIMEDOUT|network|socket hang up/i.test(blob)) {
     const network = new Error('GitHub API network failure.');
@@ -170,7 +182,10 @@ function publishRemoteContentFile(deps, contentPath, serializedUtf8, commitMessa
     if (error.code === 'AUTH_FAILED') {
       throw error;
     }
-    if (/401|403|authentication|Bad credentials/i.test(stderr + String(error.message))) {
+    if (isRateLimitBlob(`${stderr}\n${error.message}`)) {
+      throw error.code === 'RATE_LIMIT' ? error : normalizeGhApiExecError(error);
+    }
+    if (/401|authentication|Bad credentials/i.test(stderr + String(error.message))) {
       const auth = new Error('GitHub authentication failed.');
       auth.code = 'AUTH_FAILED';
       throw auth;
@@ -205,7 +220,10 @@ function deleteRemoteContentFile(deps, contentPath, sha, commitMessage) {
     if (error.code === 'AUTH_FAILED' || error.code === 'RATE_LIMIT' || error.code === 'NETWORK_FAILED') {
       throw error;
     }
-    if (/401|403|authentication|Bad credentials/i.test(stderr + String(error.message))) {
+    if (isRateLimitBlob(`${stderr}\n${error.message}`)) {
+      throw error.code === 'RATE_LIMIT' ? error : normalizeGhApiExecError(error);
+    }
+    if (/401|authentication|Bad credentials/i.test(stderr + String(error.message))) {
       const auth = new Error('GitHub authentication failed.');
       auth.code = 'AUTH_FAILED';
       throw auth;
@@ -219,7 +237,10 @@ function createRelayContentClient(options = {}) {
     repo: options.repo ?? DEFAULTS.repo,
     branch: options.branch ?? DEFAULTS.branch,
     maxRemoteBytes: options.maxRemoteBytes ?? DEFAULTS.maxRemoteBytes,
-    ghApi: options.ghApi ?? createGhApiExec(),
+    ghApi: options.ghApi ?? createGhApiExec({
+      rateLimitGate: options.rateLimitGate,
+      execFileSync: options.execFileSync,
+    }),
   };
 
   return {
@@ -248,7 +269,10 @@ function createRelayPublisher(options = {}) {
     branch: options.branch ?? DEFAULTS.branch,
     statePath: options.statePath ?? DEFAULTS.statePath,
     maxRemoteBytes: options.maxRemoteBytes ?? DEFAULTS.maxRemoteBytes,
-    ghApi: options.ghApi ?? createGhApiExec(),
+    ghApi: options.ghApi ?? createGhApiExec({
+      rateLimitGate: options.rateLimitGate,
+      execFileSync: options.execFileSync,
+    }),
   };
 
   async function publishRelayState(relayJson) {
@@ -291,7 +315,10 @@ function createRelayPublisher(options = {}) {
         conflict.code = 'SHA_CONFLICT';
         throw conflict;
       }
-      if (/401|403|authentication|Bad credentials/i.test(stderr + String(error.message))) {
+      if (isRateLimitBlob(`${stderr}\n${error.message}`)) {
+        throw error.code === 'RATE_LIMIT' ? error : normalizeGhApiExecError(error);
+      }
+      if (/401|authentication|Bad credentials/i.test(stderr + String(error.message))) {
         const auth = new Error('GitHub authentication failed.');
         auth.code = 'AUTH_FAILED';
         throw auth;

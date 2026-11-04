@@ -18,14 +18,17 @@ const {
   DEFAULT_TERRAIN_QUERY_RESULT_MAX_BYTES,
 } = require('./github-relay.cjs');
 
-const DEFAULT_POLL_MS = 1000;
+const DEFAULT_IDLE_POLL_MS = 15_000;
+/** @deprecated use DEFAULT_IDLE_POLL_MS */
+const DEFAULT_POLL_MS = DEFAULT_IDLE_POLL_MS;
 
 class TerrainQueryRelayWatcher {
   constructor(options) {
     this.snapshotPath = options.snapshotPath;
     this.stateDir = options.stateDir;
     this.dryRun = options.dryRun;
-    this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_MS;
+    this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_IDLE_POLL_MS;
+    this.rateLimitGate = options.rateLimitGate ?? null;
     this.readRemoteQuery = options.readRemoteQuery;
     this.publishRemoteQueryResult = options.publishRemoteQueryResult;
     this.log = options.log ?? ((line) => console.log(line));
@@ -58,6 +61,11 @@ class TerrainQueryRelayWatcher {
     persistQueryJournal(this.stateDir, journal, this.writeFileSync, this.renameSync);
   }
 
+  _msUntilNextPoll() {
+    const gateWait = this.rateLimitGate ? this.rateLimitGate.msUntilOpen(this.now()) : 0;
+    return Math.max(this.pollIntervalMs, gateWait);
+  }
+
   async _pollOnce() {
     if (this._inFlight) {
       return;
@@ -68,7 +76,12 @@ class TerrainQueryRelayWatcher {
       try {
         remote = await this.readRemoteQuery();
       } catch (error) {
-        this.log(`Remote terrain query read failed: ${error.message || String(error)}`);
+        const message = error.message || String(error);
+        if (error.code === 'RATE_LIMIT') {
+          this.log(`Remote terrain query read deferred: ${message}`);
+        } else {
+          this.log(`Remote terrain query read failed: ${message}`);
+        }
         return;
       }
       if (!remote || !remote.text) {
@@ -154,7 +167,7 @@ class TerrainQueryRelayWatcher {
       }
       await this._pollOnce();
       if (this.running) {
-        this._timer = setTimeout(tick, this.pollIntervalMs);
+        this._timer = setTimeout(tick, this._msUntilNextPoll());
       }
     };
     this._timer = setTimeout(tick, 0);
@@ -172,6 +185,7 @@ class TerrainQueryRelayWatcher {
 module.exports = {
   TerrainQueryRelayWatcher,
   DEFAULT_POLL_MS,
+  DEFAULT_IDLE_POLL_MS,
   RELAY_CONTENT_PATHS,
   DEFAULT_TERRAIN_QUERY_MAX_BYTES,
   DEFAULT_TERRAIN_QUERY_RESULT_MAX_BYTES,

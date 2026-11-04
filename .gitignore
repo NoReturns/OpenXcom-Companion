@@ -19,6 +19,13 @@ node_modules/
 .command-relay-sidecar-state/
 **/.command-relay-sidecar-state/
 
+# Shared GitHub rate-limit gate (cross-process runtime)
+.relay-github-rate-limit-gate.json
+**/.relay-github-rate-limit-gate.json
+.relay-github-rate-limit-gate.json.merge.lock
+**/.relay-github-rate-limit-gate.json.merge.lock
+.command-relay-sidecar.lock
+
 # Publisher / worker runtime output
 *.log
 logs/

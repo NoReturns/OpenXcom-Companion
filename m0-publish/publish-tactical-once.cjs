@@ -16,6 +16,10 @@ const {
 const { TacticalWatcher } = require('./lib/tactical-watcher.cjs');
 const { BriefingWatcher } = require('./lib/briefing-watcher.cjs');
 const { startTacticalRelaySidecar } = require('./lib/tactical-relay-sidecar.cjs');
+const {
+  acquireCommandRelaySidecarLock,
+} = require('./lib/command-relay-process-lock.cjs');
+const { createRelayRateLimitGate, resolveSharedRelayRateLimitGatePath } = require('./lib/relay-rate-limit-gate.cjs');
 const { sha256HexLower, readSnapshotByteBuffer } = require('./lib/briefing-snapshot.cjs');
 const { createNotifyEmitter } = require('./lib/companion-relay-notify.cjs');
 
@@ -34,6 +38,14 @@ const DEFAULT_LIVE_SNAPSHOT = path.resolve(__dirname, '../../local/m0/tactical-l
 const DEFAULT_BRIEFING_REQUEST = path.resolve(__dirname, '../../local/m0/briefing-request.json');
 const DEFAULT_BRIEFING_STATE_DIR = path.resolve(__dirname, '.briefing-sidecar-state');
 const DEFAULT_COMMAND_RELAY_STATE_DIR = path.resolve(__dirname, '.command-relay-sidecar-state');
+const DEFAULT_COMMAND_RELAY_LOCK = path.resolve(__dirname, '.command-relay-sidecar.lock');
+
+function createSharedRateLimitGate(options = {}) {
+  return createRelayRateLimitGate({
+    gatePath: resolveSharedRelayRateLimitGatePath(__dirname),
+    now: options.now,
+  });
+}
 
 function usage() {
   console.log(`Usage: node publish-tactical-once.cjs [options]
@@ -44,7 +56,7 @@ function usage() {
   --briefing-watch     F6 mode: poll briefing-request.json and publish verified snapshots
   --command-relay-watch  Poll GitHub tactical-command/terrain-query and mirror local engine files
   --path               Tactical YAML input (default: ${DEFAULT_LIVE_SNAPSHOT} with --briefing-watch, else ${DEFAULT_SNAPSHOT})
-  --request-path       Briefing request file (default: ${DEFAULT_BRIEFING_REQUEST})
+  --request-path       Briefing request file (default: briefing-request.json beside --path, else ${DEFAULT_BRIEFING_REQUEST})
   --state-dir          Sidecar journal directory (briefing default: ${DEFAULT_BRIEFING_STATE_DIR}, command relay: ${DEFAULT_COMMAND_RELAY_STATE_DIR})`);
 }
 
@@ -55,7 +67,8 @@ function parseArgs(argv) {
   let briefingWatch = false;
   let commandRelayWatch = false;
   let inputPath = null;
-  let requestPath = DEFAULT_BRIEFING_REQUEST;
+  let requestPath = null;
+  let requestPathExplicit = false;
   let stateDir = null;
 
   for (let i = 2; i < argv.length; i++) {
@@ -94,6 +107,7 @@ function parseArgs(argv) {
       i += 1;
       if (i >= argv.length) throw new Error('--request-path requires a value');
       requestPath = path.resolve(argv[i]);
+      requestPathExplicit = true;
       continue;
     }
     if (arg === '--state-dir') {
@@ -120,6 +134,13 @@ function parseArgs(argv) {
 
   if (inputPath === null) {
     inputPath = (briefingWatch || commandRelayWatch) ? DEFAULT_LIVE_SNAPSHOT : DEFAULT_SNAPSHOT;
+  }
+
+  if (requestPath === null) {
+    requestPath = DEFAULT_BRIEFING_REQUEST;
+  }
+  if (briefingWatch && !requestPathExplicit) {
+    requestPath = path.join(path.dirname(inputPath), 'briefing-request.json');
   }
 
   if (stateDir === null) {
@@ -183,7 +204,8 @@ async function runBriefingWatch({ dryRun, inputPath, requestPath, stateDir }) {
     }
   }
 
-  const publisher = createRelayPublisher();
+  const rateLimitGate = createSharedRateLimitGate();
+  const publisher = createRelayPublisher({ rateLimitGate });
   const controller = new AbortController();
   process.on('SIGINT', () => controller.abort());
   process.on('SIGTERM', () => controller.abort());
@@ -194,6 +216,7 @@ async function runBriefingWatch({ dryRun, inputPath, requestPath, stateDir }) {
     stateDir,
     dryRun,
     publishRelayState: (relay) => publisher.publishRelayState(relay),
+    rateLimitGate,
     signal: controller.signal,
     notify: resolveStructuredSidecarNotify(),
   });
@@ -260,14 +283,32 @@ async function runCommandRelayWatch({ dryRun, inputPath, stateDir }) {
     }
   }
 
+  let sidecarLock;
+  try {
+    sidecarLock = acquireCommandRelaySidecarLock({
+      lockPath: DEFAULT_COMMAND_RELAY_LOCK,
+      snapshotPath: inputPath,
+    });
+  } catch (error) {
+    console.error(error.message || String(error));
+    process.exitCode = 1;
+    return;
+  }
+
   const controller = new AbortController();
+  const releaseLock = () => {
+    sidecarLock.release();
+  };
   process.on('SIGINT', () => controller.abort());
   process.on('SIGTERM', () => controller.abort());
 
+  const rateLimitGate = createSharedRateLimitGate();
   const sidecar = startTacticalRelaySidecar({
     snapshotPath: inputPath,
     stateDir,
     dryRun,
+    rateLimitGate,
+    rateLimitGatePath: resolveSharedRelayRateLimitGatePath(__dirname),
     signal: controller.signal,
     notify: resolveStructuredSidecarNotify(),
   });
@@ -276,6 +317,7 @@ async function runCommandRelayWatch({ dryRun, inputPath, stateDir }) {
     controller.signal.addEventListener('abort', resolve, { once: true });
   });
   sidecar.stop();
+  releaseLock();
 }
 
 async function main() {
@@ -305,5 +347,7 @@ module.exports = {
   DEFAULT_BRIEFING_REQUEST,
   DEFAULT_BRIEFING_STATE_DIR,
   DEFAULT_COMMAND_RELAY_STATE_DIR,
+  DEFAULT_COMMAND_RELAY_LOCK,
+  createSharedRateLimitGate,
   parseArgs,
 };

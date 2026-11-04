@@ -53,6 +53,14 @@ describe('github relay idle reads (M1-22C)', () => {
     );
   });
 
+  it('classifies HTTP 403 rate limit as RATE_LIMIT not AUTH_FAILED', () => {
+    const raw = new Error('Command failed');
+    raw.stderr = 'gh: API rate limit exceeded for user (HTTP 403)';
+    const normalized = normalizeGhApiExecError(raw);
+    assert.equal(normalized.code, 'RATE_LIMIT');
+    assert.notEqual(normalized.code, 'AUTH_FAILED');
+  });
+
   it('classifies unexpected GitHub exec failures with stderr preserved', () => {
     const raw = new Error('Command failed');
     raw.stderr = 'gh: something broke (HTTP 500)';
@@ -326,10 +334,12 @@ describe('remote command retirement (M1-22C)', () => {
     const stateDir = path.join(root, 'state');
     const remoteCommand = { text: '{"command_id":"move-retry","command_type":"MOVE"}\n', sha: 'sha-retry' };
     let attempts = 0;
+    let now = 1_000_000;
     const watcher = new CommandRelayWatcher({
       snapshotPath,
       stateDir,
       dryRun: false,
+      now: () => now,
       log: () => {},
       readRemoteCommand: async () => remoteCommand,
       fetchRemoteResult: async () => ({
@@ -349,7 +359,9 @@ describe('remote command retirement (M1-22C)', () => {
     await watcher._maybeRetireRemoteCommand(journal, 'move-retry', { command_id: 'move-retry', status: 'FAILED' });
     let after = loadCommandJournal(stateDir);
     assert.equal(after.records['move-retry'].phase, 'published_terminal');
+    assert.equal(attempts, 1);
 
+    now = Date.parse(after.records['move-retry'].retirement_next_attempt_at) + 1;
     await watcher._maybeRetireRemoteCommand(after, 'move-retry', { command_id: 'move-retry', status: 'FAILED' });
     after = loadCommandJournal(stateDir);
     assert.equal(attempts, 2);

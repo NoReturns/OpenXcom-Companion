@@ -19,6 +19,7 @@ const {
   markCommandRecord,
 } = require('./command-journal.cjs');
 const { evaluateRemoteCommandRetirement } = require('./command-relay-retirement.cjs');
+const { tryPublishPostCommandTacticalState } = require('./post-command-tactical-publish.cjs');
 const { writeJsonAtomic, writeTextAtomic, removeFileIfExists } = require('./local-atomic.cjs');
 const {
   RELAY_CONTENT_PATHS,
@@ -33,7 +34,13 @@ const {
   notificationFromMoveCommand,
 } = require('./companion-relay-notify.cjs');
 
-const DEFAULT_POLL_MS = 1000;
+const DEFAULT_IDLE_POLL_MS = 5000;
+const DEFAULT_ACTIVE_POLL_MS = 1000;
+/** @deprecated use DEFAULT_IDLE_POLL_MS */
+const DEFAULT_POLL_MS = DEFAULT_IDLE_POLL_MS;
+
+const RETIREMENT_BACKOFF_BASE_MS = 30_000;
+const RETIREMENT_BACKOFF_MAX_MS = 120_000;
 
 function localRelayPaths(snapshotPath) {
   const dir = path.dirname(snapshotPath);
@@ -74,7 +81,9 @@ class CommandRelayWatcher {
     this.snapshotPath = options.snapshotPath;
     this.stateDir = options.stateDir;
     this.dryRun = options.dryRun;
-    this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_MS;
+    this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_IDLE_POLL_MS;
+    this.activePollIntervalMs = options.activePollIntervalMs ?? DEFAULT_ACTIVE_POLL_MS;
+    this.rateLimitGate = options.rateLimitGate ?? null;
     this.readRemoteCommand = options.readRemoteCommand;
     this.publishRemoteResult = options.publishRemoteResult;
     this.log = options.log ?? ((line) => console.log(line));
@@ -86,6 +95,7 @@ class CommandRelayWatcher {
     this.unlinkSync = options.unlinkSync ?? fs.unlinkSync;
     this.fetchRemoteResult = options.fetchRemoteResult ?? null;
     this.retireRemoteCommand = options.retireRemoteCommand ?? null;
+    this.publishRemoteRelayState = options.publishRemoteRelayState ?? null;
     this.signal = options.signal;
     this.notify = options.notify;
     this._relayReachable = true;
@@ -108,6 +118,31 @@ class CommandRelayWatcher {
 
   persistJournal(journal) {
     persistCommandJournal(this.stateDir, journal, this.writeFileSync, this.renameSync);
+  }
+
+  _retirementBackoffMs(attempts) {
+    const exponent = Math.min(Math.max(attempts - 1, 0), 2);
+    return Math.min(RETIREMENT_BACKOFF_MAX_MS, RETIREMENT_BACKOFF_BASE_MS * (2 ** exponent));
+  }
+
+  _computePollIntervalMs(journal) {
+    if (journal && journal.active && journal.active.command_id) {
+      return this.activePollIntervalMs;
+    }
+    const localResult = this.readLocalResult();
+    if (localResult && !localResult.__parseError) {
+      const status = localResult.status;
+      if (status === 'EXECUTING' || status === 'ACCEPTED') {
+        return this.activePollIntervalMs;
+      }
+    }
+    return this.pollIntervalMs;
+  }
+
+  _msUntilNextPoll(journal) {
+    const interval = this._computePollIntervalMs(journal);
+    const gateWait = this.rateLimitGate ? this.rateLimitGate.msUntilOpen(this.now()) : 0;
+    return Math.max(interval, gateWait);
   }
 
   readLocalResult() {
@@ -150,6 +185,30 @@ class CommandRelayWatcher {
   }
 
   async publishResult(result, commandId, journal) {
+    const publishPostCommand = async () => {
+      const record = getCommandRecord(journal, commandId);
+      const outcome = await tryPublishPostCommandTacticalState({
+        snapshotPath: this.snapshotPath,
+        result,
+        commandId,
+        journal,
+        record,
+        dryRun: this.dryRun,
+        publishRelayState: this.publishRemoteRelayState,
+        log: (line) => this.log(line),
+        readFileSync: this.readFileSync,
+        existsSync: this.existsSync,
+        now: this.now,
+      });
+      if (outcome.action === 'fail_closed') {
+        const detail = outcome.message ? `: ${outcome.message}` : '';
+        this.log(`Post-command tactical publish blocked (${outcome.reason}${detail}).`);
+      }
+      if (outcome.journal) {
+        this.persistJournal(outcome.journal);
+      }
+    };
+
     if (!this.dryRun && this.fetchRemoteResult) {
       try {
         const remote = await this.fetchRemoteResult();
@@ -165,6 +224,7 @@ class CommandRelayWatcher {
           journal.active = null;
           this.persistJournal(journal);
           this.log(`Remote result already ${result.status} for ${commandId.slice(0, 8)}; skipping publish.`);
+          await publishPostCommand();
           await this._maybeRetireRemoteCommand(journal, commandId, result);
           return;
         }
@@ -181,6 +241,7 @@ class CommandRelayWatcher {
       });
       journal.active = null;
       this.persistJournal(journal);
+      await publishPostCommand();
       await this._maybeRetireRemoteCommand(journal, commandId, result);
       return;
     }
@@ -193,6 +254,7 @@ class CommandRelayWatcher {
     journal.active = null;
     this.persistJournal(journal);
     this.log(`Published result ${commandId.slice(0, 8)} status ${result.status}.`);
+    await publishPostCommand();
     await this._maybeRetireRemoteCommand(journal, commandId, result);
   }
 
@@ -297,13 +359,32 @@ class CommandRelayWatcher {
       return;
     }
 
+    if (decision.action === 'delete') {
+      if (record.retirement_next_attempt_at) {
+        const nextAt = Date.parse(record.retirement_next_attempt_at);
+        if (Number.isFinite(nextAt) && this.now() < nextAt) {
+          return;
+        }
+      }
+    }
+
     try {
       await this.retireRemoteCommand(decision.deleteSha, commandId);
       this._markRetiredRemote(journal, commandId, {
         retired_remote_sha256: decision.deleteSha,
+        retirement_delete_attempts: null,
+        retirement_next_attempt_at: null,
       });
       this.log(`Retired remote command ${commandId.slice(0, 8)} on GitHub.`);
     } catch (error) {
+      if (decision.action === 'delete') {
+        const attempts = (record.retirement_delete_attempts ?? 0) + 1;
+        markCommandRecord(journal, commandId, {
+          retirement_delete_attempts: attempts,
+          retirement_next_attempt_at: new Date(this.now() + this._retirementBackoffMs(attempts)).toISOString(),
+        });
+        this.persistJournal(journal);
+      }
       this.log(`Remote command retirement failed: ${error.message || String(error)}`);
     }
   }
@@ -351,6 +432,8 @@ class CommandRelayWatcher {
       phase: 'delivered_local',
       remote_sha256: remoteSha,
       delivered_at: new Date(this.now()).toISOString(),
+      delivered_command_snapshot_sha256: command.snapshot_sha256,
+      delivered_command_state_version: command.state_version,
     });
     journal.active = {
       command_id: command.command_id,
@@ -406,8 +489,13 @@ class CommandRelayWatcher {
         remote = await this.readRemoteCommand();
         this._markRelayReconnected();
       } catch (error) {
-        this.log(`Remote command read failed: ${error.message || String(error)}`);
-        this._markRelayDisconnected(error.message || String(error));
+        const message = error.message || String(error);
+        if (error.code === 'RATE_LIMIT') {
+          this.log(`Remote command read deferred: ${message}`);
+        } else {
+          this.log(`Remote command read failed: ${message}`);
+        }
+        this._markRelayDisconnected(message);
         return;
       }
       if (!remote || !remote.text) {
@@ -488,7 +576,13 @@ class CommandRelayWatcher {
       }
       await this._pollOnce();
       if (this.running) {
-        this._timer = setTimeout(tick, this.pollIntervalMs);
+        let journal;
+        try {
+          journal = this.loadJournal();
+        } catch {
+          journal = { active: null };
+        }
+        this._timer = setTimeout(tick, this._msUntilNextPoll(journal));
       }
     };
     this._timer = setTimeout(tick, 0);
@@ -507,6 +601,10 @@ module.exports = {
   CommandRelayWatcher,
   localRelayPaths,
   DEFAULT_POLL_MS,
+  DEFAULT_IDLE_POLL_MS,
+  DEFAULT_ACTIVE_POLL_MS,
+  RETIREMENT_BACKOFF_BASE_MS,
+  RETIREMENT_BACKOFF_MAX_MS,
   RELAY_CONTENT_PATHS,
   DEFAULT_COMMAND_MAX_BYTES,
   DEFAULT_RESULT_MAX_BYTES,

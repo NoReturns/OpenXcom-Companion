@@ -36,6 +36,7 @@ class BriefingWatcher {
     this.existsSync = options.existsSync ?? fs.existsSync;
     this.signal = options.signal;
     this.notify = options.notify;
+    this.rateLimitGate = options.rateLimitGate ?? null;
 
     this.running = false;
     this.publishInFlight = false;
@@ -205,11 +206,27 @@ class BriefingWatcher {
       return;
     }
 
+    if (this.rateLimitGate) {
+      try {
+        this.rateLimitGate.assertOpenOrThrow(this.now());
+      } catch (error) {
+        if (error.code === 'RATE_LIMIT') {
+          this.log(`Briefing publish deferred: ${error.message || 'GitHub rate limit cooldown'}.`);
+          return;
+        }
+        throw error;
+      }
+    }
+
     let result;
     try {
       result = await this.publishRelayState(relay);
     } catch (error) {
       const code = error.code ?? 'PUBLISH_FAILED';
+      if (code === 'RATE_LIMIT') {
+        this.log(`Briefing publish deferred: ${error.message || 'GitHub rate limit cooldown'}.`);
+        return;
+      }
       if (code === 'AUTH_FAILED' || code === 'SHA_CONFLICT') {
         markRecord(journal, request.request_id, {
           status: 'failed',

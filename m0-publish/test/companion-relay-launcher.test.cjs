@@ -16,8 +16,10 @@ const {
   prefixLines,
   MODES,
   resolvePaths,
+  buildSidecarArgs,
 } = require('../lib/companion-relay-launcher.cjs');
 const { parseArgs } = require('../companion-relay-launcher-cli.cjs');
+const { parseArgs: parsePublishOnceArgs } = require('../publish-tactical-once.cjs');
 
 const YAML = require('yaml');
 const { loadAndValidateSnapshotFromText } = require('../lib/tactical-publish.cjs');
@@ -230,5 +232,68 @@ describe('companion-relay-launcher-cli args', () => {
     const args = parseArgs(['node', 'cli.cjs', '--start', 'full', '--acknowledge-inbound-risk']);
     assert.equal(args.startMode, 'full');
     assert.equal(args.acknowledgeInboundRisk, true);
+  });
+});
+
+describe('companion-relay-launcher snapshot path routing', () => {
+  it('buildSidecarArgs passes matching snapshot and briefing-request paths for briefing', () => {
+    const root = makeTempRoot();
+    try {
+      const snapshotPath = path.join(root, 'companion-snapshot', 'tactical-smoke.yaml');
+      fs.mkdirSync(path.dirname(snapshotPath), { recursive: true });
+      fs.copyFileSync(FIXTURE_V5, snapshotPath);
+      const paths = resolvePaths(snapshotPath);
+
+      const briefingArgs = buildSidecarArgs(MODES.OUTBOUND, paths, false);
+      const pathIdx = briefingArgs.indexOf('--path');
+      const requestIdx = briefingArgs.indexOf('--request-path');
+      assert.ok(pathIdx >= 0);
+      assert.ok(requestIdx >= 0);
+      assert.equal(briefingArgs[pathIdx + 1], paths.snapshotPath);
+      assert.equal(briefingArgs[requestIdx + 1], paths.briefingRequest);
+      assert.equal(paths.briefingRequest, path.join(path.dirname(snapshotPath), 'briefing-request.json'));
+      assert.ok(briefingArgs.includes('--briefing-watch'));
+
+      const commandArgs = buildSidecarArgs(MODES.FULL, paths, false);
+      assert.equal(commandArgs.indexOf('--path') >= 0, true);
+      assert.equal(commandArgs[commandArgs.indexOf('--path') + 1], paths.snapshotPath);
+      assert.equal(commandArgs.includes('--request-path'), false);
+      assert.ok(commandArgs.includes('--command-relay-watch'));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('publish-tactical-once briefing-watch derives request path beside selected snapshot', () => {
+    const root = makeTempRoot();
+    try {
+      const snapshotPath = path.join(root, 'companion-snapshot', 'tactical-smoke.yaml');
+      const args = parsePublishOnceArgs([
+        'node',
+        'publish-tactical-once.cjs',
+        '--briefing-watch',
+        '--path',
+        snapshotPath,
+      ]);
+      assert.equal(args.inputPath, path.resolve(snapshotPath));
+      assert.equal(
+        args.requestPath,
+        path.join(path.dirname(path.resolve(snapshotPath)), 'briefing-request.json'),
+      );
+
+      const customRequest = path.join(root, 'custom-briefing-request.json');
+      const overridden = parsePublishOnceArgs([
+        'node',
+        'publish-tactical-once.cjs',
+        '--briefing-watch',
+        '--path',
+        snapshotPath,
+        '--request-path',
+        customRequest,
+      ]);
+      assert.equal(overridden.requestPath, path.resolve(customRequest));
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
   });
 });
