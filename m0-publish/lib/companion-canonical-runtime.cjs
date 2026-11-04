@@ -6,8 +6,8 @@ const path = require('node:path');
 
 const SCHEMA_VERSION = 1;
 
-/** Verified Win32 Release build (M1-26C deploy authority). */
-const VERIFIED_BUILD_SHA256 = 'cb1f38ee96a0f7a3c2747e530564cd6a8e5a797e1eaf74a785b66f92c74f31fc';
+/** Verified Win32 Release build (M1-28A deploy authority). */
+const VERIFIED_BUILD_SHA256 = '463030e9b66409f514fb531f1ac760f610282ea332427ead0952942866307ad4';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 
