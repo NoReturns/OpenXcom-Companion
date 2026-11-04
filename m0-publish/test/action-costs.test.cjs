@@ -208,6 +208,29 @@ describe('schema v3 action costs', () => {
     assert.throws(() => parseAndValidate(raw), /unknown field: actionCosts/);
   });
 
+  it('preserves actionCosts on friendly soldiers for schema 4 and 5', () => {
+    const sampleCosts = {
+      posture: { kneelDownTu: 4, standUpTu: 8 },
+      hands: {
+        right: {
+          itemType: 'STR_HEAVY_CANNON',
+          actions: [{
+            id: 'snap',
+            actionType: 6,
+            tuCost: 17,
+            canAffordTu: true,
+            usable: true,
+          }],
+        },
+        left: { actions: [] },
+      },
+    };
+    for (const schemaVersion of [4, 5]) {
+      const unit = validateUnit(friendlyV3WithEquipment({ actionCosts: sampleCosts }), 0, schemaVersion);
+      assert.equal(unit.actionCosts.hands.right.actions[0].tuCost, 17);
+    }
+  });
+
   it('rejects malformed action entry fields', () => {
     assert.throws(
       () => validateActionCosts({

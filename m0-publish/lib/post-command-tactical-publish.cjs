@@ -111,6 +111,9 @@ async function tryPublishPostCommandTacticalState(input) {
     if (typeof result.remaining_tu === 'number' && actor.timeUnits !== result.remaining_tu) {
       return { action: 'fail_closed', reason: 'remaining_tu_mismatch' };
     }
+    if (typeof result.kneeled === 'boolean' && actor.kneeled !== result.kneeled) {
+      return { action: 'fail_closed', reason: 'kneeled_mismatch' };
+    }
   }
 
   const publishedAt = new Date(now()).toISOString();

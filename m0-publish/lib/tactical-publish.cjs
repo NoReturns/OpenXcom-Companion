@@ -354,6 +354,7 @@ function validateUnit(raw, index, schemaVersion = 2) {
   const friendly = isFriendlyPlayerControlled(unit);
   const v2Extras = ['name', 'health', 'timeUnits'];
   const v3Extras = ['kneeled', 'activeHand', 'hands', 'inventory', 'actionCosts'];
+  const schemaSupportsV3UnitFields = schemaVersion >= 3;
 
   for (const key of v2Extras) {
     if (Object.prototype.hasOwnProperty.call(raw, key) && !friendly) {
@@ -361,7 +362,7 @@ function validateUnit(raw, index, schemaVersion = 2) {
     }
   }
   for (const key of v3Extras) {
-    if (schemaVersion === 3 && Object.prototype.hasOwnProperty.call(raw, key) && !friendly) {
+    if (schemaSupportsV3UnitFields && Object.prototype.hasOwnProperty.call(raw, key) && !friendly) {
       throw new ValidationError(`units[${index}] must not include ${key}`);
     }
     if (schemaVersion === 2 && Object.prototype.hasOwnProperty.call(raw, key)) {
@@ -375,7 +376,7 @@ function validateUnit(raw, index, schemaVersion = 2) {
     unit.health = requireInt(raw.health, `units[${index}].health`, { min: 0, allowNegative: false });
     unit.timeUnits = requireInt(raw.timeUnits, `units[${index}].timeUnits`, { min: 0, allowNegative: false });
 
-    if (schemaVersion === 3) {
+    if (schemaSupportsV3UnitFields) {
       assert(Object.prototype.hasOwnProperty.call(raw, 'kneeled'), `units[${index}].kneeled required`);
       assert(Object.prototype.hasOwnProperty.call(raw, 'activeHand'), `units[${index}].activeHand required`);
       assert(Object.prototype.hasOwnProperty.call(raw, 'hands'), `units[${index}].hands required`);
@@ -391,7 +392,7 @@ function validateUnit(raw, index, schemaVersion = 2) {
       }
     }
   } else {
-    for (const key of [...v2Extras, ...(schemaVersion === 3 ? v3Extras : [])]) {
+    for (const key of [...v2Extras, ...(schemaSupportsV3UnitFields ? v3Extras : [])]) {
       assert(!Object.prototype.hasOwnProperty.call(raw, key), `units[${index}] must not include ${key}`);
     }
     if (schemaVersion === 2 && Object.prototype.hasOwnProperty.call(raw, 'actionCosts')) {

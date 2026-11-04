@@ -253,4 +253,30 @@ describe('schema v3 equipment validation', () => {
     const relay = buildRelayPayload(tactical, '2026-01-01T00:00:00.000Z');
     assert.equal(relay.source.companion_schema, 3);
   });
+
+  it('accepts v4 and v5 fixtures with the same soldier equipment fields as v3', () => {
+    for (const file of ['valid-v4.yaml', 'valid-v5.yaml']) {
+      const text = fs.readFileSync(path.join(__dirname, 'fixtures', file), 'utf8');
+      const tactical = loadAndValidateSnapshotFromText(text, YAML);
+      assert.equal(tactical.units[0].kneeled, false);
+      assert.equal(tactical.units[1].kneeled, true);
+      assert.equal(tactical.units[0].hands.right.itemType, 'STR_RIFLE');
+      assert.equal(tactical.units[1].hands.right.itemType, 'STR_HEAVY_CANNON');
+    }
+  });
+
+  it('rejects v3-only soldier fields on visible hostiles for schema 4 and 5', () => {
+    for (const schemaVersion of [4, 5]) {
+      assert.throws(
+        () => validateUnit({
+          id: 1000000,
+          faction: FACTION_HOSTILE,
+          originalFaction: FACTION_HOSTILE,
+          position: [5, 5, 0],
+          kneeled: false,
+        }, 0, schemaVersion),
+        /must not include kneeled/
+      );
+    }
+  });
 });
