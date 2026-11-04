@@ -15,7 +15,7 @@ const {
 const { createRelayRateLimitGate, resolveSharedRelayRateLimitGatePath } = require('./relay-rate-limit-gate.cjs');
 const { createGithubQuotaTelemetryStore } = require('./github-quota-telemetry.cjs');
 const { createGithubQuotaConsoleMonitor } = require('./github-quota-console.cjs');
-const { removeCompanionGithubQuotaHudFile } = require('./github-quota-hud-file.cjs');
+const { removeCompanionGithubQuotaHudFile, resolveCompanionGithubQuotaHudPath } = require('./github-quota-hud-file.cjs');
 
 const M0_PUBLISH_ROOT = path.resolve(__dirname, '..');
 
@@ -24,8 +24,9 @@ function createTacticalRelaySidecar(options) {
     ?? resolveSharedRelayRateLimitGatePath(M0_PUBLISH_ROOT);
   const rateLimitGate = options.rateLimitGate
     ?? createRelayRateLimitGate({ gatePath, now: options.now });
+  const hudPath = resolveCompanionGithubQuotaHudPath({ snapshotPathEnv: options.snapshotPath });
   const quotaTelemetryStore = options.quotaTelemetryStore
-    ?? createGithubQuotaTelemetryStore({ now: options.now });
+    ?? createGithubQuotaTelemetryStore({ now: options.now, persistPath: hudPath });
   const baseLog = options.log ?? ((line) => console.log(line));
   const quotaConsoleMonitor = options.quotaConsoleMonitor
     ?? createGithubQuotaConsoleMonitor({
@@ -33,6 +34,8 @@ function createTacticalRelaySidecar(options) {
       rateLimitGate,
       log: baseLog,
       now: options.now,
+      hudPath,
+      snapshotPathEnv: options.snapshotPath,
     });
   const relayOptions = {
     ...(options.relayOptions ?? {}),

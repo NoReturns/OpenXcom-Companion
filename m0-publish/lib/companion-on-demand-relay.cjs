@@ -18,6 +18,7 @@ const {
 const { createRelayRateLimitGate, resolveSharedRelayRateLimitGatePath } = require('./relay-rate-limit-gate.cjs');
 const { createGithubQuotaTelemetryStore } = require('./github-quota-telemetry.cjs');
 const { createGithubQuotaConsoleMonitor } = require('./github-quota-console.cjs');
+const { resolveCompanionGithubQuotaHudPath } = require('./github-quota-hud-file.cjs');
 const { writeJsonAtomic } = require('./local-atomic.cjs');
 const { localRelayPaths } = require('./command-relay-watcher.cjs');
 const { isTerminalStatus } = require('./tactical-command.cjs');
@@ -125,14 +126,17 @@ function createOnDemandRelayContext(options = {}) {
   const gatePath = resolveSharedRelayRateLimitGatePath(M0_PUBLISH_ROOT);
   const rateLimitGate = options.rateLimitGate
     ?? createRelayRateLimitGate({ gatePath, now });
+  const hudPath = resolveCompanionGithubQuotaHudPath({ snapshotPathEnv: snapshotPath });
   const quotaTelemetryStore = options.quotaTelemetryStore
-    ?? createGithubQuotaTelemetryStore({ now });
+    ?? createGithubQuotaTelemetryStore({ now, persistPath: hudPath });
   const quotaConsoleMonitor = options.quotaConsoleMonitor
     ?? createGithubQuotaConsoleMonitor({
       store: quotaTelemetryStore,
       rateLimitGate,
       log: (line) => log(line),
       now,
+      hudPath,
+      snapshotPathEnv: snapshotPath,
     });
 
   const relayOptions = {
@@ -471,6 +475,9 @@ function createOnDemandRelayDaemon(options = {}) {
       await processPendingRequest(ctx, options.io);
     } finally {
       inFlight = false;
+      if (ctx.quotaConsoleMonitor && typeof ctx.quotaConsoleMonitor.tick === 'function') {
+        ctx.quotaConsoleMonitor.tick();
+      }
     }
   };
 

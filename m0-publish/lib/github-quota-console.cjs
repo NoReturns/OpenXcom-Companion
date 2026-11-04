@@ -1,7 +1,13 @@
 'use strict';
 
 const { formatQuotaConsoleLine, DEFAULT_WARN_FRACTION } = require('./github-quota-telemetry.cjs');
-const { writeCompanionGithubQuotaHudFile } = require('./github-quota-hud-file.cjs');
+const {
+  writeCompanionGithubQuotaHudFile,
+  buildGithubQuotaHudPayload,
+  hudQuotaContentSignature,
+  HUD_HEARTBEAT_WRITE_MS,
+  resolveCompanionGithubQuotaHudPath,
+} = require('./github-quota-hud-file.cjs');
 
 function createGithubQuotaConsoleMonitor(options = {}) {
   const store = options.store;
@@ -14,25 +20,44 @@ function createGithubQuotaConsoleMonitor(options = {}) {
   const warnFraction = options.warnFraction ?? DEFAULT_WARN_FRACTION;
   const writeHudFile = options.writeHudFile !== false;
 
+  let lastLogSignature = null;
+  let lastLogAtMs = 0;
+
   function tick() {
     const now = nowFn();
-    const line = formatQuotaConsoleLine({
-      snapshot: store.getSnapshot(),
+    const hudPath = options.hudPath ?? resolveCompanionGithubQuotaHudPath(options);
+    const payload = buildGithubQuotaHudPayload({
+      store,
       rateLimitGate,
       now,
-      warnFraction,
+      hudPath,
+      snapshotPathEnv: options.snapshotPathEnv,
+      m0PublishRoot: options.m0PublishRoot,
     });
-    log(line);
+    const signature = hudQuotaContentSignature(payload);
+    const quotaChanged = signature !== lastLogSignature;
+    if (quotaChanged || (now - lastLogAtMs) >= HUD_HEARTBEAT_WRITE_MS) {
+      const line = formatQuotaConsoleLine({
+        snapshot: store.getSnapshot(),
+        rateLimitGate,
+        now,
+        warnFraction,
+      });
+      log(line);
+      lastLogSignature = signature;
+      lastLogAtMs = now;
+    }
     if (writeHudFile) {
       writeCompanionGithubQuotaHudFile({
         store,
         rateLimitGate,
         now,
-        hudPath: options.hudPath,
+        hudPath,
         snapshotPathEnv: options.snapshotPathEnv,
         m0PublishRoot: options.m0PublishRoot,
         writeFileSync: options.writeFileSync,
         renameSync: options.renameSync,
+        payload,
       });
     }
   }

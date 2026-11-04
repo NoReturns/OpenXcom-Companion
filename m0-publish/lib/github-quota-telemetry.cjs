@@ -1,6 +1,11 @@
 'use strict';
 
 const { isRateLimitBlob } = require('./relay-rate-limit-gate.cjs');
+const {
+  readCompanionGithubQuotaHudFile,
+  snapshotFromHudFilePayload,
+  HUD_RATE_LIMIT_RESOURCE,
+} = require('./github-quota-hud-file.cjs');
 
 const DEFAULT_WARN_FRACTION = 0.1;
 
@@ -100,6 +105,14 @@ function classifyGhErrorKind(error) {
 function createGithubQuotaTelemetryStore(options = {}) {
   const nowFn = options.now ?? (() => Date.now());
   let state = emptySnapshot();
+  if (options.persistPath) {
+    const persisted = snapshotFromHudFilePayload(
+      readCompanionGithubQuotaHudFile(options.persistPath, options.io),
+    );
+    if (persisted) {
+      state = { ...state, ...persisted };
+    }
+  }
 
   function emptySnapshot() {
     return {
@@ -134,12 +147,16 @@ function createGithubQuotaTelemetryStore(options = {}) {
 
   function recordFromHeaders(headers, meta = {}) {
     const now = meta.now ?? nowFn();
+    const resource = headers['x-ratelimit-resource'] ?? null;
+    if (resource && resource !== HUD_RATE_LIMIT_RESOURCE) {
+      return;
+    }
     mergeParsed({
       limit: parseIntHeader(headers, 'x-ratelimit-limit'),
       remaining: parseIntHeader(headers, 'x-ratelimit-remaining'),
       used: parseIntHeader(headers, 'x-ratelimit-used'),
       resetEpochSec: parseIntHeader(headers, 'x-ratelimit-reset'),
-      resource: headers['x-ratelimit-resource'] ?? null,
+      resource: resource ?? HUD_RATE_LIMIT_RESOURCE,
     }, now);
     if (state.remaining !== null && state.remaining > 0 && !meta.preserveErrorKind) {
       state.lastErrorKind = null;
@@ -148,7 +165,15 @@ function createGithubQuotaTelemetryStore(options = {}) {
 
   function recordFromGhError(error, now = nowFn()) {
     const blob = `${error && error.stderr ? error.stderr : ''}\n${error && error.message ? error.message : ''}`;
-    mergeParsed(parseRateLimitHeadersFromText(blob), now);
+    const parsed = parseRateLimitHeadersFromText(blob);
+    if (parsed.resource && parsed.resource !== HUD_RATE_LIMIT_RESOURCE) {
+      const kind = classifyGhErrorKind(error);
+      if (kind) {
+        state.lastErrorKind = kind;
+      }
+      return;
+    }
+    mergeParsed(parsed, now);
     const kind = classifyGhErrorKind(error);
     if (kind) {
       state.lastErrorKind = kind;

@@ -22,7 +22,7 @@ const {
 const { createRelayRateLimitGate, resolveSharedRelayRateLimitGatePath } = require('./lib/relay-rate-limit-gate.cjs');
 const { createGithubQuotaTelemetryStore } = require('./lib/github-quota-telemetry.cjs');
 const { createGithubQuotaConsoleMonitor } = require('./lib/github-quota-console.cjs');
-const { removeCompanionGithubQuotaHudFile } = require('./lib/github-quota-hud-file.cjs');
+const { removeCompanionGithubQuotaHudFile, resolveCompanionGithubQuotaHudPath } = require('./lib/github-quota-hud-file.cjs');
 const { sha256HexLower, readSnapshotByteBuffer } = require('./lib/briefing-snapshot.cjs');
 const { createNotifyEmitter } = require('./lib/companion-relay-notify.cjs');
 
@@ -179,8 +179,13 @@ async function runWatch({ dryRun, inputPath }) {
     }
   }
 
-  const quotaTelemetryStore = createGithubQuotaTelemetryStore();
-  const quotaConsoleMonitor = createGithubQuotaConsoleMonitor({ store: quotaTelemetryStore });
+  const hudPath = resolveCompanionGithubQuotaHudPath({ snapshotPathEnv: inputPath });
+  const quotaTelemetryStore = createGithubQuotaTelemetryStore({ persistPath: hudPath });
+  const quotaConsoleMonitor = createGithubQuotaConsoleMonitor({
+    store: quotaTelemetryStore,
+    hudPath,
+    snapshotPathEnv: inputPath,
+  });
   const publisherWithTelemetry = createRelayPublisher({ quotaTelemetryStore });
   const controller = new AbortController();
   process.on('SIGINT', () => controller.abort());
@@ -211,10 +216,13 @@ async function runBriefingWatch({ dryRun, inputPath, requestPath, stateDir }) {
   }
 
   const rateLimitGate = createSharedRateLimitGate();
-  const quotaTelemetryStore = createGithubQuotaTelemetryStore();
+  const hudPath = resolveCompanionGithubQuotaHudPath({ snapshotPathEnv: inputPath });
+  const quotaTelemetryStore = createGithubQuotaTelemetryStore({ persistPath: hudPath });
   const quotaConsoleMonitor = createGithubQuotaConsoleMonitor({
     store: quotaTelemetryStore,
     rateLimitGate,
+    hudPath,
+    snapshotPathEnv: inputPath,
   });
   const publisher = createRelayPublisher({ rateLimitGate, quotaTelemetryStore });
   const controller = new AbortController();
