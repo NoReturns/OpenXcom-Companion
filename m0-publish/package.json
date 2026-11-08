@@ -2,7 +2,7 @@
   "name": "@open-xcom-companion/m0-publish",
   "private": true,
   "version": "0.1.0",
-  "description": "One-shot tactical snapshot publisher for OpenXcom-Aster-Relay",
+  "description": "GitHub relay tooling for Open X-Com Companion (operator-configured private repo)",
   "scripts": {
     "test": "node scripts/run-all-node-tests.cjs",
     "dry-run": "node publish-tactical-once.cjs --dry-run",

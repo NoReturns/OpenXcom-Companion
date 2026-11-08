@@ -1,12 +1,21 @@
 'use strict';
 
 const path = require('node:path');
-const { DEFAULTS, RELAY_CONTENT_PATHS } = require('./lib/github-relay.cjs');
+const { applyRelayEnvFromLocalConfig, tryResolveRelayDefaults } = require('./lib/relay-config.cjs');
+applyRelayEnvFromLocalConfig();
+const { RELAY_CONTENT_PATHS } = require('./lib/github-relay.cjs');
 const { loadRelayIsolationConfigFromEnv } = require('./lib/relay-isolation-config.cjs');
 const { publishRulesReferenceOnce, RulesReferenceRelayError } = require('./lib/rules-reference-relay-publish.cjs');
 const { createGhApiCallLog } = require('./lib/github-api-instrumentation.cjs');
 
 const DEFAULT_LOCAL = path.resolve(__dirname, '../../local/m0/companion-rules-reference.json');
+
+function formatConfiguredRelayLabel() {
+  const resolved = tryResolveRelayDefaults();
+  return resolved
+    ? `${resolved.repo} branch ${resolved.branch}`
+    : '(unset — set OPENXCOM_COMPANION_RELAY_REPO or m0-publish/config/relay.local.json)';
+}
 
 function usage() {
   console.log(`Usage: node publish-rules-reference-once.cjs [options]
@@ -18,7 +27,7 @@ function usage() {
   --isolation-config   Relay isolation JSON (tests); or set COMPANION_RELAY_ISOLATION_CONFIG
 
 Production remote path: ${RELAY_CONTENT_PATHS.rulesReference}
-Production repo: ${DEFAULTS.repo} branch ${DEFAULTS.branch}`);
+Configured relay: ${formatConfiguredRelayLabel()}`);
 }
 
 function parseArgs(argv) {

@@ -6,13 +6,13 @@ const { spawn } = require('node:child_process');
 const { createSupervisorNotifyBridge } = require('./companion-relay-notify.cjs');
 const YAML = require('yaml');
 const {
-  DEFAULTS,
   RELAY_CONTENT_PATHS,
   DEFAULT_COMMAND_MAX_BYTES,
   DEFAULT_RESULT_MAX_BYTES,
   checkGhAuthReadiness,
   createRelayContentClient,
 } = require('./github-relay.cjs');
+const { tryResolveRelayDefaults: tryRelayConfig } = require('./relay-config.cjs');
 const { localRelayPaths } = require('./command-relay-watcher.cjs');
 const {
   loadCommandJournal,
@@ -62,8 +62,27 @@ function resolvePaths(snapshotPath) {
     briefingStateDir: DEFAULT_BRIEFING_STATE_DIR,
     commandRelayStateDir: DEFAULT_COMMAND_RELAY_STATE_DIR,
     publishOnce: PUBLISH_ONCE,
-    relayRepo: DEFAULTS.repo,
-    relayBranch: DEFAULTS.branch,
+    relayRepo: (tryRelayConfig() || {}).repo ?? '(not configured)',
+    relayBranch: (tryRelayConfig() || {}).branch ?? 'main',
+  };
+}
+
+function checkRelayConfig(env = process.env) {
+  const resolved = tryRelayConfig(env);
+  if (!resolved) {
+    return {
+      ok: false,
+      message:
+        'GitHub relay repo not configured. Set OPENXCOM_COMPANION_RELAY_REPO=owner/name '
+        + 'or create m0-publish/config/relay.local.json from relay.local.example.json.',
+    };
+  }
+  return {
+    ok: true,
+    repo: resolved.repo,
+    branch: resolved.branch,
+    source: resolved.configSource,
+    message: `Relay destination: ${resolved.repo}@${resolved.branch} (${resolved.configSource}).`,
   };
 }
 
@@ -335,15 +354,30 @@ async function runPreflight(options = {}) {
   const paths = resolvePaths(snapshotPath);
   const node = checkNodeRuntime(options);
   const gh = checkGh(options);
+  const relay = checkRelayConfig(options.env);
 
   const local = inspectLocalState(paths, options.io);
-  const remote = await inspectRemoteCommand(paths, options);
+  let remote;
+  if (relay.ok) {
+    remote = await inspectRemoteCommand(paths, options);
+  } else {
+    remote = {
+      remoteCommand: null,
+      remoteResult: null,
+      parsedCommand: null,
+      parsedResult: null,
+      commandParseError: null,
+      resultParseError: null,
+      readErrors: [relay.message],
+    };
+  }
   const inbound = assessInboundDeliverySafety(local, remote, paths, options.io);
   const running = detectRunningSidecars(options);
 
   const snapshotOk = local.snapshot.exists;
   const ghOkForPublish = gh.ok;
-  const readyOutbound = node.ok && snapshotOk && ghOkForPublish;
+  const relayOk = relay.ok;
+  const readyOutbound = node.ok && snapshotOk && ghOkForPublish && relayOk;
   const readyFull = readyOutbound && inbound.safe;
 
   return {
@@ -351,6 +385,7 @@ async function runPreflight(options = {}) {
     paths,
     node,
     gh,
+    relay,
     local,
     remote: {
       hasCommand: Boolean(remote.remoteCommand && remote.remoteCommand.text),
@@ -376,6 +411,7 @@ function formatPreflightReport(report) {
   lines.push(`Snapshot: ${report.paths.snapshotPath} (${report.local.snapshot.exists ? 'present' : 'MISSING'})`);
   lines.push(`Node: ${report.node.version} (${report.node.ok ? 'ok' : `need ${report.node.required}`})`);
   lines.push(`GitHub: ${report.gh.message}`);
+  lines.push(report.relay?.message ?? 'Relay: (missing relay check)');
   lines.push(`Local result status: ${report.local.openLocalStatus ?? '(none)'}`);
   lines.push(`Inbound delivery safe: ${report.inbound.safe ? 'yes' : 'NO'}`);
   for (const b of report.inbound.blockers) {
@@ -458,6 +494,9 @@ async function startRelaySupervisor(startMode, options = {}) {
   }
   if (!preflight.gh.ok && !options.dryRun) {
     throw new Error(preflight.gh.message);
+  }
+  if (!preflight.relay.ok && !options.dryRun) {
+    throw new Error(preflight.relay.message);
   }
 
   if (startMode === MODES.FULL || startMode === 'full') {

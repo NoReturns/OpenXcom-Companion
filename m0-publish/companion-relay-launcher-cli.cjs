@@ -1,5 +1,8 @@
 'use strict';
 
+const { applyRelayEnvFromLocalConfig } = require('./lib/relay-config.cjs');
+applyRelayEnvFromLocalConfig();
+
 const fs = require('node:fs');
 const {
   runPreflight,

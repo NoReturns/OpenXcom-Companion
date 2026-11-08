@@ -7,7 +7,7 @@ Manual, one-shot publication of `companion-rules-reference.json` to the private 
 | Item | Value |
 |------|--------|
 | **Path** | `m0/rules-reference.json` |
-| **Repo / branch** | `NoReturns/OpenXcom-Aster-Relay` @ `main` (production cooperative defaults) |
+| **Repo / branch** | Configured relay (`OPENXCOM_COMPANION_RELAY_REPO` or `config/relay.local.json`) @ `main` (or `OPENXCOM_COMPANION_RELAY_BRANCH`) |
 | **Wire format** | JSON envelope + embedded WP5 reference (see below) |
 
 ## Local prerequisites
@@ -73,7 +73,7 @@ Campaign id alone is **insufficient**. Treat remote data as current only when **
 Retrieve via authenticated `gh api` (same tooling as tactical relay):
 
 ```text
-GET repos/NoReturns/OpenXcom-Aster-Relay/contents/m0/rules-reference.json?ref=main
+GET repos/{owner}/{relay}/contents/m0/rules-reference.json?ref=main
 ```
 
 Compare against local `companion-rules-reference-publish-marker.json`:

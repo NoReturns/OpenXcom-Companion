@@ -9,13 +9,18 @@ const {
   RELAY_PUBLISH_TARGET_BYTES,
 } = require('./relay-payload-adaptive-shrink.cjs');
 const { resolveFullAsciiRelayEnabled } = require('./terrain-full-ascii-relay.cjs');
+const {
+  resolveRelayDefaults,
+  tryResolveRelayDefaults,
+} = require('./relay-config.cjs');
 
-const DEFAULTS = {
-  repo: 'NoReturns/OpenXcom-Aster-Relay',
-  branch: 'main',
-  statePath: 'm0/state.json',
-  maxRemoteBytes: 256 * 1024,
-};
+function relayDefaultsOrThrow() {
+  return resolveRelayDefaults();
+}
+
+function tryCooperativeRelaySurface(env = process.env) {
+  return tryResolveRelayDefaults(env);
+}
 
 const RELAY_CONTENT_PATHS = {
   tacticalCommand: 'm0/tactical-command.json',
@@ -309,15 +314,16 @@ function assertRelayMutationAllowed(deps, contentPath) {
     assertRelayIsolationContract(deps, contentPath);
     return;
   }
-  const repo = String(deps.repo || DEFAULTS.repo);
-  const branch = String(deps.branch || DEFAULTS.branch);
-  if (repo === DEFAULTS.repo && branch === DEFAULTS.branch) {
+  const defaults = tryCooperativeRelaySurface();
+  const repo = String(deps.repo || (defaults && defaults.repo) || '').trim();
+  const branch = String(deps.branch || (defaults && defaults.branch) || '').trim();
+  if (defaults && repo === defaults.repo && branch === defaults.branch) {
     throw new Error(
       `Refusing isolated-enforced GitHub mutation on production cooperative branch for ${contentPath}`,
     );
   }
   const productionPathSet = new Set(Object.values(RELAY_CONTENT_PATHS));
-  if (repo === DEFAULTS.repo && productionPathSet.has(contentPath)) {
+  if (defaults && repo === defaults.repo && productionPathSet.has(contentPath)) {
     throw new Error(
       `Refusing isolated-enforced GitHub mutation on production relay path ${contentPath}`,
     );
@@ -330,8 +336,9 @@ function assertRelayIsolationContract(deps, contentPath) {
   if (!contract) {
     return;
   }
-  const repo = String(deps.repo || DEFAULTS.repo).trim();
-  const branch = String(deps.branch || DEFAULTS.branch).trim();
+  const defaults = tryCooperativeRelaySurface();
+  const repo = String(deps.repo || (defaults && defaults.repo) || '').trim();
+  const branch = String(deps.branch || (defaults && defaults.branch) || '').trim();
   if (repo !== contract.repo || branch !== contract.branch) {
     const err = new Error(
       `RELAY_ISOLATION_CONTRACT_VIOLATION: mutation on ${repo}@${branch} `
@@ -355,10 +362,11 @@ function assertRelayIsolationContract(deps, contentPath) {
 
 function createRelayContentClient(options = {}) {
   const contentPaths = resolveRelayContentPaths(options);
+  const defaults = relayDefaultsOrThrow();
   const deps = {
-    repo: options.repo ?? DEFAULTS.repo,
-    branch: options.branch ?? DEFAULTS.branch,
-    maxRemoteBytes: options.maxRemoteBytes ?? DEFAULTS.maxRemoteBytes,
+    repo: options.repo ?? defaults.repo,
+    branch: options.branch ?? defaults.branch,
+    maxRemoteBytes: options.maxRemoteBytes ?? defaults.maxRemoteBytes,
     contentPaths,
     isolationEnforced: options.isolationEnforced === true,
     relayIsolationContract: options.relayIsolationContract ?? null,
@@ -404,11 +412,12 @@ function buildRelayPublishPrepareOptions(deps) {
 
 function createRelayPublisher(options = {}) {
   const contentPaths = resolveRelayContentPaths(options);
+  const defaults = relayDefaultsOrThrow();
   const deps = {
-    repo: options.repo ?? DEFAULTS.repo,
-    branch: options.branch ?? DEFAULTS.branch,
-    statePath: options.statePath ?? DEFAULTS.statePath,
-    maxRemoteBytes: options.maxRemoteBytes ?? DEFAULTS.maxRemoteBytes,
+    repo: options.repo ?? defaults.repo,
+    branch: options.branch ?? defaults.branch,
+    statePath: options.statePath ?? defaults.statePath,
+    maxRemoteBytes: options.maxRemoteBytes ?? defaults.maxRemoteBytes,
     relayPublishTargetBytes: options.relayPublishTargetBytes ?? RELAY_PUBLISH_TARGET_BYTES,
     includeTerrainFullAsciiBattlefield: options.includeTerrainFullAsciiBattlefield,
     contentPaths,
@@ -501,7 +510,11 @@ function createRelayPublisher(options = {}) {
 
 module.exports = {
   RELAY_SHRINK_EXHAUSTED,
-  DEFAULTS,
+  get DEFAULTS() {
+    return relayDefaultsOrThrow();
+  },
+  resolveRelayDefaults: relayDefaultsOrThrow,
+  tryResolveRelayDefaults: tryCooperativeRelaySurface,
   RELAY_CONTENT_PATHS,
   resolveRelayContentPaths,
   DEFAULT_COMMAND_MAX_BYTES,

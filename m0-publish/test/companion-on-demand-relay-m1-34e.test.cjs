@@ -1,5 +1,8 @@
 'use strict';
 
+const { applySyntheticRelayEnv } = require('./helpers/synthetic-relay-env.cjs');
+applySyntheticRelayEnv();
+
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const {

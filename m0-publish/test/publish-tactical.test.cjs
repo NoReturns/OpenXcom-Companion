@@ -18,6 +18,8 @@ const {
   FACTION_HOSTILE,
 } = require('../lib/tactical-publish.cjs');
 
+const { SYNTHETIC_RELAY_REPO } = require('./helpers/synthetic-relay-env.cjs');
+
 const FIXTURE = path.join(__dirname, 'fixtures', 'valid-v2.yaml');
 const REAL_SNAPSHOT = path.resolve(__dirname, '../../../local/m0/tactical-m1-04.yaml');
 
@@ -125,9 +127,15 @@ describe('publish-tactical-once CLI', () => {
     const out = execFileSync(process.execPath, [
       path.join(__dirname, '..', 'publish-tactical-once.cjs'),
       '--path', REAL_SNAPSHOT,
-    ], { encoding: 'utf8' });
+    ], {
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        OPENXCOM_COMPANION_RELAY_REPO: SYNTHETIC_RELAY_REPO,
+      },
+    });
     assert.match(out, /Mode: dry-run/);
     assert.match(out, /Snapshot ID: [a-f0-9]{64}/);
-    assert.match(out, /Target: https:\/\/github.com\/NoReturns\/OpenXcom-Aster-Relay/);
+    assert.match(out, new RegExp(`Target: https://github.com/${SYNTHETIC_RELAY_REPO.replace('/', '\\/')}/`));
   });
 });

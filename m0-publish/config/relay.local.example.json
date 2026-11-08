@@ -1,0 +1,5 @@
+{
+  "schema_version": 1,
+  "repo": "YOUR_GITHUB_OWNER/YOUR_PRIVATE_RELAY",
+  "branch": "main"
+}

@@ -1,5 +1,8 @@
 'use strict';
 
+const { applyRelayEnvFromLocalConfig } = require('./lib/relay-config.cjs');
+applyRelayEnvFromLocalConfig();
+
 const path = require('node:path');
 const { resolveSnapshotPath } = require('./lib/companion-relay-launcher.cjs');
 const { createOnDemandRelayDaemon } = require('./lib/companion-on-demand-relay.cjs');

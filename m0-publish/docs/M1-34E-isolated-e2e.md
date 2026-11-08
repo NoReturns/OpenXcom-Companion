@@ -4,7 +4,7 @@
 
 Prove the M1-34B single-RETRIEVE lifecycle against **real GitHub publish and retirement**, without touching:
 
-- Production cooperative GitHub (`NoReturns/OpenXcom-Aster-Relay` `main`, `m0/*`)
+- Production cooperative GitHub (configured `OPENXCOM_COMPANION_RELAY_REPO` @ `main`, default `m0/*` paths)
 - Production sidecar journal (`companion/m0-publish/.command-relay-sidecar-state/`)
 - Production `local/m0/` relay files or live daemon (PID 16048)
 

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "repo": "YOUR_GITHUB_OWNER/OpenXcom-Aster-Relay-M134E-Isolated",
+  "branch": "main",
+  "state_path": "m0-e2e/state.json",
+  "content_paths": {
+    "tacticalCommand": "m0-e2e/tactical-command.json",
+    "tacticalResult": "m0-e2e/tactical-result.json",
+    "terrainQuery": "m0-e2e/terrain-query.json",
+    "terrainQueryResult": "m0-e2e/terrain-query-result.json",
+    "rulesReference": "m0-e2e/rules-reference.json"
+  }
+}

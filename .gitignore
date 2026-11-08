@@ -42,3 +42,28 @@ Thumbs.db
 # M1-34E isolated GitHub config (local secrets / test repo name)
 m0-publish/config/m1-34e-relay-isolation.local.json
 **/m1-34e-relay-isolation.local.json
+**/config/*.local.json
+m0-publish/config/relay.local.json
+**/config/relay.local.json
+
+# Companion on-demand relay test harness output (never commit)
+companion_on_demand_relay_test_tmp/
+**/companion_on_demand_relay_test_tmp/
+
+# Local GitHub quota telemetry written beside the tactical snapshot
+**/companion-github-quota.json
+companion-github-quota.json
+
+# Local command-journal scratch files (tests / operator)
+companion_command_journal_test.json
+**/companion_command_journal_test.json
+
+# Editor or recovery backups of source
+*.backup-*
+**/*.backup-*
+
+# On-demand daemon / relay runtime artifacts (local machine)
+**/companion-on-demand-relay-transactions.jsonl
+**/.companion-on-demand-daemon-health.json
+**/.companion-on-demand-daemon-ready.json
+**/.companion-on-demand-daemon-lifecycle.json

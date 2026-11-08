@@ -7,7 +7,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { setTimeout: delay } = require('node:timers/promises');
 
-const BASE = 'https://api.github.com/repos/NoReturns/OpenXcom-Aster-Relay';
+const { applyRelayEnvFromLocalConfig, resolveRelayRepoTarget } = require('../m0-publish/lib/relay-config.cjs');
+applyRelayEnvFromLocalConfig();
+const { repo: relayRepo } = resolveRelayRepoTarget();
+const BASE = `https://api.github.com/repos/${relayRepo}`;
 const COMMAND = 'm0/command.json';
 const RESULT = 'm0/result.json';
 const DIR = path.join(__dirname, '.aster-ping-state');

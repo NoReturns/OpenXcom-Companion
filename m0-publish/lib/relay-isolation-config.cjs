@@ -3,16 +3,32 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { DEFAULTS, RELAY_CONTENT_PATHS } = require('./github-relay.cjs');
+const { tryResolveRelayDefaults, RELAY_CONTENT_PATHS, resolveRelayDefaults } = require('./github-relay.cjs');
 
 const CONFIG_SCHEMA_VERSION = 1;
 
-const PRODUCTION_COOPERATIVE_RELAY = Object.freeze({
-  repo: DEFAULTS.repo,
-  branch: DEFAULTS.branch,
-  statePath: DEFAULTS.statePath,
-  contentPaths: { ...RELAY_CONTENT_PATHS },
-});
+function getProductionCooperativeRelay(env = process.env) {
+  const defaults = resolveRelayDefaults(env);
+  return Object.freeze({
+    repo: defaults.repo,
+    branch: defaults.branch,
+    statePath: defaults.statePath,
+    contentPaths: { ...RELAY_CONTENT_PATHS },
+  });
+}
+
+function tryGetProductionCooperativeRelay(env = process.env) {
+  const defaults = tryResolveRelayDefaults(env);
+  if (!defaults) {
+    return null;
+  }
+  return Object.freeze({
+    repo: defaults.repo,
+    branch: defaults.branch,
+    statePath: defaults.statePath,
+    contentPaths: { ...RELAY_CONTENT_PATHS },
+  });
+}
 
 function mergeContentPaths(partial) {
   const merged = { ...RELAY_CONTENT_PATHS };
@@ -32,30 +48,35 @@ function mergeContentPaths(partial) {
   return merged;
 }
 
-function matchesProductionCooperativeSurface(config) {
+function matchesProductionCooperativeSurface(config, env = process.env) {
   if (!config || typeof config !== 'object') {
+    return false;
+  }
+  const production = tryGetProductionCooperativeRelay(env);
+  if (!production) {
     return false;
   }
   const repo = String(config.repo || '').trim();
   const branch = String(config.branch || 'main').trim();
-  if (repo !== PRODUCTION_COOPERATIVE_RELAY.repo || branch !== PRODUCTION_COOPERATIVE_RELAY.branch) {
+  if (repo !== production.repo || branch !== production.branch) {
     return false;
   }
   const paths = mergeContentPaths(config.content_paths ?? config.contentPaths);
   for (const key of Object.keys(RELAY_CONTENT_PATHS)) {
-    if (paths[key] === PRODUCTION_COOPERATIVE_RELAY.contentPaths[key]) {
+    if (paths[key] === production.contentPaths[key]) {
       return true;
     }
   }
-  const statePath = String(config.state_path ?? config.statePath ?? PRODUCTION_COOPERATIVE_RELAY.statePath).trim();
-  return statePath === PRODUCTION_COOPERATIVE_RELAY.statePath;
+  const statePath = String(config.state_path ?? config.statePath ?? production.statePath).trim();
+  return statePath === production.statePath;
 }
 
-function assertIsolatedFromProductionCooperative(config, label = 'relay isolation config') {
-  if (matchesProductionCooperativeSurface(config)) {
+function assertIsolatedFromProductionCooperative(config, label = 'relay isolation config', env = process.env) {
+  const production = tryGetProductionCooperativeRelay(env);
+  if (production && matchesProductionCooperativeSurface(config, env)) {
     throw new Error(
       `${label}: refusing production cooperative GitHub surface `
-      + `(${PRODUCTION_COOPERATIVE_RELAY.repo}@${PRODUCTION_COOPERATIVE_RELAY.branch} `
+      + `(${production.repo}@${production.branch} `
       + 'and production m0/* paths). Use a dedicated test repository or non-overlapping paths on a non-main branch.',
     );
   }
@@ -67,22 +88,22 @@ function assertIsolatedFromProductionCooperative(config, label = 'relay isolatio
   if (!branch) {
     throw new Error(`${label}: branch is required`);
   }
-  if (repo === PRODUCTION_COOPERATIVE_RELAY.repo && branch === PRODUCTION_COOPERATIVE_RELAY.branch) {
+  if (production && repo === production.repo && branch === production.branch) {
     throw new Error(`${label}: refusing production repo main branch for isolated validation`);
   }
-  if (repo === PRODUCTION_COOPERATIVE_RELAY.repo) {
+  if (production && repo === production.repo) {
     const paths = mergeContentPaths(config.content_paths ?? config.contentPaths);
     for (const key of Object.keys(RELAY_CONTENT_PATHS)) {
-      const productionPath = PRODUCTION_COOPERATIVE_RELAY.contentPaths[key];
+      const productionPath = production.contentPaths[key];
       if (productionPath && paths[key] === productionPath) {
         throw new Error(
           `${label}: on production repo ${repo}, content_paths.${key} must not equal production path ${paths[key]}`,
         );
       }
     }
-    const statePath = String(config.state_path ?? config.statePath ?? PRODUCTION_COOPERATIVE_RELAY.statePath).trim();
-    if (statePath === PRODUCTION_COOPERATIVE_RELAY.statePath) {
-      throw new Error(`${label}: on production repo ${repo}, state_path must not equal ${PRODUCTION_COOPERATIVE_RELAY.statePath}`);
+    const statePath = String(config.state_path ?? config.statePath ?? production.statePath).trim();
+    if (statePath === production.statePath) {
+      throw new Error(`${label}: on production repo ${repo}, state_path must not equal ${production.statePath}`);
     }
   }
 }
@@ -170,8 +191,9 @@ function relayOptionsMatchContract(relayOptions, contract) {
   if (!relayOptions || typeof relayOptions !== 'object') {
     return { ok: false, reason: 'missing relay options for isolation contract' };
   }
-  const repo = String(relayOptions.repo ?? DEFAULTS.repo).trim();
-  const branch = String(relayOptions.branch ?? DEFAULTS.branch).trim();
+  const defaults = tryResolveRelayDefaults();
+  const repo = String(relayOptions.repo ?? (defaults && defaults.repo) ?? '').trim();
+  const branch = String(relayOptions.branch ?? (defaults && defaults.branch) ?? 'main').trim();
   if (repo !== contract.repo || branch !== contract.branch) {
     return {
       ok: false,
@@ -187,7 +209,12 @@ function relayOptionsMatchContract(relayOptions, contract) {
       };
     }
   }
-  const statePath = String(relayOptions.statePath ?? relayOptions.state_path ?? DEFAULTS.statePath).trim();
+  const statePath = String(
+    relayOptions.statePath
+    ?? relayOptions.state_path
+    ?? (defaults && defaults.statePath)
+    ?? 'm0/state.json',
+  ).trim();
   if (statePath !== contract.statePath) {
     return {
       ok: false,
@@ -234,7 +261,11 @@ function describeRelayIsolationTarget(config) {
 
 module.exports = {
   CONFIG_SCHEMA_VERSION,
-  PRODUCTION_COOPERATIVE_RELAY,
+  get PRODUCTION_COOPERATIVE_RELAY() {
+    return getProductionCooperativeRelay();
+  },
+  getProductionCooperativeRelay,
+  tryGetProductionCooperativeRelay,
   mergeContentPaths,
   matchesProductionCooperativeSurface,
   assertIsolatedFromProductionCooperative,
