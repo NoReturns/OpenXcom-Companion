@@ -81,7 +81,10 @@ Full suite (`npm test` via `scripts/run-all-node-tests.cjs`): **813** tests, **7
 companion/
   LICENSE              # GPLv3 (Companion source)
   README.md            # this file
-  docs/                # M1 design and completion notes
+  AGENTS.md            # agent / Cursor conventions (tactical relay, builds)
+  docs/                # M1 design notes + workspace & live-play guides
+  scripts/workspace/   # example deploy + launch PowerShell (monorepo workspace)
+  contrib/cursor/rules/# optional Cursor M1 tactical briefing rule
   m0-ping/             # lightweight GitHub connectivity worker
   m0-publish/          # daemons, libraries, CLIs, tests, runbooks
     lib/                 # relay, terrain, command, daemon logic
@@ -91,11 +94,20 @@ companion/
     config/              # example configs (*.example.json); never commit *.local.json
 ```
 
+## Workspace setup (monorepo)
+
+Clone this repo into `companion/` beside `engine/OpenXcom`, `local/m0/`, and `runtime/m0/` under a parent workspace directory. Full layout, build/deploy, relay env vars, and SHA verification:
+
+- **[docs/WORKSPACE-LAYOUT.md](docs/WORKSPACE-LAYOUT.md)** — directory tree, engine branch, deploy, launch
+- **[scripts/workspace/](scripts/workspace/)** — `deploy-openxcom.example.ps1`, `Start-CompanionOpenXcom.example.ps1` (`-WorkspaceRoot` or `OPENXCOM_COMPANION_WORKSPACE_ROOT`)
+- **[docs/ASTER-LIVE-PLAYBOOK.md](docs/ASTER-LIVE-PLAYBOOK.md)** — cooperative play via GitHub relay (external agent)
+- **[AGENTS.md](AGENTS.md)** — tactical publishing and development conventions
+
 ## Current limitations (M1)
 
-- **Monorepo layout:** Some helpers assume the Companion repo sits next to `engine/OpenXcom` and optional `runtime/m0/` in a parent workspace. Standalone clones may need environment overrides (documented in runbooks under `m0-publish/docs/`).
+- **Monorepo layout:** `companion-canonical-runtime.cjs` resolves paths from a workspace root containing `engine/`, `local/`, and `runtime/`. Standalone clones need that parent tree or future path overrides (see WORKSPACE-LAYOUT).
 - **Relay is operator-supplied:** Missing `OPENXCOM_COMPANION_RELAY_REPO` (and missing `relay.local.json`) causes a clear configuration error instead of silent publishes.
-- **Human-only actions:** `END_TURN` and human-assigned soldiers remain outside agent authority (see workspace `AGENTS.md` when present).
+- **Human-only actions:** `END_TURN` and human-assigned soldiers remain outside agent authority (see [AGENTS.md](AGENTS.md)).
 - **No npm package:** `package.json` is marked `"private": true`; this project is published as **source on GitHub**, not as a registry package.
 
 ## Legal and attribution
@@ -107,6 +119,8 @@ companion/
 
 ## Further reading
 
-- `m0-publish/docs/relay-github-setup.md` — create and validate your relay repo
-- `m0-publish/docs/tactical-command-m1-20b.md` — operator runbook for tactical publishing
-- `AGENTS.md` (workspace root, when using the full development tree) — agent and Cursor conventions for live play
+- [docs/WORKSPACE-LAYOUT.md](docs/WORKSPACE-LAYOUT.md) — reproduce the full workspace
+- [AGENTS.md](AGENTS.md) — agent conventions for tactical relay and builds
+- [docs/ASTER-LIVE-PLAYBOOK.md](docs/ASTER-LIVE-PLAYBOOK.md) — external co-op agent workflow
+- [m0-publish/docs/relay-github-setup.md](m0-publish/docs/relay-github-setup.md) — create and validate your relay repo
+- [m0-publish/docs/tactical-command-m1-20b.md](m0-publish/docs/tactical-command-m1-20b.md) — operator runbook for tactical publishing

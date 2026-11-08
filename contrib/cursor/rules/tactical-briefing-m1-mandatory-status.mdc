@@ -1,0 +1,34 @@
+---
+description: Mandatory unitStateBrief review after every fresh F6 / m0/state.json retrieval
+alwaysApply: true
+---
+
+# M1 — Mandatory battlefield status review
+
+When you analyze a **fresh** tactical briefing (`BRIEFING_PUBLISHED`, new F6 export, or newly fetched GitHub `m0/state.json`), you **must** complete this sequence **before** terrain planning, MOVE authoring, or order proposals:
+
+1. **Read `unitStateBrief.exceptions` before tactical planning** — inspect the relay payload’s `unitStateBrief.exceptions` array first; do not skip to `terrainBrief` or `commandBinding.player_soldiers` alone.
+
+2. **Review psychological `perceptionLog` history alongside exceptions** — inspect `tactical.perceptionLog` for `*_observed` psychological events (panic, berserk, mind control, psi morale). Treat them as **historical player notifications**, not current unit status.
+
+3. **Identify panic, berserk, mind control, and low-morale warnings** — map `readiness` summaries (`panicking`, `berserk`), `kind: mind_controlled_roster_soldier`, `kind: xcom_controlled_hostile_unit`, and `kind: low_morale_heuristic` (plus `engine_not_acting_unit` / non-`ready_to_act` readiness when present).
+
+4. **Distinguish confirmed conditions from heuristics** — treat `mind_controlled_roster_soldier`, `xcom_controlled_hostile_unit`, and readiness `panicking`/`berserk` as **confirmed** at export time. Treat `low_morale_heuristic` and `low_energy_heuristic` as **heuristics only**; never describe them as active panic. Do not infer active panic from `psi_morale_attack_observed` alone.
+
+5. **Cross-check command authority before issuing orders** — only propose commands for units listed in `commandBinding.player_soldiers` with matching `snapshot_sha256` / `state_version`. Mind-controlled roster soldiers and MC aliens are **not** Companion command actors unless explicitly listed.
+
+6. **Include significant status changes in the tactical assessment** — separate **current export status** from **historical** `perceptionLog` psych events (e.g. panicked during turn N; current standing unless readiness confirms panic).
+
+**Do not** add or request a duplicate relay summary field; use `unitStateBrief.exceptions`, `perceptionLog`, and `commandBinding` as structured sources.
+
+**Hostile intelligence (after step 6, before terrain/MOVE planning):** Read `m0-publish/lib/hostile-intelligence-consumer.cjs`. `units[]` with `facing` are current engine-visible observations at export; use `classifyCurrentHostileObservation()` — only `confirmed_current_los` is a genuine hostile target (neutrals/MC use other `confirmed_current_los_*` values). `perceptionLog` is historical memory only — missing `unit_last_seen` does not mean hidden; do not merge logs across different `sessionId`. `last_seen` is not live tracking. Units absent from `units[]` have no current position. Mind-controlled roster soldiers are hostile threats but not commandable; they appear in `exceptions` only — `visibleHostileObservations` is genuine hostiles (faction/originalFaction hostile), not neutrals or MC roster.
+
+Canonical programmatic mirror (E2E): `m0-publish/lib/tactical-briefing-ai-workflow.cjs`.
+
+Public agent runbook: repository root `AGENTS.md` and `docs/ASTER-LIVE-PLAYBOOK.md`.
+
+**Stage D example (Battleship harness, turn 3):**
+
+- **Virender Shah (#3):** Confirmed under alien mind control. Not available for X-COM orders.
+- **Eric Reyes (#1):** Low morale. No confirmed active panic at this snapshot.
+- **Historical panic:** Unknown. Current snapshots cannot establish whether an earlier episode occurred.
