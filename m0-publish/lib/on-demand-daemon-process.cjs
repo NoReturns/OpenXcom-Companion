@@ -4,6 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { detectRunningSidecars } = require('./companion-relay-launcher.cjs');
 const { execFileSyncHidden } = require('./exec-file-sync.cjs');
+function loadTestSupervisorModule() {
+  return require('./on-demand-test-supervisor.cjs');
+}
 
 function loadDiagnostics() {
   return require('./on-demand-daemon-diagnostics.cjs');
@@ -393,6 +396,9 @@ function startOnDemandDaemonVerified(options = {}) {
     const relayStateArgs = options.commandRelayStateDir
       ? ['--command-relay-state-dir', path.resolve(options.commandRelayStateDir)]
       : [];
+    const { inferTestSupervisorBinding, buildTestSupervisorCliArgs } = loadTestSupervisorModule();
+    const supervisorBinding = inferTestSupervisorBinding(options, deps);
+    const supervisorArgs = supervisorBinding ? buildTestSupervisorCliArgs(supervisorBinding) : [];
     const { spawn: spawnProcess } = deps.childProcess ?? require('node:child_process');
     const stdioLogFd = openDaemonStdioLog(snapshotDir, deps);
     let earlyExitCode = null;
@@ -405,6 +411,7 @@ function startOnDemandDaemonVerified(options = {}) {
       '--snapshot-path',
       snapshotPath,
       ...relayStateArgs,
+      ...supervisorArgs,
       ...extraArgs,
     ], {
       cwd,

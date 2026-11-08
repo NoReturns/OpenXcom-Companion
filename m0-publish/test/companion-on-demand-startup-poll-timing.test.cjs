@@ -111,6 +111,7 @@ describe('startup poll timing and strict verify ordering', () => {
       timeoutMs: 2000,
       pollMs: 25,
       disableLiveDaemonReuse: true,
+      bindTestSupervisor: false,
       deps,
     });
     const elapsed = Date.now() - started;
@@ -153,6 +154,7 @@ describe('startup poll timing and strict verify ordering', () => {
       timeoutMs: 350,
       pollMs: 15,
       disableLiveDaemonReuse: true,
+      bindTestSupervisor: false,
       deps,
     });
     assert.equal(start.ok, true, start.error || 'expected post-deadline verify success');

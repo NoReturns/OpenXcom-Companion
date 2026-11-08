@@ -286,6 +286,7 @@ function createOnDemandRelayContext(options = {}) {
 
   const sessionBindings = {
     gameSessionWatchdog: options.gameSessionWatchdog ?? null,
+    testSupervisorWatchdog: options.testSupervisorWatchdog ?? null,
   };
   const resolveCommandDeliveryGate = options.assertCommandDeliveryAllowed
     ?? (() => assertCommandDeliveryAllowed(snapshotPath, {
@@ -361,6 +362,16 @@ function createOnDemandRelayContext(options = {}) {
   });
   if (options.gameSessionWatchdog) {
     ctx.gameSessionWatchdog = options.gameSessionWatchdog;
+  }
+  Object.defineProperty(ctx, 'testSupervisorWatchdog', {
+    enumerable: true,
+    get: () => sessionBindings.testSupervisorWatchdog,
+    set: (value) => {
+      sessionBindings.testSupervisorWatchdog = value;
+    },
+  });
+  if (options.testSupervisorWatchdog) {
+    ctx.testSupervisorWatchdog = options.testSupervisorWatchdog;
   }
   return ctx;
 }
@@ -912,6 +923,11 @@ async function processPendingRequest(ctx, io = {}) {
       return { processed: false, reason: 'game_session_closed' };
     }
   }
+  if (ctx.testSupervisorWatchdog && typeof ctx.testSupervisorWatchdog.acceptingRequests === 'function') {
+    if (!ctx.testSupervisorWatchdog.acceptingRequests()) {
+      return { processed: false, reason: 'test_supervisor_closed' };
+    }
+  }
   const { paths } = ctx;
   const pending = readJsonIfExists(paths.requestPath, io);
   if (!pending || !pending.value || pending.value.status !== 'pending') {
@@ -1058,6 +1074,17 @@ function createOnDemandRelayDaemon(options = {}) {
     }
     if (options.gameSessionWatchdog) {
       const phase = await options.gameSessionWatchdog.beforeTick();
+      if (phase === 'shutdown') {
+        running = false;
+        if (timer) {
+          clearTimeout(timer);
+          timer = null;
+        }
+        return;
+      }
+    }
+    if (options.testSupervisorWatchdog) {
+      const phase = await options.testSupervisorWatchdog.beforeTick();
       if (phase === 'shutdown') {
         running = false;
         if (timer) {

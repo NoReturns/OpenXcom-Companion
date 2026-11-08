@@ -36,6 +36,7 @@ const {
   createGameSessionWatchdog,
   gameSessionGateDisabled,
 } = require('./lib/on-demand-game-session.cjs');
+const { createTestSupervisorWatchdog } = require('./lib/on-demand-test-supervisor.cjs');
 const { reconcileDaemonMarkersForStoppedPid } = require('./lib/on-demand-daemon-health.cjs');
 const {
   adoptDaemonIntoPlaySessionLease,
@@ -53,7 +54,10 @@ function usage() {
   --once             Process one daemon tick and exit (tests)
   --snapshot-path    Override OPENXCOM_COMPANION_SNAPSHOT_PATH
   --command-relay-state-dir  Override command-relay journal directory (tests/isolated runs)
-  --relay-isolation-config   JSON file with isolated GitHub repo/branch/paths (M1-34E; fail-closed)`);
+  --relay-isolation-config   JSON file with isolated GitHub repo/branch/paths (M1-34E; fail-closed)
+  --test-supervisor-pid      Owning node test process pid (set by test harness)
+  --test-supervisor-creation-ms  Supervisor creation time for pid-reuse guards
+  --test-supervisor-cmd-digest   SHA-256 of supervisor command line at bind time`);
 }
 
 function parseArgs(argv) {
@@ -62,6 +66,9 @@ function parseArgs(argv) {
   let snapshotPath = null;
   let commandRelayStateDir = null;
   let relayIsolationConfigPath = null;
+  let testSupervisorPid = null;
+  let testSupervisorCreationMs = null;
+  let testSupervisorCmdDigest = null;
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--help' || arg === '-h') {
@@ -91,6 +98,21 @@ function parseArgs(argv) {
       relayIsolationConfigPath = path.resolve(argv[i]);
       continue;
     }
+    if (arg === '--test-supervisor-pid') {
+      i += 1;
+      testSupervisorPid = Number(argv[i]);
+      continue;
+    }
+    if (arg === '--test-supervisor-creation-ms') {
+      i += 1;
+      testSupervisorCreationMs = Number(argv[i]);
+      continue;
+    }
+    if (arg === '--test-supervisor-cmd-digest') {
+      i += 1;
+      testSupervisorCmdDigest = String(argv[i]);
+      continue;
+    }
     throw new Error(`Unknown argument: ${arg}`);
   }
   return {
@@ -99,6 +121,9 @@ function parseArgs(argv) {
     snapshotPath: snapshotPath ?? resolveSnapshotPath(),
     commandRelayStateDir,
     relayIsolationConfigPath,
+    testSupervisorPid,
+    testSupervisorCreationMs,
+    testSupervisorCmdDigest,
   };
 }
 
@@ -108,6 +133,14 @@ async function main() {
     console.error(
       'Refusing default production command-relay journal under node:test; '
       + `pass --command-relay-state-dir (production journal: ${getProductionCommandRelayJournalPath()}).`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+  if (!args.once && args.commandRelayStateDir && !Number.isFinite(args.testSupervisorPid)) {
+    console.error(
+      'Refusing long-running test daemon without --test-supervisor-pid; '
+      + 'spawn via startOnDemandDaemonVerified or pass explicit supervisor binding.',
     );
     process.exitCode = 1;
     return;
@@ -208,11 +241,21 @@ async function main() {
     process.exit(0);
   };
 
-  if (!args.once && !gameSessionGateDisabled() && !isNodeTestProcess()) {
+  if (!args.once && !gameSessionGateDisabled() && !Number.isFinite(args.testSupervisorPid)) {
     daemonOptions.gameSessionWatchdog = createGameSessionWatchdog({
       snapshotPath,
       daemonPid: process.pid,
       onShutdown: (reason) => shutdown(`game_session:${reason}`),
+    });
+  }
+
+  if (!args.once && Number.isFinite(args.testSupervisorPid)) {
+    daemonOptions.testSupervisorWatchdog = createTestSupervisorWatchdog({
+      snapshotDir,
+      supervisorPid: args.testSupervisorPid,
+      supervisorCreationMs: args.testSupervisorCreationMs,
+      supervisorCommandDigest: args.testSupervisorCmdDigest,
+      onShutdown: (reason) => shutdown(`test_supervisor:${reason}`),
     });
   }
 

@@ -22,4 +22,23 @@ const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ..
   stdio: 'inherit',
 });
 
-process.exit(result.status ?? 1);
+const {
+  listTestOwnedOnDemandRelayLeaks,
+  formatRelayDaemonLeakReport,
+} = require('../lib/on-demand-test-supervisor.cjs');
+const relayLeaks = listTestOwnedOnDemandRelayLeaks();
+if (relayLeaks.length > 0) {
+  console.error('\n[companion] Test-owned on-demand relay daemon leak check FAILED');
+  console.error(formatRelayDaemonLeakReport(relayLeaks));
+  for (const row of relayLeaks) {
+    console.error(`  cmd: ${row.commandLine}`);
+  }
+  process.exit(1);
+}
+
+if ((result.status ?? 1) !== 0) {
+  process.exit(result.status ?? 1);
+}
+
+console.log('[companion] Test-owned on-demand relay daemon leak check: PASS');
+process.exit(0);
