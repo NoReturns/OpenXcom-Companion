@@ -10,6 +10,7 @@ const { isTerminalStatus } = require('./tactical-command.cjs');
 const { markCommandRecord } = require('./command-journal.cjs');
 const path = require('node:path');
 const { writeTacticalPublicationConfirmAtomic } = require('./tactical-publication-confirm.cjs');
+const { buildMoveOutcomeBrief } = require('./move-result-consumer.cjs');
 
 const SNAPSHOT_SHA_PATTERN = /^[a-f0-9]{64}$/;
 const POST_COMMAND_PUBLISH_STATUSES = new Set(['COMPLETED', 'INTERRUPTED', 'FAILED']);
@@ -35,6 +36,7 @@ async function tryPublishPostCommandTacticalState(input) {
     commandId,
     journal,
     record,
+    deliveredCommand = null,
     dryRun = false,
     publishRelayState,
     log = () => {},
@@ -119,7 +121,18 @@ async function tryPublishPostCommandTacticalState(input) {
   }
 
   const publishedAt = new Date(now()).toISOString();
-  const relay = buildRelayPayload(tactical, publishedAt, null, { snapshotSha256: digest });
+  const relayOptions = { snapshotSha256: digest };
+  if (
+    result.command_type === 'MOVE'
+    && deliveredCommand
+    && deliveredCommand.command_id === result.command_id
+  ) {
+    const brief = buildMoveOutcomeBrief(result, deliveredCommand);
+    if (brief) {
+      relayOptions.lastMoveOutcomeBrief = brief;
+    }
+  }
+  const relay = buildRelayPayload(tactical, publishedAt, null, relayOptions);
 
   if (dryRun) {
     markCommandRecord(journal, commandId, {

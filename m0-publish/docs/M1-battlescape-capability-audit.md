@@ -111,7 +111,7 @@ Read-only stat on `local/m0/tactical-live.yaml` (not modified):
 | Flying / falling | Full | **MISSING** explicit; export blocked while falling | Rejected `UNITS_FALLING` | Automated | |
 | Kneeling | Full | **SUPPORTED** `kneeled` + posture TU in `actionCosts` | **KNEEL** | Automated; live **UNVERIFIED** | |
 | Faction / mind control | Full | **PARTIAL** — `faction`, `originalFaction`; hostiles only if `getVisible()` | Actor must be live player soldier | Automated | Hidden units omitted entirely |
-| Friendly non-roster units (e.g. some HWP/civilian edge cases) | Full | **PARTIAL** — position/faction shell if visible | **MISSING** actor validation | — | |
+| Friendly non-roster units (friendly HWP: `id >= 1_000_000`) | Full | **M1 BY DESIGN** — sparse shell: `id`, `faction`, `originalFaction`, `position` only | **OUT OF SCOPE** — not in `player_soldiers` / roster actor model | Pinned regression | Civilian edge cases differ; see §5 |
 
 **Key symbols:** `shouldIncludeUnit`, `exportFriendlyTacticalDetails`, `isPublishableLivePlayerSoldier` in `CompanionSnapshot.cpp`; validation in `CompanionCommandCore.cpp`.
 
@@ -161,11 +161,14 @@ Read-only stat on `local/m0/tactical-live.yaml` (not modified):
 | Topic | Engine | Companion | Status |
 |-------|--------|-----------|--------|
 | Multi-tile units | Supported | Visible units export **position** (typically anchor tile) | **PARTIAL** — no footprint/size |
-| HWP as non-soldier | Supported | Unless visible hostile shell, **no** friendly detail unless live roster soldier | **MISSING** command actor |
-| Vehicle weapons | Supported | Same as item actionCosts if soldier/HWP treated as friendly detailed unit | **UNVERIFIED** for HWP |
-| Ownership | Engine | Campaign/tactical YAML + control JSON | **PARTIAL** — see §7 |
+| Friendly HWP visibility | Supported | **M1 contract** — sparse shell in `units[]` (`id`, `faction`, `originalFaction`, `position`); see `M1-wp2-unit-state-schema.md` | **INTENTIONAL** — not an export defect |
+| Friendly HWP command | Supported in UI | **Excluded** — `isLiveCampaignPlayerSoldierUnit()` + binding roster filter | **OUT OF SCOPE** for M1 |
+| Vehicle weapons / TU (HWP) | Supported | Not exported for HWPs in M1 | **DEFERRED** — richer observation or P3 control only |
+| Ownership | Engine | Campaign/tactical YAML + control JSON | **PARTIAL** — see §7; HWPs not command actors |
 
-**Priority:** **P2** if HWP AI control is a product goal (actor model + export stats).
+**M1 closeout (Issue #3):** Sparse friendly HWP export and exclusion from `commandBinding.player_soldiers`, equipment brief, and remote executor are **required behavior**, validated by `publish-tactical.test.cjs` and `friendly-hwp-sparse-v5.yaml`.
+
+**Deferred (not M1):** optional awareness-only fields (`observedUnitType`, `facing`, health/TU) without expanding command authority; **P2/P3** HWP AI control if ever a product goal (actor model + stats export).
 
 ---
 

@@ -111,6 +111,54 @@ describe('post-command tactical publish', () => {
     }
   });
 
+  it('M1-I8: attaches derived lastMoveOutcomeBrief on post-command relay for MOVE', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'post-cmd-move-brief-'));
+    try {
+      const baseText = fs.readFileSync(FIXTURE_V5, 'utf8');
+      const oldDigest = sha256HexLower(Buffer.from(baseText, 'utf8'));
+      const updatedText = makeUpdatedSnapshot(baseText, {
+        unitId: 1,
+        position: [3, 3, 1],
+        timeUnits: 50,
+      });
+      const snapshotPath = path.join(root, 'tactical-live.yaml');
+      fs.writeFileSync(snapshotPath, updatedText, 'utf8');
+      const updatedTactical = loadAndValidateSnapshotFromText(updatedText, YAML);
+      const newDigest = sha256HexLower(Buffer.from(updatedText, 'utf8'));
+      const deliveredCommand = {
+        command_id: 'move-stair-1',
+        command_type: 'MOVE',
+        destination: { x: 3, y: 3, z: 1 },
+      };
+      const result = makeCompletedResult(updatedTactical, newDigest, {
+        command_id: 'move-stair-1',
+        final_position: { x: 3, y: 3, z: 1 },
+        remaining_tu: 50,
+      });
+      const relayPublishes = [];
+      const outcome = await tryPublishPostCommandTacticalState({
+        snapshotPath,
+        result,
+        commandId: result.command_id,
+        journal: { version: 1, active: null, records: {} },
+        record: { delivered_command_snapshot_sha256: oldDigest },
+        deliveredCommand,
+        publishRelayState: async (relay) => {
+          relayPublishes.push(relay);
+          return { skipped: false };
+        },
+        readFileSync: fs.readFileSync,
+        existsSync: fs.existsSync,
+      });
+      assert.equal(outcome.action, 'published');
+      assert.ok(relayPublishes[0].lastMoveOutcomeBrief);
+      assert.equal(relayPublishes[0].lastMoveOutcomeBrief.outcome_class, 'completed_verified_destination');
+      assert.equal(relayPublishes[0].lastMoveOutcomeBrief.tactical_success, true);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('second MOVE can bind to newly published commandBinding', async () => {
     const baseText = fs.readFileSync(FIXTURE_V5, 'utf8');
     const baseTactical = loadAndValidateSnapshotFromText(baseText, YAML);

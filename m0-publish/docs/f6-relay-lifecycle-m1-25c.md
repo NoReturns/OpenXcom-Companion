@@ -26,3 +26,46 @@
 | Engine `tactical-command-journal.json` | Executed `command_id` history (append-only) |
 
 Archived inbox copies: `local/m0/backups/tactical-command.*.json`
+
+## Issue #2: Node daemon vs AUTO RETRIEVE
+
+M1 operators must distinguish **launcher-scoped Node relay** from **battlescape-scoped AUTO RETRIEVE**. Existing session and command gates (quarantine, stale inbox archive, `STALE_*` rejects, play-session delivery checks) are unchanged.
+
+### Node on-demand daemon (production)
+
+| Aspect | Behavior |
+|--------|----------|
+| Started | `Start-CompanionOpenXcom.ps1` → `beginCompanionPlaySession` + `companion-on-demand-relay-daemon.cjs` |
+| Lifetime | **Game session** — remains alive across Geoscape ↔ battlescape transitions and multiple missions |
+| Stopped | Play-session shutdown when the OpenXcom game process exits (see `on-demand-play-session.cjs`, launcher `finally`) |
+| Work | Polls `companion-on-demand-request.json`; GitHub I/O only while processing SEND/RETRIEVE |
+| Not | A 30s autopilot publisher — agents still publish `m0/tactical-command.json`; daemon validates and delivers |
+
+Engine recovery may **adopt** a healthy daemon for the same snapshot path; one owner per `OPENXCOM_COMPANION_SNAPSHOT_PATH`.
+
+### AUTO RETRIEVE (engine, battlescape HUD)
+
+| Aspect | Behavior |
+|--------|----------|
+| Scope | **Battlescape only** (`CompanionAutoRetrieveCore::enterBattlescape` / `leaveBattlescape`) |
+| Default | **OFF** when entering each mission; cannot enable on Geoscape |
+| Interval | **30s** when enabled (`AUTO_RETRIEVE_INTERVAL_DEFAULT_SEC`); **reset to 30s on each battlescape entry** |
+| Role | Schedules in-game RETRIEVE attempts when relay UI is not busy — requires the running daemon + local request path |
+| Not | Independent GitHub publish, command authoring, or a substitute for starting the launcher daemon |
+
+`resetForNewGameSession()` in `CompanionAutoRetrieveCore` is used in **unit tests** only; production reset is enter/leave battlescape.
+
+### P0 test-supervisor repair (not production AUTO)
+
+Commit *bind test relay daemons to supervisor lifecycle* (`on-demand-test-supervisor.cjs`) ensures **Node test** daemons exit when the owning `node --test` worker ends. It does **not** change operator AUTO RETRIEVE defaults, battlescape interval reset, or `Start-CompanionOpenXcom.ps1` play-session shutdown.
+
+### Pending commands across transitions
+
+| Transition | Daemon | AUTO | Commands |
+|------------|--------|------|----------|
+| Mission end → Geoscape | Keeps running | OFF | `onBattleCompanionBindingContext` may archive stale inbox / interrupt in-flight work |
+| New mission (same game) | Keeps running | OFF; interval → 30s | New tactical `session_id` — stale binding rules apply |
+| Game exit | Stopped | N/A | Next launch: `quarantine-tactical-inbox.cjs` hygiene |
+| Save/load (same process) | Same session if launcher unchanged | Per battlescape enter/leave | F6 + export archives stale inbox |
+
+Operator playbook: [ASTER-LIVE-PLAYBOOK.md](../../docs/ASTER-LIVE-PLAYBOOK.md#two-relay-lifecycles-daemon-vs-auto-retrieve).

@@ -41,6 +41,8 @@ Statuses: `REJECTED`, `ACCEPTED`, `EXECUTING`, `COMPLETED`, `INTERRUPTED`, `FAIL
 
 Terminal payloads may include: `final_position`, `remaining_tu`, `kneeled`, `destination_reached`, `public_reason`, `snapshot_sha256` (post-move export when available).
 
+**COMPLETED** MOVE: actor on commanded destination (x,y,z); `destination_reached` should be **true**. **INTERRUPTED** / **FAILED**: use `final_position` for replan. Agent verification: `move-result-consumer.cjs` and `ASTER-LIVE-PLAYBOOK.md` (MOVE mandatory verification).
+
 ## Soldier ownership (local only)
 
 File beside tactical snapshot: `companion-soldier-control.json`

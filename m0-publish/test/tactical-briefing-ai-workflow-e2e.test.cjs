@@ -13,6 +13,7 @@ const {
   getAiBriefingInstructionsMarkdown,
   runMandatoryBattlefieldStatusReview,
   runMandatoryBriefingPrelude,
+  runMandatoryPostCommandPrelude,
 } = require('../lib/tactical-briefing-ai-workflow.cjs');
 
 const REPO_ROOT = path.join(__dirname, '..', '..', '..');
@@ -91,9 +92,57 @@ describe('M1 tactical briefing AI workflow (consumer E2E)', () => {
     assert.match(md, /Mandatory tactical equipment review/);
     assert.match(md, /Hostile intelligence fair-play/);
     assert.match(md, /sessionId/);
+    assert.match(md, /Mandatory MOVE result verification/);
+    assert.match(md, /runMandatoryPostCommandPrelude/);
 
     const prelude = runMandatoryBriefingPrelude(relay);
     assert.equal(prelude.workflowVersion, 2);
     assert.ok(prelude.equipment.soldiers.length > 0);
+  });
+
+  it('post-command prelude gates next command on verified MOVE', () => {
+    const command = {
+      command_type: 'MOVE',
+      command_id: 'wf-move-1',
+      destination: { x: 2, y: 2, z: 0 },
+    };
+    const ok = runMandatoryPostCommandPrelude({
+      result: {
+        command_type: 'MOVE',
+        command_id: 'wf-move-1',
+        status: 'COMPLETED',
+        final_position: { x: 2, y: 2, z: 0 },
+        destination_reached: true,
+      },
+      command,
+    });
+    assert.equal(ok.readyForNextCommand, true);
+    const bad = runMandatoryPostCommandPrelude({
+      result: {
+        command_type: 'MOVE',
+        command_id: 'wf-move-1',
+        status: 'COMPLETED',
+        final_position: { x: 1, y: 2, z: 0 },
+        destination_reached: true,
+      },
+      command,
+    });
+    assert.equal(bad.readyForNextCommand, false);
+    const interrupted = runMandatoryPostCommandPrelude({
+      result: {
+        command_type: 'MOVE',
+        command_id: 'wf-move-2',
+        status: 'INTERRUPTED',
+        final_position: { x: 3, y: 3, z: 0 },
+        destination_reached: false,
+      },
+      command: {
+        command_type: 'MOVE',
+        command_id: 'wf-move-2',
+        destination: { x: 3, y: 3, z: 1 },
+      },
+    });
+    assert.equal(interrupted.readyForNextCommand, false);
+    assert.equal(interrupted.mayPublishAfterFreshBinding, true);
   });
 });

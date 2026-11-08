@@ -24,8 +24,19 @@ const {
   getEquipmentReviewContractMarkdown,
   runMandatoryTacticalEquipmentReview,
 } = require('./tactical-equipment-brief.cjs');
+const {
+  getMoveResultContractMarkdown,
+  runMandatoryMoveResultReview,
+} = require('./move-result-consumer.cjs');
 
 const WORKFLOW_VERSION = 2;
+
+const MANDATORY_TERMINAL_MOVE_REVIEW = {
+  step: 'post_retrieve_move',
+  title: 'Mandatory MOVE result verification before the next command',
+  detail:
+    'After terminal MOVE, call runMandatoryPostCommandPrelude({ result, command }). mayContinuePriorMovePlan / readyForNextCommand means safe to chain the same movement plan only. When false after INTERRUPTED/FAILED/unverified COMPLETED, do not auto-continue — but mayPublishAfterFreshBinding is true: after SEND or post-command m0/state.json, publish a new independently planned command with fresh commandBinding.',
+};
 
 const MANDATORY_F6_REVIEW_SEQUENCE = [
   {
@@ -93,6 +104,14 @@ function getAiBriefingInstructionsMarkdown() {
     getPsychologicalPerceptionContractMarkdown(),
     '',
     getEquipmentReviewContractMarkdown(),
+    '',
+    getMoveResultContractMarkdown(),
+    '',
+    `**${MANDATORY_TERMINAL_MOVE_REVIEW.title}** — ${MANDATORY_TERMINAL_MOVE_REVIEW.detail}`,
+    '',
+    'Programmatic mirror after RETRIEVE: `runMandatoryMoveResultReview(result, command)` and `runMandatoryPostCommandPrelude({ result, command })` in this module.',
+    '',
+    'When post-command state refresh publishes `lastMoveOutcomeBrief` on m0/state.json, treat it as derived guidance; engine `m0/tactical-result.json` remains authoritative.',
     '',
     '## Stage D reference assessment (Battleship harness, turn 3)',
     '',
@@ -228,22 +247,55 @@ function runMandatoryBriefingPrelude(relay, options = {}) {
     aiCommandActorIds: options.aiCommandActorIds,
     statusReview: status,
   });
+  const move = options.terminalMove
+    ? runMandatoryMoveResultReview(options.terminalMove.result, options.terminalMove.command)
+    : null;
   return {
     workflowVersion: WORKFLOW_VERSION,
     status,
     equipment,
+    move,
+  };
+}
+
+/**
+ * Required consumer path between terminal MOVE result and the next tactical command publish.
+ */
+function runMandatoryPostCommandPrelude({ result, command } = {}) {
+  const move = runMandatoryMoveResultReview(result, command);
+  if (move.skipped) {
+    return {
+      workflowVersion: WORKFLOW_VERSION,
+      move,
+      mayContinuePriorMovePlan: true,
+      requiresFreshBindingBeforeNextPublish: false,
+      mayPublishAfterFreshBinding: true,
+      readyForNextCommand: true,
+    };
+  }
+  const recovery = move.recovery;
+  return {
+    workflowVersion: WORKFLOW_VERSION,
+    move,
+    mayContinuePriorMovePlan: recovery.mayContinuePriorMovePlan,
+    requiresFreshBindingBeforeNextPublish: recovery.requiresFreshBindingBeforeNextPublish,
+    mayPublishAfterFreshBinding: recovery.mayPublishAfterFreshBinding,
+    readyForNextCommand: recovery.mayContinuePriorMovePlan,
   };
 }
 
 module.exports = {
   WORKFLOW_VERSION,
   MANDATORY_F6_REVIEW_SEQUENCE,
+  MANDATORY_TERMINAL_MOVE_REVIEW,
   HOSTILE_INTELLIGENCE_CONSUMER_RULES,
   getAiBriefingInstructionsMarkdown,
   getHostileIntelligenceContractMarkdown,
   runMandatoryBattlefieldStatusReview,
   runMandatoryTacticalEquipmentReview,
   runMandatoryBriefingPrelude,
+  runMandatoryPostCommandPrelude,
+  runMandatoryMoveResultReview,
   getEquipmentReviewContractMarkdown,
   assertSamePerceptionSession,
   mergePerceptionEventsSameSessionOnly,

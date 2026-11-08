@@ -67,6 +67,23 @@ Never commit tokens or `relay.local.json`.
 - **`OPENXCOM_COMPANION_COMMAND_EXECUTOR=1`** — remote commands are **rejected** when the engine executor is off (`EXECUTOR_DISABLED`).
 - **Normal launcher** (`runtime/m0/Start-CompanionOpenXcom.ps1` or equivalent) starts the Node relay services — do not start duplicate sidecars during play.
 
+## Two relay lifecycles (daemon vs AUTO RETRIEVE)
+
+M1 uses **two independent mechanisms**. Do not treat AUTO RETRIEVE as a replacement for the launcher-started Node daemon.
+
+| | **Node on-demand daemon** (`companion-on-demand-relay-daemon.cjs`) | **In-game AUTO RETRIEVE** (battlescape HUD) |
+|--|---------------------------------------------------------------------|---------------------------------------------|
+| Scope | **Launcher / game session** — survives Geoscape and mission transitions until game exit | **Battlescape only** — inactive on Geoscape |
+| Started by | `Start-CompanionOpenXcom.ps1` play session + daemon startup | Operator toggles in mission |
+| Default | Running while the canonical game session is active (stops on play-session shutdown) | **OFF** at each battlescape entry; interval **30s** when enabled |
+| Role | Polls local on-demand request; runs GitHub SEND/RETRIEVE **transactions** when the engine enqueues them | Schedules **in-engine RETRIEVE** attempts on a timer when ON |
+| Publishes commands? | **No** — agents publish `m0/tactical-command.json`; daemon delivers inbox + publishes results | **No** — only triggers RETRIEVE; still one command per transaction |
+| Requires | Game process + play-session lease | Running relay daemon **and** battlescape UI |
+
+Session command gates (`one active command`, stale binding archive on F6, quarantine on launch) are unchanged. P0 **test-supervisor** daemon lifecycle fixes apply to **Node test harnesses** only, not production AUTO RETRIEVE behavior.
+
+Detail: [f6-relay-lifecycle-m1-25c.md](../m0-publish/docs/f6-relay-lifecycle-m1-25c.md#issue-2-node-daemon-vs-auto-retrieve).
+
 ## Division of labour
 
 | Actor | Does |
@@ -121,6 +138,8 @@ READ m0/state.json → status review → equipment review → one-active-command
 
 Note grenades (standard, smoke, proximity), high explosives, medikit charges, loaded weapons vs spare ammo, primed vs unprimed. **Do not assume usability** from export alone — TU, ownership, and command support still gate orders. Human-owned soldiers are **not** Companion command actors even when listed in binding.
 
+**Friendly HWPs** (`tactical.units[]` with `id >= 1_000_000`): M1 exports **position + faction shell only** — no hands/inventory. They are **not** in `commandBinding.player_soldiers`; skip them in equipment review. See `m0-publish/docs/M1-wp2-unit-state-schema.md`.
+
 Programmatic mirror: `runMandatoryTacticalEquipmentReview()` / `runMandatoryBriefingPrelude()` in `companion/m0-publish/lib/tactical-briefing-ai-workflow.cjs` (derived from existing snapshot data only).
 
 ---
@@ -148,7 +167,44 @@ Programmatic mirror: `runMandatoryTacticalEquipmentReview()` / `runMandatoryBrie
 | `ACCEPTED`, `EXECUTING` | No — wait |
 | `COMPLETED`, `INTERRUPTED`, `FAILED` | Yes |
 
-Match `command_id` and `session_id`. MOVE may include `final_position`, `remaining_tu`, `destination_reached`.
+Match `command_id` and `session_id` on every terminal result.
+
+### MOVE — mandatory verification (before the next order)
+
+Engine contract (authoritative):
+
+| Status | Meaning |
+|--------|---------|
+| `COMPLETED` | Walk finished with the actor on the **commanded destination** tile: same **x, y, z** as the MOVE `destination`. Payload should include `destination_reached: true` and `final_position` equal to that destination. |
+| `INTERRUPTED` | Partial progress, reaction fire, hostile spot, TU stop, or authority loss. **`final_position` is the stop tile** — not the destination. |
+| `FAILED` | No successful terminal walk (e.g. stuck at start, actor down). May still include `final_position`. |
+
+**Tactical success** for a MOVE is **not** `status == COMPLETED` alone. Require all of:
+
+1. `status` is `COMPLETED`
+2. `final_position` matches the published command `destination` (including **z**)
+3. `destination_reached` is `true` when the field is present (legacy results without it: trust matching `final_position` only)
+
+If `COMPLETED` disagrees with `final_position` or `destination_reached`, treat the move as **not** successful, read refreshed `m0/state.json` (or request **SEND**), and replan.
+
+`FAILED` or `INTERRUPTED` with `destination_reached: true` can occur — **`status` wins**; do not treat the move as successful.
+
+Optional MOVE fields: `starting_position`, `remaining_tu`, `kneeled`, `movement_stop_reason`, `public_reason`, `snapshot_sha256` (post-move export when available).
+
+### MOVE replan (especially ramps, doors, grav lifts)
+
+| Outcome | Action |
+|---------|--------|
+| Verified success | Refresh binding; then publish the next command with a new `command_id`. |
+| `INTERRUPTED` / `FAILED` | Replan from **`final_position`**, not the original destination. New binding + new `command_id`. |
+| Short of destination near **ramp / stairs / Skyranger deck / grav lift** | Stage **short** MOVEs: foot tile → ramp/stair → correct **z** (often `z:0` ground ↔ `z:1` cabin). Confirm each step’s `final_position` before chaining. |
+| Wrong **z** on destination | Command a destination with the intended **z**; do not assume same `(x,y)` implies the right level. |
+
+Fair-play: use floor **`G`** / **`g`** and `terrainFullAsciiBattlefield.hints.gravLiftStructures` for **planning** only (`pathfindingGuaranteed: false` on vertical links). ASCII does not guarantee walkability — engine results and refreshed unit positions are authoritative.
+
+**Mandatory workflow (not optional):** After terminal MOVE, run `runMandatoryPostCommandPrelude({ result, command })`. **`readyForNextCommand` / `mayContinuePriorMovePlan`** = safe to **chain the same movement plan** (verified COMPLETED on x/y/z). When **false**, do **not** auto-continue the prior destination — but **`mayPublishAfterFreshBinding`** is still **true** after any terminal MOVE: refresh binding (SEND or post-command `m0/state.json`), then publish a **new** `command_id` from replanned `final_position` (especially actual **z** after interrupted ramp/stair moves). Derived `lastMoveOutcomeBrief` on state is guidance only; `m0/tactical-result.json` stays authoritative.
+
+Programmatic mirror: `companion/m0-publish/lib/move-result-consumer.cjs` (`classifyMoveTerminalOutcome`, `buildMoveOutcomeBrief`).
 
 ---
 
@@ -288,7 +344,7 @@ Optional: `m0/terrain-query.json` with `snapshot_id`, `center`, `radius` or `rec
 
 ## In-game relay
 
-**SEND (F6)** → fresh `m0/state.json`. **RETRIEVE** → one command execution. **AUTO RETRIEVE** default **30s** when enabled. One command per retrieve transaction.
+**SEND (F6)** → fresh `m0/state.json`. **RETRIEVE** → one command execution (handled by the **Node daemon** transaction path). **AUTO RETRIEVE** is an optional battlescape timer that fires RETRIEVE when **AUTO:ON** (default **off** each mission; **30s** interval when on, reset on battlescape entry). AUTO does not publish commands or replace the daemon. One command per retrieve transaction.
 
 ---
 
@@ -580,7 +636,8 @@ Replace placeholders with the **current** export; the example digest is for pars
 | No fresh `commandBinding` after terminal | Request **SEND (F6)** |
 | `NOT_AI_CONTROLLED` | Operator confirms AI ids / re-assigns |
 | `STALE_*` | Operator SEND; re-read binding |
-| `INTERRUPTED` MOVE | Use `final_position`; replan |
+| `INTERRUPTED` / `FAILED` MOVE | Replan from `final_position`; verify `destination_reached` + tile match before treating `COMPLETED` as success |
+| `COMPLETED` MOVE but wrong tile / flag | Hard stop — refresh state (SEND or post-command binding); staged ramp/grav MOVE |
 | `no_new_orders` | Inbox empty — not failure |
 | `EXECUTOR_DISABLED` | Operator enables executor + launcher stack |
 
@@ -597,6 +654,7 @@ Concise intent in plain language. Human owns human soldiers and End Turn.
 | Topic | File |
 |-------|------|
 | Commands | `m0-publish/lib/tactical-command.cjs` |
+| MOVE result verification | `m0-publish/lib/move-result-consumer.cjs` |
 | ASCII | `m0-publish/lib/terrain-tactical-map.cjs` |
 | Operator relay setup (not agent onboarding) | `m0-publish/docs/relay-github-setup.md` |
 

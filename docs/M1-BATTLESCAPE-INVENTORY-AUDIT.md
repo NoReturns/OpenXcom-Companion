@@ -596,7 +596,7 @@ Treat inventory mutations like movement: invalidate stale SHA/version. Watch pri
 3. Panic inventory drop not fully traced in `UnitPanicBState.cpp`.  
 4. Blaster `BA_LAUNCH` vs directed-fire command path — live verify.  
 5. Unresearched artifact equip via drag — partial UI-only evidence.  
-6. HWP units may lack v3 equipment export (`getGeoscapeSoldier()` filter).  
+6. Friendly HWP equipment is **intentionally omitted** in M1: `exportFriendlyTacticalDetails()` requires a geoscape roster soldier; HWPs export only the sparse unit shell (`id`, `faction`, `originalFaction`, `position`) and are excluded from `commandBinding.player_soldiers` and tactical equipment brief — see `m0-publish/docs/M1-wp2-unit-state-schema.md` (Issue #3). Richer HWP loadout observation is **deferred**, not a missing v3 bug.
 7. Canonical binary not executed this session.
 
 ---

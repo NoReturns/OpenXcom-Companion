@@ -21,10 +21,16 @@ const STRUCTURED_PREFIX = '@COMPANION_NOTIFY\t';
 
 const STALE_REASON_PATTERN = /STALE_|state_version|snapshot_sha256|session_id|turn mismatch|binding/i;
 
+const {
+  buildMoveOutcomeBrief,
+  MOVE_OUTCOME_CLASS,
+} = require('./move-result-consumer.cjs');
+
 function pickCorrelation(fields = {}) {
   const out = {};
   for (const key of ['command_id', 'session_id', 'request_id', 'turn', 'state_version', 'reason_code',
-    'remote_sha256', 'inbox_sha256', 'result_sha256', 'channel', 'message']) {
+    'remote_sha256', 'inbox_sha256', 'result_sha256', 'channel', 'message',
+    'move_outcome_class', 'move_tactical_success', 'may_chain_next_command']) {
     if (fields[key] !== undefined && fields[key] !== null && fields[key] !== '') {
       out[key] = fields[key];
     }
@@ -80,7 +86,7 @@ function terminalRequiresObservedResult(code) {
     || code === NOTIFICATION_CODES.COMMAND_CONFLICT;
 }
 
-function notificationFromLocalResult(result, inboxSha256) {
+function notificationFromLocalResult(result, inboxSha256, context = {}) {
   if (!result || typeof result !== 'object' || !result.status) {
     return null;
   }
@@ -112,14 +118,28 @@ function notificationFromLocalResult(result, inboxSha256) {
   if (!code) {
     return null;
   }
-  return buildNotification(code, {
+  const fields = {
     command_id: result.command_id,
     session_id: result.session_id,
     turn: result.turn,
     state_version: result.state_version,
     inbox_sha256: result.inbox_sha256 || inboxSha256,
     reason_code: typeof reasonCode === 'string' ? reasonCode : result.status,
-  });
+  };
+  if (result.command_type === 'MOVE' && context.command) {
+    const brief = buildMoveOutcomeBrief(result, context.command);
+    if (brief) {
+      fields.move_outcome_class = brief.outcome_class;
+      fields.move_tactical_success = brief.tactical_success;
+      fields.may_chain_next_command = brief.may_chain_next_command;
+      if (brief.outcome_class === MOVE_OUTCOME_CLASS.CONTRACT_INCOMPLETE_OR_UNVERIFIED) {
+        fields.message = 'MOVE COMPLETED status but destination not verified — do not chain.';
+      } else if (brief.outcome_class === MOVE_OUTCOME_CLASS.INTERRUPTED_KNOWN_FINAL_POSITION) {
+        fields.message = 'MOVE interrupted — replan from final_position.';
+      }
+    }
+  }
+  return buildNotification(code, fields);
 }
 
 function notificationFromMoveCommand(command, extra = {}) {

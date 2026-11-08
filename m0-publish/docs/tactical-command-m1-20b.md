@@ -71,6 +71,14 @@ Terminal SEND semantics: `published`, `skipped_unchanged`, `failed`, and `manual
 
 Manual upload fallback (engine v5 oversize vs relay shrink), notice lifecycle, HUD wording, and `manual-exports/` retention: [manual-upload-fallback-m1-p3.md](./manual-upload-fallback-m1-p3.md).
 
+## Friendly HWP snapshot contract (M1, Issue #3)
+
+Friendly HWPs appear in `tactical.units[]` with **only** `id`, `faction`, `originalFaction`, and `position`. They are **not** listed in `commandBinding.player_soldiers` and are out of scope for remote command and mandatory equipment review. This is intentional M1 behavior, not a v3 export defect. Schema and regression: [M1-wp2-unit-state-schema.md](./M1-wp2-unit-state-schema.md), `test/fixtures/friendly-hwp-sparse-v5.yaml`.
+
+## Node daemon vs AUTO RETRIEVE (Issue #2)
+
+Canonical launcher starts a **session-scoped** on-demand daemon (survives Geoscape; stops with game exit). **AUTO RETRIEVE** is battlescape-only, default off each mission, 30s when enabled, and only schedules RETRIEVE — it does not publish commands or replace the daemon. Full tables: [f6-relay-lifecycle-m1-25c.md](./f6-relay-lifecycle-m1-25c.md#issue-2-node-daemon-vs-auto-retrieve) and operator [ASTER-LIVE-PLAYBOOK.md](../../docs/ASTER-LIVE-PLAYBOOK.md).
+
 ## Verification status
 
 | Item | Status |

@@ -58,6 +58,42 @@ describe('companion-relay-notify classification', () => {
     assert.equal(event.inbox_sha256, 'b'.repeat(64));
   });
 
+  it('enriches COMPLETED MOVE with move_outcome_class when command supplied', () => {
+    const command = {
+      command_type: 'MOVE',
+      command_id: 'move-notify-verify',
+      destination: { x: 2, y: 2, z: 0 },
+    };
+    const verified = notificationFromLocalResult({
+      schema_version: 1,
+      command_id: 'move-notify-verify',
+      command_type: 'MOVE',
+      status: 'COMPLETED',
+      session_id: 'a'.repeat(32),
+      turn: 1,
+      final_position: { x: 2, y: 2, z: 0 },
+      destination_reached: true,
+    }, null, { command });
+    assert.equal(verified.code, NOTIFICATION_CODES.COMMAND_COMPLETED);
+    assert.equal(verified.move_outcome_class, 'completed_verified_destination');
+    assert.equal(verified.move_tactical_success, true);
+    assert.equal(verified.may_chain_next_command, true);
+
+    const unverified = notificationFromLocalResult({
+      schema_version: 1,
+      command_id: 'move-notify-verify',
+      command_type: 'MOVE',
+      status: 'COMPLETED',
+      session_id: 'a'.repeat(32),
+      turn: 1,
+      final_position: { x: 1, y: 2, z: 0 },
+      destination_reached: true,
+    }, null, { command });
+    assert.equal(unverified.move_outcome_class, 'contract_incomplete_or_unverified');
+    assert.equal(unverified.may_chain_next_command, false);
+    assert.match(unverified.message, /not verified/i);
+  });
+
   it('does not emit COMPLETED from non-terminal statuses', () => {
     assert.equal(notificationFromLocalResult({
       command_id: 'x',

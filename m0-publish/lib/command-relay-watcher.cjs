@@ -185,7 +185,14 @@ class CommandRelayWatcher {
     if (!resultValue || resultValue.__parseError) {
       return;
     }
-    const event = notificationFromLocalResult(resultValue);
+    const delivered =
+      this._lastDeliveredCommand
+      && this._lastDeliveredCommand.command_id === resultValue.command_id
+        ? this._lastDeliveredCommand
+        : null;
+    const event = notificationFromLocalResult(resultValue, undefined, {
+      command: delivered,
+    });
     if (event) {
       this._emitNotify(event);
     }
@@ -194,12 +201,17 @@ class CommandRelayWatcher {
   async publishResult(result, commandId, journal) {
     const publishPostCommand = async () => {
       const record = getCommandRecord(journal, commandId);
+      const deliveredCommand =
+        this._lastDeliveredCommand && this._lastDeliveredCommand.command_id === commandId
+          ? this._lastDeliveredCommand
+          : null;
       const outcome = await tryPublishPostCommandTacticalState({
         snapshotPath: this.snapshotPath,
         result,
         commandId,
         journal,
         record,
+        deliveredCommand,
         dryRun: this.dryRun,
         publishRelayState: this.publishRemoteRelayState,
         log: (line) => this.log(line),
@@ -717,6 +729,7 @@ class CommandRelayWatcher {
     removeFileIfExists(this.local.result, this.existsSync, this.unlinkSync);
     const serialized = `${JSON.stringify(command, null, 2)}\n`;
     writeTextAtomic(this.local.command, serialized, this.writeFileSync, this.renameSync);
+    this._lastDeliveredCommand = command;
     markCommandRecord(journal, command.command_id, {
       phase: 'delivered_local',
       remote_sha256: remoteSha,

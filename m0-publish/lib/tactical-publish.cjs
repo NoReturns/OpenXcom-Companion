@@ -2088,6 +2088,9 @@ function buildRelayPayload(tactical, publishedAt, briefingMeta = null, options =
   if (options.snapshotSha256 && tactical.eventLog && typeof tactical.eventLog.sessionId === 'string') {
     payload.commandBinding = buildCommandBinding(tactical, options.snapshotSha256);
   }
+  if (options.lastMoveOutcomeBrief !== undefined && options.lastMoveOutcomeBrief !== null) {
+    payload.lastMoveOutcomeBrief = options.lastMoveOutcomeBrief;
+  }
   return payload;
 }
 

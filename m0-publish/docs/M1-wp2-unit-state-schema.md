@@ -36,6 +36,24 @@ Remote command acceptance tests must use **AI-owned** soldiers only. `engineActi
 
 Live roster soldiers who are **unconscious or dead** remain in `units[]` (position + condition); `actionCosts` omitted when `isOut()`.
 
+## Friendly HWPs (sparse shell, M1)
+
+Friendly heavy weapons platforms are **not** geoscape roster soldiers: battlescape `id >= BattleUnit::MAX_SOLDIER_ID` (1_000_000) with `getGeoscapeSoldier() == 0`. M1 exports them in `tactical.units[]` for **situational awareness only**, using a fixed sparse contract — **not** an accidental omission.
+
+| Allowed on `tactical.units[]` | Forbidden on friendly HWP rows (schema v5 rejects extras) |
+|------------------------------|-----------------------------------------------------------|
+| `id`, `faction`, `originalFaction`, `position` | `name`, `health`, `timeUnits`, `hands`, `inventory`, `actionCosts`, `condition`, `readiness`, `observedUnitType`, `displayLabel`, … |
+
+**Engine:** `exportFriendlyTacticalDetails()` is false for HWPs; `appendUnit()` emits the shell only (`CompanionSnapshot.cpp`). **Node:** `validateUnit()` and pinned fixture `test/fixtures/friendly-hwp-sparse-v5.yaml`.
+
+**Excluded from M1 command paths (by design):**
+
+- `commandBinding.player_soldiers` — `isFriendlyRosterSoldier()` / `id < 1_000_000`
+- Mandatory tactical equipment review — `buildTacticalEquipmentBrief()` skips non-roster friendlies
+- Remote command authority — `isLiveCampaignPlayerSoldierUnit()` requires roster id + geoscape soldier link
+
+**Deferred (post-M1, no command expansion required for sparse shell):** optional richer observation only (e.g. `observedUnitType` / `displayLabel`, `facing` / `kneeled` for awareness) without listing HWPs in binding or AI ownership.
+
 ## Visible non-friendly units
 
 Only **`kneeled`** and **`facing`** (same shape as friendly). No health, TU, morale, stun, or inventory.
