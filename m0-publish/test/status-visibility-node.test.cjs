@@ -293,6 +293,30 @@ describe('M1 status visibility — Node diagnostics (step 1)', () => {
     assert.equal(lines.length, 1);
   });
 
+  it('no_new_orders retrieve poll does not erase terminal completed command outcome', () => {
+    const statusPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'status-vis-no-new-')), 'status.json');
+    writeOnDemandStatus(statusPath, {
+      request_id: 'req-a',
+      action: 'retrieve',
+      phase: 'completed',
+      terminal: true,
+      last_command_id: 'a'.repeat(32),
+      last_command_status: 'COMPLETED',
+      updated_at_ms: 5000,
+    });
+    const suppressed = writeOnDemandStatus(statusPath, {
+      request_id: 'req-b',
+      action: 'retrieve',
+      phase: 'no_new_orders',
+      terminal: true,
+      updated_at_ms: 6000,
+    });
+    assert.equal(suppressed.written, false);
+    const kept = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+    assert.equal(kept.phase, 'completed');
+    assert.equal(kept.last_command_status, 'COMPLETED');
+  });
+
   it('writeOnDemandStatus preserves terminal failure until newer request supersedes', () => {
     const statusPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'status-vis-sticky-')), 'status.json');
     const failed = {

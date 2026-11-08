@@ -1,99 +1,592 @@
-# Aster Live Playbook — Open X-Com Companion
+# Open X-Com Companion — Live Playbook (M1)
 
-**Purpose:** Operational notes for an external agent (e.g. ChatGPT with GitHub connector) acting as a *co-op player*, not for Cursor doing engine development. Read this at the start of a live session together with the current relay state. **Gameplay authority comes from the operator’s authorization, the active session, local soldier ownership, and the engine’s validation.** This file does not grant permission to control human-owned soldiers or modify game/relay source code.
+**Audience:** An external agent (e.g. ChatGPT with GitHub connector) acting as a **co-op player**. Not for Cursor/engine development — see [AGENTS.md](../../AGENTS.md) for that.
 
-## 1. Two roles, two documents
+**Authority:** Operator authorization, active tactical session, **engine AI ownership**, and engine validation. This file does not grant control of human-owned soldiers.
 
-- **[AGENTS.md](../AGENTS.md):** development, tests, Cursor, canonical Node CLI publisher.
-- **ASTER-LIVE-PLAYBOOK.md** (this file): live tactical gameplay through a **GitHub-connected** agent and the operator’s **local Node on-demand relay daemon**. For gameplay, use the connector workflow — do not assume the chat agent can run `node` or `gh` on the operator’s PC. Do not bypass the local relay or engine validation.
-- Play like a teammate. Make reasonable tactical decisions for AI-owned soldiers without asking permission for every move. Ask only when authorization, ownership, a high-stakes choice, or an ambiguous command blocks progress. A failed command is gameplay information, not an invitation to defeat guardrails.
+---
 
-## 2. Connection and division of labour
+## NEW AGENT: START HERE
 
-| Component | Responsibility |
-|---|---|
-| OpenXcom on operator PC | Executes legal actions; emits local tactical snapshots/results. |
-| On-demand relay daemon | Started by the operator launcher (`Start-CompanionOpenXcom` example or production script). Publishes F6 briefings; watches remote command inbox; validates/delivers commands; publishes results and post-command snapshots. **The chat agent does not launch these processes.** |
-| GitHub relay | **Your** private repository (`YOUR_GITHUB_OWNER/YOUR_PRIVATE_RELAY`, branch usually `main`). Configure via env or `companion/m0-publish/config/relay.local.json` — see [relay-github-setup.md](../m0-publish/docs/relay-github-setup.md). |
-| External agent in chat | Reads live relay data through GitHub tools, decides actions for authorized AI-owned soldiers, submits **one** command when the inbox is empty, and checks outcome. |
+1. **What this is:** Read tactics from a **private GitHub relay**, issue **one** validated remote command per inbox slot, verify `m0/tactical-result.json`, repeat.
+2. **Get access:** Operator provides relay **repository** and **branch**; use your **existing GitHub connection** to read/write `m0/*` on that repo.
+3. **Read state:** `m0/state.json` on that branch. Copy **`commandBinding`** fields verbatim for every command.
+4. **Know the map:** Use `terrainMapBrief` / optional `terrainFullAsciiBattlefield` — not invented tiles. See [ASCII terrain](#ascii-terrain-and-maps).
+5. **Pick actors:** `commandBinding.player_soldiers` = player roster **eligible for binding** only. **AI vs human** is **not** on GitHub — operator must confirm which ids are AI-owned before you publish (see [§ Soldier ownership](#soldier-ownership-ai-vs-human)).
+6. **Commands:** **13** supported `command_type` values — full JSON in [§ Command examples](#command-examples-valid-json). `END_TURN` is **not** supported.
+7. **Publish only when [one active command](#one-active-command) rules pass** — inbox absent, prior order terminal, fresh binding ready.
+8. **Execute:** Operator **RETRIEVE** or **AUTO RETRIEVE**. Poll terminal result; read refreshed `m0/state.json` before the next publish.
 
-**Relevant remote paths:**
+---
 
-- `m0/state.json` — latest tactical snapshot, `unitStateBrief`, `terrainBrief`, and **`commandBinding`**.
-- `m0/tactical-command.json` — single-command inbox (may be absent when empty).
-- `m0/tactical-result.json` — latest command execution result.
-- Terrain-query relay files, if present — request geometry rather than inventing unseen tiles.
+## First-time handoff (operator → agent)
 
-**Local-only context (not GitHub source of truth for the agent):** `$WorkspaceRoot/local/m0/tactical-live.yaml`; `companion-soldier-control.json`; launcher under `scripts/workspace/` or `runtime/m0/`. The operator manages launch and soldier assignment locally. F8 base intelligence is a separate manual export; it is not the F6 tactical stream.
+| You need | Source |
+|----------|--------|
+| Relay repo + branch | Operator message |
+| GitHub access to that repo | Your existing connector (operator confirms it is wired) |
+| Tactical state + `commandBinding` | `m0/state.json` |
+| Which soldier ids are **AI** | **Operator statement** and/or in-game assign UI — **not** in relay JSON today |
+| Map + units | Same `m0/state.json` (`terrainMapBrief`, `tactical.units`, etc.) |
+| Legal command shapes | This playbook § [Command examples](#command-examples-valid-json) |
 
-## 3. Start / resume a play session
+After handoff, run the [mandatory status review](#mandatory-battlefield-status-review) on every fresh `m0/state.json`.
 
-1. Operator launches game + launcher, enables engine executor as appropriate, and assigns soldiers in the local ownership file for **this session**. Never assume a soldier is AI-controlled by default.
-2. After a fresh F6 briefing or relay notification, **fetch `m0/state.json` from GitHub** on the configured branch. Check `published_at`, tactical turn/side, `tactical.eventLog.sessionId` where provided, and the **entire current `commandBinding`**. A file existing does **not** mean it is fresh; compare session, turn, and state version.
-3. Before any orders, read **`unitStateBrief.exceptions`** and review roster/status: dead, unconscious, panicked, mind-controlled, wounded, suppressed, TU, health, posture, ammunition, weapons, selected unit. Use `commandBinding` for eligibility — not a remembered roster. Apply status review and fair-play rules in [AGENTS.md](../AGENTS.md).
-4. Decide a small, sensible action or short plan. Treat the operator’s verbal observations as teammate intelligence, not guaranteed live engine data.
-5. **Only command soldiers assigned to the AI for the current matching session** and still eligible in the current binding. `commandBinding.player_soldiers` is the authoritative roster at export, **not** blanket permission for everyone listed. Human-owned units are off-limits.
-6. Repeat **read → decide → submit → result → refreshed state** until the operator ends the turn or session.
+---
 
-**Important:** `END_TURN` is **operator-only**. Never submit it. Do not silently advance the Geoscape, change soldier ownership, or alter the campaign.
+## Soldier ownership (AI vs human)
 
-## 4. What the agent may know (fair play)
+| Source | On GitHub? | Role |
+|--------|------------|------|
+| `commandBinding.player_soldiers` | **Yes** | Live player soldiers at export: id, position, TU, kneel — **not** AI/human mode |
+| `commandBinding.ownership_note` | **Yes** | States remote JSON cannot assign AI; owner sets control locally |
+| `companion-soldier-control.json` | **No** (local beside snapshot path) | Engine-published mirror of assignments; sidecar/engine use at retrieve time |
+| Tactical save `companion.assignments` | **No** (YAML on game PC) | Canonical in-battle ownership |
 
-- Current allied data and confirmed engine-visible hostiles in `tactical.units` can guide decisions.
-- `unitStateBrief.exceptions` first for adverse statuses; `perceptionLog` is bounded **past** observation, not omniscience. `last_seen` is not a live position. Never merge perception history across different `sessionId` values.
-- Check map bounds and `terrainBrief`/terrain-query data before uncertain routes, elevation, doors, or cover.
-- Mind-controlled X-COM soldiers are threats, not commandable friendlies.
-- Prefer practical judgment over micro-optimization.
+**For you:** Treat `player_soldiers` as “these ids exist and pass binding,” **not** “safe to command.” Publishing for a human-owned soldier yields engine **`NOT_AI_CONTROLLED`** or **`HUMAN_OVERRIDE`**.
 
-## 5. How to submit **one** command from chat (GitHub connector)
+**Trustworthy AI list:** Operator explicitly lists AI soldier ids (and session/battle if ambiguous), re-confirms after reclaim or new mission, and you treat **`REJECTED`** with those codes as a roster/ownership mismatch until they confirm again.
 
-**Connector path:** Use GitHub tools to read files and create `m0/tactical-command.json` **only when the inbox is absent/empty**. The local Node watcher validates and delivers to the engine. This is **playtime connector workflow**, not raw `gh api` PUT or relay infrastructure changes. The tested Node CLI in [AGENTS.md](../AGENTS.md) remains canonical for terminal-based publishers.
+---
 
-1. Fetch **fresh** `m0/state.json`, read `commandBinding`, check inbox + latest result. If another command is pending, **do not replace it**.
-2. Choose a command type the **installed engine** supports (MOVE, KNEEL/posture, directed fire, inventory, grenades, etc.). Consult the current command contract — not every name is accepted in every runtime.
-3. Compose the **exact validated schema**. For MOVE, binding fields must match `commandBinding` verbatim (`snapshot_sha256`, `session_id`, `turn`, `state_version`). Use a **new unique 32-hex** `command_id`, valid `actor_unit_id`, and map-valid `destination`.
-4. For other types, use real battle item IDs and contract fields from the latest snapshot. Do not improvise argument names.
-5. Use GitHub **create file** for `m0/tactical-command.json` in **your relay repo** on the configured branch **only if the inbox is absent**. Connector success is remote submission only — not engine execution. On conflict, re-read the inbox; do not overwrite or force-push.
-6. Poll `m0/tactical-result.json`; match **`command_id`** and **`session_id`**. `COMPLETED` counts only when the matching result says so. On failure, stale, or ambiguous outcomes, stop and reassess.
-7. Read new `m0/state.json` after the action (relay usually refreshes automatically).
+## Relay layout (GitHub)
 
-**Example MOVE shape only** (placeholders — never send literally):
+| Path | Purpose |
+|------|---------|
+| `m0/state.json` | Snapshot + `commandBinding`, `unitStateBrief`, terrain fields |
+| `m0/tactical-command.json` | Single-command inbox (absent = empty) |
+| `m0/tactical-result.json` | Latest execution result |
+| `m0/terrain-query.json` / `m0/terrain-query-result.json` | Optional bounded geometry query |
+
+Never commit tokens or `relay.local.json`.
+
+---
+
+## Operational prerequisites (operator PC)
+
+- **`OPENXCOM_COMPANION_COMMAND_EXECUTOR=1`** — remote commands are **rejected** when the engine executor is off (`EXECUTOR_DISABLED`).
+- **Normal launcher** (`runtime/m0/Start-CompanionOpenXcom.ps1` or equivalent) starts the Node relay services — do not start duplicate sidecars during play.
+
+## Division of labour
+
+| Actor | Does |
+|-------|------|
+| **Operator** | Launcher; in-game AI assign; **SEND** (F6); **RETRIEVE**; **END TURN**; optional AUTO RETRIEVE |
+| **Local relay (Node)** | Validates inbox, delivers commands, publishes results (launcher-started) |
+| **You** | Read GitHub; publish only under [one active command](#one-active-command); correlate results |
+
+Local-only: `local/m0/tactical-live.yaml`, `companion-soldier-control.json`, sidecar journals.
+
+---
+
+## One active command
+
+Before **every** publish:
+
+1. **`m0/tactical-command.json` must be absent** (empty inbox). If it exists → **stop**; do not overwrite.
+2. **Prior submission resolved:** read `m0/tactical-result.json`. If you already published this turn, the file must show your last `command_id` with a **terminal** `status`: `COMPLETED`, `FAILED`, `REJECTED`, or `INTERRUPTED`.
+3. **`ACCEPTED` or `EXECUTING` are not terminal** — wait for RETRIEVE / refreshed result; do **not** publish again.
+4. **Ambiguous prior result** (wrong/missing `command_id`, mismatched `session_id`, non-terminal status, or unsure which command finished) → **hard stop**; ask operator to RETRIEVE or clarify; do not chain orders.
+5. **Fresh binding for the next order:** re-read `m0/state.json` and copy a new `commandBinding` (`snapshot_sha256`, `session_id`, `turn`, `state_version`). If state did not advance after a terminal result, request operator **SEND (F6)** — never reuse stale binding fields because the previous command “looked” successful.
+
+## Operational loop
+
+```
+READ m0/state.json → status review → one-active-command checks → publish
+→ RETRIEVE → terminal result → fresh state/binding → repeat
+```
+
+**Binding (every command):** all four binding fields from **current** `commandBinding` after step 5 above.
+
+---
+
+## Mandatory battlefield status review
+
+1. `unitStateBrief.exceptions` first.
+2. `perceptionLog` psych `*_observed` = historical only.
+3. Confirmed vs heuristic morale/panic/MC per [AGENTS.md](../../AGENTS.md) / `tactical-briefing-ai-workflow.cjs`.
+4. Actors ⊆ `commandBinding.player_soldiers` **and** operator-confirmed AI set.
+5. Hostile fair-play: `units[]` + `facing`; `perceptionLog` / `last_seen` not live tracking.
+
+---
+
+## How to submit orders
+
+### GitHub connector (ChatGPT)
+
+1. Read `m0/state.json`; status review; complete [one active command](#one-active-command) checks.
+2. Compose command; unique `command_id` (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`).
+3. `create_file` `m0/tactical-command.json` only when inbox absent.
+4. Operator RETRIEVE; poll until **terminal** result matches your `command_id` and `session_id`.
+
+### Local CLI (operator PC only)
+
+`node companion/m0-publish/publish-tactical-command-once.cjs --dry-run|--publish --path <draft>`
+
+---
+
+## Results
+
+| Status | Terminal? |
+|--------|-----------|
+| `REJECTED` | Yes |
+| `ACCEPTED`, `EXECUTING` | No — wait |
+| `COMPLETED`, `INTERRUPTED`, `FAILED` | Yes |
+
+Match `command_id` and `session_id`. MOVE may include `final_position`, `remaining_tu`, `destination_reached`.
+
+---
+
+## ASCII terrain and maps
+
+### Three presentations (do not mix semantics)
+
+| Kind | Where | Use |
+|------|--------|-----|
+| **A. Edge-interleaved** | `terrainMapBrief.mapText` | Human-readable crop around focus soldier; `north_edges` + `floor_row` lines |
+| **B. Tactical composite** | `terrainFullAsciiBattlefield.levels[].channels.tactical` (or P0 `layers.tactical`) | Single char per cell: walls/floors/doors condensed |
+| **C. Diagnostic layers** | Same object: `visibility`, `floor`, `edgeNorth`, `edgeWest` (+ derived `edgeSouth`/`edgeEast` in P0 view) | Inspect visibility vs structure separately |
+
+**Coordinates:** Cell `(x,y,z)`. String index **x** = column left→right; string row index **y** = row top→bottom (`y=0` is north/top). `terrainMapBrief.window` gives crop `x0..x1`, `y0..y1` absolute.
+
+### Glyphs on diagnostic layers (`DEFAULT_LEGEND`)
+
+**Visibility:** `?` undiscovered · `:` off-LOS discovered · `.` in LOS.
+
+**Floor (only layer that encodes grav-lift floors):** `?` undiscovered · `o` open · `x` blocked · `O` UFO interior · `A` air · `:` generic off-LOS floor (non-grav) · **`G`** grav-lift in current LOS · **`g`** grav-lift discovered off-LOS (`floorGlyph` / `structureMeta.floorGravLift`).
+
+**edgeNorth / edgeWest:** ` ` none · `.` no wall emitted · `W` impassable wall · `p` passable structural edge · `D`/`d` door closed/open (in LOS) · `U` door off-LOS state unknown · `:` off-LOS wall · `?` undiscovered.
+
+### Tactical composite-only glyphs (`tacticalCellGlyph`)
+
+These appear in **B** (`tactical`, `tacticalWithUnits`), not as separate legend keys in `DEFAULT_LEGEND`:
+
+| Glyph | Meaning |
+|-------|---------|
+| **`w`** | Impassable wall on a cardinal edge of this cell (composite from edge `W`) |
+| **`d` / `D`** | Open / closed door priority over floor |
+| **`U`** | Door off-LOS unknown |
+| **`o`, `x`, `A`, `:`, `?`** | Composite rules — see grav note below |
+| **`G`** | In-LOS grav-lift floor (when not masked by doors/walls) |
+| **`:`** | Off-LOS discovered cell — **replaces floor `g`** (and most non-wall floors) because `tacticalCellGlyph` returns `:` when visibility is off-LOS |
+| **`@` `H` `N` `M`** | Unit overlay in `tacticalWithUnits` only |
+
+**Floor layer `.`:** On **C** floor channel only — discovered body, in LOS, no floor body glyph (`floorGlyph`).
+
+### Renderer fixture: 3×2 map, z=0 (from `terrain-tactical-map` tests)
+
+Discovered tiles at `(0,0)…(1,1)`; `(x=2)` undiscovered; unit id **1** at **`(1,1,0)`**; north wall on `(0,0)`; west wall on `(1,0)`.
+
+**C — visibility** (row `y`):
+
+```
+y0: ..?
+y1: ..?
+```
+
+**C — floor:**
+
+```
+y0: oo?
+y1: oo?
+```
+
+**C — edgeNorth / edgeWest:**
+
+```
+y0 edgeNorth: W.?
+y0 edgeWest:  .W?
+```
+
+**B — tactical composite:**
+
+```
+y0: ww?
+y1: oo?
+```
+
+**B — tacticalWithUnits:**
+
+```
+y0: ww?
+y1: o@?    ← '@' at (1,1)
+```
+
+**A — interleaved rows** (`terrainMapBrief` style):
+
+```
+n  y0  ---   ???
+    y0   o |o ??  
+n  y1        ???
+    y1   o  @ ??  
+```
+
+Read **`o |o`**: open cell `(0,0)`, wall between, open `(1,0)`. **`@`** at `(1,1)`.
+
+### Two-level grav-lift fixture (renderer-generated)
+
+4×4×2; grav floor at **`(1,1,0)`** in LOS (`G`), same `(x,y)` on **z=1** off LOS (`g`); ordinary floors elsewhere.
+
+**Floor channel z=0** (row strings): positions align with map width 4; grav at index x=1, y=1:
+
+```
+???? 
+?Go? 
+????
+????
+```
+
+**C — floor z=1** (same cell `(1,1)` is **`g`** on the floor channel):
+
+```
+???? 
+?g?? 
+????
+????
+```
+
+**B — tactical z=0** at `(1,1)`: **`G`** (in LOS). **B — tactical z=1** at `(1,1)`: **`:`** — not `g` (off-LOS visibility wins in `tacticalCellGlyph`).
+
+**A — edge-interleaved** floor cells use `interleavedFloorCenter`: off-LOS centers render as **`:`** (or `o`/`x`/`A`/`?`), **not** `G`/`g` — use **C floor** or hints for grav identity.
+
+**Vertical links:** `terrainFullAsciiBattlefield.hints.gravLiftStructures` (when present) + **C floor** `G`/`g` on each level — do not read grav from tactical **`:`** alone or from interleaved floor rows.
+
+### Fair-play (movement vs map)
+
+- `?` ≠ empty. `o` ≠ guaranteed MOVE path. Visibility ≠ walkability. `w` in composite ≠ full edge diagnostics — use **C** when ambiguious.
+- Off-LOS `U` doors: state unknown. No smoke/fire/damage in ASCII export.
+
+Optional: `m0/terrain-query.json` with `snapshot_id`, `center`, `radius` or `rectangle`.
+
+---
+
+## Tactical interpretation
+
+| Need | Relay field |
+|------|-------------|
+| Roster positions, TU | `commandBinding.player_soldiers`, `tactical.units` |
+| AI ownership | **Operator** + local control file — not relay |
+| Weapon / TU costs | `tactical.units[].actionCosts`, `hands`, `inventory` |
+| Item ids for reload/inventory | `battleItemId` on snapshot rows — replace example ids |
+
+---
+
+## In-game relay
+
+**SEND (F6)** → fresh `m0/state.json`. **RETRIEVE** → one command execution. **AUTO RETRIEVE** default **30s** when enabled. One command per retrieve transaction.
+
+---
+
+## Command inventory (13 types)
+
+Authoritative: `parseTacticalCommand` in `companion/m0-publish/lib/tactical-command.cjs` and engine whitelist in `CompanionCommandRuntime.cpp`.
+
+| # | `command_type` | Notes |
+|---|----------------|--------|
+| 1 | `MOVE` | async |
+| 2 | `KNEEL` | sync |
+| 3 | `STAND` | sync |
+| 4 | `SNAP_SHOT` | async |
+| 5 | `AUTO_SHOT` | async |
+| 6 | `AIMED_SHOT` | async |
+| 7 | `PRIME` | sync; `fuse_timer` 0–23 |
+| 8 | `THROW` | async |
+| 9 | `RELOAD` | sync |
+| 10 | `UNLOAD` | sync |
+| 11 | `INVENTORY_MOVE` | engine-heavy legality |
+| 12 | `PICKUP` | sync |
+| 13 | `DROP` | sync |
+
+Not supported: `END_TURN`, unknown `command_type` strings, extra JSON keys on any command.
+
+---
+
+## Command examples (valid JSON)
+
+**Replace on every live order:**
+
+| Field | Source |
+|-------|--------|
+| `snapshot_sha256`, `session_id`, `turn`, `state_version` | Current `commandBinding` |
+| `actor_unit_id` | Listed in `player_soldiers` **and** operator AI list |
+| `destination` / `target` / `ground_position` | Legal coords within `commandBinding.map` + fair play |
+| `*_battle_item_id` | Matching `battleItemId` on actor snapshot rows |
+
+Examples below use **dummy** binding hashes and **parse-valid** shapes (`JSON.parse` + `parseTacticalCommand` verified). **`ba7816bf…`** is a test digest, not your live SHA.
+
+### Shared binding fields (copy from live `commandBinding`)
+
+| Field | Format | Example placeholder in § below |
+|-------|--------|--------------------------------|
+| `snapshot_sha256` | 64 lowercase hex | `ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad` |
+| `session_id` | 32 lowercase hex | `a1b2c3d4e5f6789012345678abcdef01` |
+| `turn` | integer ≥ 1 | `1` |
+| `state_version` | integer ≥ 0 (= `eventLog.latestSeq` at export) | `7` |
+
+Replace placeholders with the **current** export; the example digest is for parser shape only.
+
+### 1. MOVE
 
 ```json
 {
   "schema_version": 1,
-  "command_id": "<unique 32 lowercase hex characters>",
+  "command_id": "move-example-001",
   "command_type": "MOVE",
-  "actor_unit_id": 0,
-  "destination": { "x": 0, "y": 0, "z": 0 },
-  "snapshot_sha256": "<current commandBinding.snapshot_sha256>",
-  "session_id": "<current commandBinding.session_id>",
-  "turn": 0,
-  "state_version": 0
+  "actor_unit_id": 1,
+  "destination": { "x": 2, "y": 3, "z": 0 },
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
 }
 ```
 
-## 6. Tactical behavior
+### 2. KNEEL
 
-- Play assigned soldiers as a teammate; no sign-off per routine authorized action.
-- Keep **each command atomic** (single active inbox). Multiple commands per player turn are fine **sequentially** after each outcome.
-- `COMPLETED` MOVE may stop short; use `final_position`, `remaining_tu`, `destination_reached`.
-- Reassess on contact, panic/MC, casualties, blockage, or gear changes.
-- If all friendlies are human-owned, advise only until AI assignment exists.
+```json
+{
+  "schema_version": 1,
+  "command_id": "kneel-example-001",
+  "command_type": "KNEEL",
+  "actor_unit_id": 1,
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
 
-## 7. Failures and recovery
+### 3. STAND
 
-| Observation | Correct response |
-|---|---|
-| `m0/tactical-command.json` already exists | Inbox occupied — do not overwrite. |
-| Result shows an older `command_id` | Keep checking current command; do not treat as fresh completion. |
-| Rejected (ownership, session, stale hash, item ID, destination) | Fresh state / fix selection; never bypass validation. |
-| No result, relay down | Explain blockage; no blind retries. |
-| `INTERRUPTED` MOVE | Read final position and TU; re-plan. |
-| New turn/mission/campaign | Re-read state and ownership; discard memorized IDs. |
+```json
+{
+  "schema_version": 1,
+  "command_id": "stand-example-001",
+  "command_type": "STAND",
+  "actor_unit_id": 1,
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
 
-## 8. Minimal communication during play
+### 4. SNAP_SHOT
 
-Be concise: **"Moving unit two tiles north to cover the door."** After confirmed execution: position, TU, contact. If blocked, say why. Do not narrate JSON unless troubleshooting.
+```json
+{
+  "schema_version": 1,
+  "command_id": "snap-example-001",
+  "command_type": "SNAP_SHOT",
+  "actor_unit_id": 1,
+  "active_hand": "STR_RIGHT_HAND",
+  "target": { "x": 4, "y": 4, "z": 0 },
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
 
-**Session rule:** The operator owns human soldiers and End Turn. The agent owns only explicitly assigned AI soldiers, obeys the information boundary, and accepts consequences.
+### 5. AUTO_SHOT
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "auto-example-001",
+  "command_type": "AUTO_SHOT",
+  "actor_unit_id": 1,
+  "active_hand": "STR_RIGHT_HAND",
+  "target": { "x": 4, "y": 4, "z": 0 },
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
+
+### 6. AIMED_SHOT
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "aimed-example-001",
+  "command_type": "AIMED_SHOT",
+  "actor_unit_id": 1,
+  "active_hand": "STR_RIGHT_HAND",
+  "target": { "x": 4, "y": 4, "z": 0 },
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
+
+### 7. PRIME
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "prime-example-001",
+  "command_type": "PRIME",
+  "actor_unit_id": 1,
+  "active_hand": "STR_LEFT_HAND",
+  "fuse_timer": 3,
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
+
+### 8. THROW
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "throw-example-001",
+  "command_type": "THROW",
+  "actor_unit_id": 1,
+  "active_hand": "STR_LEFT_HAND",
+  "target": { "x": 5, "y": 5, "z": 0 },
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
+
+### 9. RELOAD
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "reload-example-001",
+  "command_type": "RELOAD",
+  "actor_unit_id": 1,
+  "weapon_battle_item_id": 100,
+  "ammo_battle_item_id": 102,
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
+
+### 10. UNLOAD
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "unload-example-001",
+  "command_type": "UNLOAD",
+  "actor_unit_id": 1,
+  "weapon_battle_item_id": 100,
+  "loaded_ammo_battle_item_id": 101,
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
+
+### 11. INVENTORY_MOVE
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "inv-move-example-001",
+  "command_type": "INVENTORY_MOVE",
+  "actor_unit_id": 1,
+  "item_battle_item_id": 300,
+  "source_slot": "STR_BELT",
+  "destination_slot": "STR_RIGHT_HAND",
+  "destination_x": 0,
+  "destination_y": 0,
+  "source_x": 0,
+  "source_y": 0,
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
+
+### 12. PICKUP
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "pickup-example-001",
+  "command_type": "PICKUP",
+  "actor_unit_id": 1,
+  "item_battle_item_id": 900,
+  "ground_position": { "x": 1, "y": 1, "z": 0 },
+  "destination_slot": "STR_RIGHT_HAND",
+  "destination_x": 0,
+  "destination_y": 0,
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
+
+### 13. DROP
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "drop-example-001",
+  "command_type": "DROP",
+  "actor_unit_id": 1,
+  "item_battle_item_id": 300,
+  "source_slot": "STR_BELT",
+  "source_x": 0,
+  "source_y": 0,
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
+
+**Carried slots:** `STR_RIGHT_HAND`, `STR_LEFT_HAND`, `STR_BELT`, `STR_BACK_PACK`, `STR_RIGHT_SHOULDER`, `STR_LEFT_SHOULDER`, `STR_RIGHT_LEG`, `STR_LEFT_LEG`. Hands use grid `0,0` for PICKUP destination.
+
+---
+
+## Recovery
+
+| Situation | Action |
+|-----------|--------|
+| Inbox exists | Do not overwrite ([one active command](#one-active-command)) |
+| Prior result `ACCEPTED` / `EXECUTING` | Wait — not terminal |
+| Ambiguous / stale result | Hard stop; operator RETRIEVE or clarify |
+| No fresh `commandBinding` after terminal | Request **SEND (F6)** |
+| `NOT_AI_CONTROLLED` | Operator confirms AI ids / re-assigns |
+| `STALE_*` | Operator SEND; re-read binding |
+| `INTERRUPTED` MOVE | Use `final_position`; replan |
+| `no_new_orders` | Inbox empty — not failure |
+| `EXECUTOR_DISABLED` | Operator enables executor + launcher stack |
+
+---
+
+## Communication
+
+Concise intent in plain language. Human owns human soldiers and End Turn.
+
+---
+
+## Implementation pointers
+
+| Topic | File |
+|-------|------|
+| Commands | `m0-publish/lib/tactical-command.cjs` |
+| ASCII | `m0-publish/lib/terrain-tactical-map.cjs` |
+| Operator relay setup (not agent onboarding) | `m0-publish/docs/relay-github-setup.md` |
+
+Companion repo index: [README.md](../README.md) → this playbook.
+
+---
+
+*M1 pipeline: **13** command types in `parseTacticalCommand` (includes STAND). Stale: `M1-battlescape-capability-audit.md` (MOVE/KNEEL/SNAP only).*

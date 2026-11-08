@@ -190,6 +190,9 @@ function writeOnDemandStatusForCtx(ctx, fields, io = {}) {
     outcome: fields.outcome,
     error_code: fields.error_code,
     briefing_request_id: fields.briefing_request_id,
+    last_command_id: fields.last_command_id,
+    last_command_status: fields.last_command_status,
+    retrieve_outcome: fields.retrieve_outcome,
   });
   return writeOnDemandStatus(ctx.paths.statusPath, payload, io);
 }
@@ -612,6 +615,49 @@ function openNonTerminalResultForActive(commandWatcher, paths) {
   return openResult.value;
 }
 
+function resolveRetrieveCommandOutcome(commandWatcher, tx) {
+  if (!tx || !commandWatcher) {
+    return null;
+  }
+  const commandId = tx.deliveredCommandId || tx.publishedCommandId;
+  if (!commandId) {
+    return null;
+  }
+  if (tx.completionKind === 'sidecar_rejected') {
+    return {
+      last_command_id: commandId,
+      last_command_status: 'REJECTED',
+      retrieve_outcome: 'command_rejected',
+    };
+  }
+  const local = commandWatcher.readLocalResult();
+  if (local && !local.__parseError && local.command_id === commandId && local.status) {
+    return {
+      last_command_id: commandId,
+      last_command_status: local.status,
+      retrieve_outcome: isTerminalStatus(local.status) ? 'command_terminal' : 'relay_complete',
+    };
+  }
+  const journal = commandWatcher.loadJournal();
+  const record = journal.records && journal.records[commandId] ? journal.records[commandId] : null;
+  if (record && record.status) {
+    return {
+      last_command_id: commandId,
+      last_command_status: record.status,
+      retrieve_outcome: 'command_terminal',
+    };
+  }
+  return null;
+}
+
+function withRetrieveCommandOutcome(outcome, commandWatcher, tx) {
+  const commandFields = resolveRetrieveCommandOutcome(commandWatcher, tx);
+  if (!commandFields) {
+    return outcome;
+  }
+  return { ...outcome, ...commandFields };
+}
+
 function isRetrieveEndToEndComplete(tx) {
   if (!tx) {
     return false;
@@ -758,7 +804,12 @@ async function runRetrieveOnce(ctx, options = {}) {
   const tx = commandWatcher.getRetrieveTransactionState();
   if (isRetrieveEndToEndComplete(tx)) {
     ctx.transactionTrace?.record('retrieve_disposition', { disposition: 'completed', retrieve_tx: tx });
-    return { phase: RETRIEVE_PHASE.COMPLETED, message: 'Retrieve complete.' };
+    return withRetrieveCommandOutcome({
+      phase: RETRIEVE_PHASE.COMPLETED,
+      message: 'Retrieve complete.',
+      terminal: true,
+      outcome: RELAY_OUTCOME.RETRIEVE_COMPLETE,
+    }, commandWatcher, tx);
   }
 
   const touched = Boolean(
@@ -776,16 +827,34 @@ async function runRetrieveOnce(ctx, options = {}) {
       ...(dispositionCommandId ? { command_id: dispositionCommandId } : {}),
       ...(tx && tx.sidecarRejectCode ? { sidecar_reject_code: tx.sidecarRejectCode } : {}),
     });
-    return {
+    return withRetrieveCommandOutcome({
       phase: RETRIEVE_PHASE.FAILED,
       message: sidecarReject
         ? 'Sidecar rejected command before execution; cooperative retrieve incomplete.'
         : 'Retrieve incomplete; press RETRIEVE again to finish relay.',
+      error_code: sidecarReject ? (tx.sidecarRejectCode || 'SIDECAR_REJECTED') : 'RETRIEVE_INCOMPLETE',
+      terminal: true,
+      outcome: RELAY_OUTCOME.FAILED,
       retryable: !sidecarReject,
-    };
+    }, commandWatcher, tx);
   }
 
   const snap = commandWatcher.getLastRetrievePollSnapshot();
+  if (!touched && snap && snap.remoteReadFailed) {
+    ctx.transactionTrace?.record('retrieve_disposition', {
+      disposition: 'retrieval_error',
+      retrieve_tx: tx,
+      poll_snapshot: snap,
+      error_code: snap.remoteReadErrorCode,
+    });
+    return {
+      phase: RETRIEVE_PHASE.FAILED,
+      message: 'Remote inbox check failed.',
+      error_code: snap.remoteReadErrorCode || 'RETRIEVAL_ERROR',
+      terminal: true,
+      outcome: RELAY_OUTCOME.FAILED,
+    };
+  }
   const openLocalNonTerminal =
     openNonTerminalResultForActive(commandWatcher, paths)
     || (() => {
@@ -806,12 +875,20 @@ async function runRetrieveOnce(ctx, options = {}) {
     return {
       phase: RETRIEVE_PHASE.FAILED,
       message: 'Retrieve incomplete; press RETRIEVE again to finish relay.',
+      error_code: 'RETRIEVE_INCOMPLETE',
+      terminal: true,
+      outcome: RELAY_OUTCOME.FAILED,
       retryable: true,
     };
   }
 
   ctx.transactionTrace?.record('retrieve_disposition', { disposition: 'no_new_orders', retrieve_tx: tx });
-  return { phase: RETRIEVE_PHASE.NO_NEW_ORDERS, message: 'No new orders.' };
+  return {
+    phase: RETRIEVE_PHASE.NO_NEW_ORDERS,
+    message: 'No new orders.',
+    terminal: true,
+    outcome: RELAY_OUTCOME.NO_NEW_ORDERS,
+  };
 }
 
 function isNonTerminalUiPhase(phase) {
@@ -915,7 +992,7 @@ async function processPendingRequest(ctx, io = {}) {
   const uiTerminal = outcome.terminal !== undefined
     ? Boolean(outcome.terminal)
     : !isNonTerminalUiOutcome(outcome);
-  writeOnDemandStatusForCtx(ctx, {
+  const statusWrite = writeOnDemandStatusForCtx(ctx, {
     request_id: requestId,
     action,
     phase: outcome.phase,
@@ -925,7 +1002,11 @@ async function processPendingRequest(ctx, io = {}) {
     outcome: outcome.outcome,
     error_code: outcome.error_code,
     briefing_request_id: pending.value.briefing_request_id ?? outcome.briefing_request_id,
+    last_command_id: outcome.last_command_id,
+    last_command_status: outcome.last_command_status,
+    retrieve_outcome: outcome.retrieve_outcome,
   }, io);
+  const uiStatusPreserved = statusWrite && statusWrite.written === false;
   if (action === 'send') {
     emitSendOutcomeDiagnostics(ctx, pending.value, outcome);
   }
@@ -935,6 +1016,7 @@ async function processPendingRequest(ctx, io = {}) {
     outcomePhase: outcome.phase,
     outcomeMessage: outcome.message,
     uiStatusTerminal: uiTerminal,
+    uiStatusPreserved,
     apiCallLog,
     retrieveTx: action === 'retrieve' ? ctx.commandWatcher.getRetrieveTransactionState() : null,
     pollSnapshot: action === 'retrieve' ? ctx.commandWatcher.getLastRetrievePollSnapshot() : null,
@@ -1078,6 +1160,7 @@ module.exports = {
   sanitizeBriefingReason,
   isRetrieveEndToEndComplete,
   retrieveHasPendingRelayWork,
+  resolveRetrieveCommandOutcome,
   createGhApiCallLog,
   createRelayTransactionTrace,
   bindTransactionScopeToContext,

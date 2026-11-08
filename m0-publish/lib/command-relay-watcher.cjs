@@ -316,6 +316,7 @@ class CommandRelayWatcher {
       completionKind: null,
     };
     this._lastRetrievePollSnapshot = null;
+    this._lastRetrievePollReadError = null;
     this._retrievePollIndex = 0;
     this._emitTransactionTrace('retrieve_transaction_begin', {
       transaction_id: transactionId ?? null,
@@ -432,6 +433,7 @@ class CommandRelayWatcher {
       || publishedThisTx
       || (activeCommand && !inboxEmpty),
     );
+    const remoteReadFailed = Boolean(this._lastRetrievePollReadError);
     this._lastRetrievePollSnapshot = {
       inboxEmpty,
       pendingRetirement,
@@ -439,6 +441,8 @@ class CommandRelayWatcher {
       deliveredThisTx,
       publishedThisTx,
       completedExecutionThisTx: Boolean(this._retrieveTransaction && this._retrieveTransaction.completedExecution),
+      remoteReadFailed,
+      remoteReadErrorCode: remoteReadFailed ? this._lastRetrievePollReadError.code : null,
     };
   }
 
@@ -776,7 +780,9 @@ class CommandRelayWatcher {
     let inboxRemote = undefined;
     const pollIndex = this._retrievePollIndex + 1;
     this._retrievePollIndex = pollIndex;
+    this._lastRetrievePollReadError = null;
     this._emitTransactionTrace('internal_poll_start', { poll_index: pollIndex });
+    let inboxPolled = false;
     try {
       let journal = this.loadJournal();
       if (await this._resumeActive(journal)) {
@@ -795,9 +801,16 @@ class CommandRelayWatcher {
           this.log(`Remote command read failed: ${message}`);
         }
         this._markRelayDisconnected(message);
+        inboxPolled = true;
+        inboxRemote = null;
+        this._lastRetrievePollReadError = {
+          code: error.code || 'NETWORK_FAILED',
+          message,
+        };
         return;
       }
       inboxRemote = remote;
+      inboxPolled = true;
 
       await this._retryPendingRemoteRetirements(journal, remote);
       journal = this.loadJournal();
@@ -883,7 +896,7 @@ class CommandRelayWatcher {
         throw error;
       }
     } finally {
-      if (inboxRemote !== undefined) {
+      if (inboxPolled) {
         try {
           this._finalizeRetrievePollSnapshot(this.loadJournal(), inboxRemote);
         } catch {

@@ -147,9 +147,9 @@ function createRelayTransactionTrace(options = {}) {
       ui_may_show_completed_until_next_action: Boolean(
         summary.uiStatusTerminal
         && (summary.outcomePhase === 'completed'
-          || summary.outcomePhase === 'sent'
-          || summary.outcomePhase === 'no_new_orders'),
+          || summary.outcomePhase === 'sent'),
       ),
+      ui_status_preserved: summary.uiStatusPreserved === true,
       busy_rejects_logged_as: 'relay_button_enqueue',
     };
     const retrieveDiag = retrieveDiagnostics(summary.retrieveTx);

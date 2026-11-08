@@ -17,6 +17,7 @@ const COMMAND_SCHEMA_VERSION = 1;
 const RESULT_SCHEMA_VERSION = 1;
 const COMMAND_TYPE_MOVE = 'MOVE';
 const COMMAND_TYPE_KNEEL = 'KNEEL';
+const COMMAND_TYPE_STAND = 'STAND';
 const COMMAND_TYPE_SNAP_SHOT = 'SNAP_SHOT';
 const COMMAND_TYPE_AUTO_SHOT = 'AUTO_SHOT';
 const COMMAND_TYPE_AIMED_SHOT = 'AIMED_SHOT';
@@ -61,6 +62,7 @@ const COMMAND_KEYS_COMMON = new Set([
 
 const COMMAND_KEYS_MOVE = new Set([...COMMAND_KEYS_COMMON, 'destination']);
 const COMMAND_KEYS_KNEEL = new Set([...COMMAND_KEYS_COMMON]);
+const COMMAND_KEYS_STAND = new Set([...COMMAND_KEYS_COMMON]);
 const COMMAND_KEYS_DIRECTED_FIRE = new Set([...COMMAND_KEYS_COMMON, 'target', 'active_hand']);
 const COMMAND_KEYS_PRIME = new Set([...COMMAND_KEYS_COMMON, 'active_hand', 'fuse_timer']);
 const COMMAND_KEYS_THROW = new Set([...COMMAND_KEYS_COMMON, 'target', 'active_hand']);
@@ -192,6 +194,15 @@ function parseKneelCommand(raw) {
   assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
   assert(raw.command_type === COMMAND_TYPE_KNEEL, 'unsupported command_type');
   assertAllowedCommandKeys(raw, COMMAND_KEYS_KNEEL);
+  return parseBindingFields(raw);
+}
+
+function parseStandCommand(raw) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === COMMAND_TYPE_STAND, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, COMMAND_KEYS_STAND);
   return parseBindingFields(raw);
 }
 
@@ -644,6 +655,9 @@ function parseTacticalCommand(raw) {
   if (raw.command_type === COMMAND_TYPE_KNEEL) {
     return parseKneelCommand(raw);
   }
+  if (raw.command_type === COMMAND_TYPE_STAND) {
+    return parseStandCommand(raw);
+  }
   if (raw.command_type === COMMAND_TYPE_SNAP_SHOT) {
     return parseSnapShotCommand(raw);
   }
@@ -710,6 +724,13 @@ function validateMoveAgainstSnapshot(command, tactical, snapshotSha256Lower) {
 
 function validateKneelAgainstSnapshot(command, tactical, snapshotSha256Lower) {
   parseKneelCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  const actor = validateActorAgainstSnapshot(command, tactical);
+  return { snapshotId: computeSnapshotId(tactical), actor };
+}
+
+function validateStandAgainstSnapshot(command, tactical, snapshotSha256Lower) {
+  parseStandCommand(command);
   validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
   const actor = validateActorAgainstSnapshot(command, tactical);
   return { snapshotId: computeSnapshotId(tactical), actor };
@@ -897,6 +918,9 @@ function validateTacticalCommandAgainstSnapshot(command, tactical, snapshotSha25
   if (command && command.command_type === COMMAND_TYPE_KNEEL) {
     return validateKneelAgainstSnapshot(command, tactical, snapshotSha256Lower);
   }
+  if (command && command.command_type === COMMAND_TYPE_STAND) {
+    return validateStandAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  }
   if (command && command.command_type === COMMAND_TYPE_SNAP_SHOT) {
     return validateSnapShotAgainstSnapshot(command, tactical, snapshotSha256Lower);
   }
@@ -982,6 +1006,7 @@ module.exports = {
   RESULT_SCHEMA_VERSION,
   COMMAND_TYPE_MOVE,
   COMMAND_TYPE_KNEEL,
+  COMMAND_TYPE_STAND,
   COMMAND_TYPE_SNAP_SHOT,
   COMMAND_TYPE_AUTO_SHOT,
   COMMAND_TYPE_AIMED_SHOT,
@@ -999,6 +1024,7 @@ module.exports = {
   NON_TERMINAL_STATUSES,
   parseMoveCommand,
   parseKneelCommand,
+  parseStandCommand,
   parseSnapShotCommand,
   parseAutoShotCommand,
   parseAimedShotCommand,
@@ -1013,6 +1039,7 @@ module.exports = {
   commandDigest,
   validateMoveAgainstSnapshot,
   validateKneelAgainstSnapshot,
+  validateStandAgainstSnapshot,
   validateSnapShotAgainstSnapshot,
   validateAutoShotAgainstSnapshot,
   validateAimedShotAgainstSnapshot,

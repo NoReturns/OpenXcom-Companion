@@ -95,6 +95,25 @@ function composeKneelCommand(binding, { commandId, actorUnitId }) {
   };
 }
 
+function composeStandCommand(binding, { commandId, actorUnitId }) {
+  const b = parseCommandBinding(binding);
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId > 0, 'actorUnitId required');
+  const soldier = b.player_soldiers.find((s) => s.id === actorUnitId);
+  assert(soldier, 'actorUnitId must be a listed player_soldier');
+
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: 'STAND',
+    actor_unit_id: actorUnitId,
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
 function composeMoveCommand(binding, { commandId, actorUnitId, destination }) {
   const b = parseCommandBinding(binding);
   assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
@@ -395,6 +414,7 @@ module.exports = {
   parseCommandBinding,
   composeMoveCommand,
   composeKneelCommand,
+  composeStandCommand,
   composeSnapShotCommand,
   composeAutoShotCommand,
   composeAimedShotCommand,

@@ -30,6 +30,39 @@ function readOnDemandStatus(statusPath, io = {}) {
   }
 }
 
+function isTerminalRetrievePhase(phase) {
+  return phase === 'completed' || phase === 'failed';
+}
+
+/**
+ * Empty inbox polls must not erase a confirmed retrieve / command outcome on the overlay.
+ */
+function isStickyTerminalRetrieveOutcome(existing) {
+  if (!existing || existing.action !== 'retrieve' || !existing.terminal) {
+    return false;
+  }
+  if (existing.last_command_id && existing.last_command_status) {
+    return true;
+  }
+  return isTerminalRetrievePhase(existing.phase);
+}
+
+function incomingRetrievePollWouldEraseTerminalOutcome(existing, incoming) {
+  if (!existing || !incoming || incoming.action !== 'retrieve') {
+    return false;
+  }
+  if (!isStickyTerminalRetrieveOutcome(existing)) {
+    return false;
+  }
+  if (incoming.phase === 'no_new_orders') {
+    return true;
+  }
+  if (incoming.phase === 'retrieving' && incoming.terminal === false) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * Prevent an older on-demand request or stale poll from overwriting a newer terminal status.
  */
@@ -39,6 +72,9 @@ function shouldWriteOnDemandStatus(existing, incoming) {
   }
   if (!existing || typeof existing !== 'object') {
     return true;
+  }
+  if (incomingRetrievePollWouldEraseTerminalOutcome(existing, incoming)) {
+    return false;
   }
   if (incoming.request_id && existing.request_id && incoming.request_id === existing.request_id) {
     return true;
@@ -80,6 +116,15 @@ function buildOnDemandStatusPayload(fields) {
   }
   if (fields.briefing_request_id) {
     payload.briefing_request_id = fields.briefing_request_id;
+  }
+  if (fields.last_command_id) {
+    payload.last_command_id = fields.last_command_id;
+  }
+  if (fields.last_command_status) {
+    payload.last_command_status = fields.last_command_status;
+  }
+  if (fields.retrieve_outcome) {
+    payload.retrieve_outcome = fields.retrieve_outcome;
   }
   return payload;
 }
@@ -201,6 +246,9 @@ module.exports = {
   BRIEFING_ACK_STATUS_MANUAL_UPLOAD_REQUIRED,
   BRIEFING_ACK_STATUS_DEFERRED,
   RELAY_OUTCOME,
+  isTerminalRetrievePhase,
+  isStickyTerminalRetrieveOutcome,
+  incomingRetrievePollWouldEraseTerminalOutcome,
   readOnDemandStatus,
   shouldWriteOnDemandStatus,
   buildOnDemandStatusPayload,

@@ -16,7 +16,7 @@ const SCHEMA_VERSION = 1;
  * Verified Win32 Release build (M1 combined: AUTO RETRIEVE, relay diagnostics, casualty settlement,
  * STAND, SEND freshness, uniform shooting spread, Inventory compile fix).
  */
-const VERIFIED_BUILD_SHA256 = '08442e36b745f9dd91e756291d62f556a58f4a395fa8bd67d0fc9257233f6cd9';
+const VERIFIED_BUILD_SHA256 = '56b3d9a42f64865cbc6a498ab8756f2dfdfd504a85be17c24dce260efa209c3d6c';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 
@@ -41,7 +41,7 @@ function companionRuntimeLayout(repoRoot = resolveRepoRoot()) {
       root,
       'engine',
       'OpenXcom',
-      'build-isolated-m1-23e',
+      'build-wp8-isolated',
       'bin',
       'Release',
       'openxcom.exe',
@@ -50,7 +50,7 @@ function companionRuntimeLayout(repoRoot = resolveRepoRoot()) {
       root,
       'engine',
       'OpenXcom',
-      'build-isolated-m1-23e',
+      'build-wp8-isolated',
       'bin',
       'Release',
       'OpenXcom.exe',
