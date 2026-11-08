@@ -1,0 +1,72 @@
+# Pinned schema v2 regression — eight friendly roster soldiers plus one sparse hostile HWP (id >= 1_000_000).
+# Geometry and roster layout derived from a live M1 export; soldier names and operator-specific data removed.
+# Do not repoint tests at local/m0/tactical-m1-04.yaml (non-portable operator snapshot).
+schemaVersion: 2
+turn: 1
+side: 0
+selectedUnitId: 2
+map:
+  width: 50
+  height: 50
+  depth: 4
+units:
+  - id: 1
+    faction: 0
+    originalFaction: 0
+    position: [43, 38, 0]
+    name: Roster Soldier 1
+    health: 37
+    timeUnits: 38
+  - id: 2
+    faction: 0
+    originalFaction: 0
+    position: [43, 37, 0]
+    name: Roster Soldier 2
+    health: 34
+    timeUnits: 10
+  - id: 3
+    faction: 0
+    originalFaction: 0
+    position: [44, 40, 1]
+    name: Roster Soldier 3
+    health: 30
+    timeUnits: 54
+  - id: 4
+    faction: 0
+    originalFaction: 0
+    position: [45, 40, 1]
+    name: Roster Soldier 4
+    health: 29
+    timeUnits: 53
+  - id: 5
+    faction: 0
+    originalFaction: 0
+    position: [44, 41, 1]
+    name: Roster Soldier 5
+    health: 34
+    timeUnits: 57
+  - id: 6
+    faction: 0
+    originalFaction: 0
+    position: [45, 41, 1]
+    name: Roster Soldier 6
+    health: 36
+    timeUnits: 60
+  - id: 7
+    faction: 0
+    originalFaction: 0
+    position: [44, 42, 1]
+    name: Roster Soldier 7
+    health: 28
+    timeUnits: 54
+  - id: 8
+    faction: 0
+    originalFaction: 0
+    position: [45, 42, 1]
+    name: Roster Soldier 8
+    health: 29
+    timeUnits: 52
+  - id: 1000000
+    faction: 1
+    originalFaction: 1
+    position: [35, 30, 0]

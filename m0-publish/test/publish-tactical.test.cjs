@@ -23,7 +23,11 @@ const { SYNTHETIC_RELAY_REPO } = require('./helpers/synthetic-relay-env.cjs');
 
 const FIXTURE = path.join(__dirname, 'fixtures', 'valid-v2.yaml');
 const FIXTURE_FRIENDLY_HWP_V5 = path.join(__dirname, 'fixtures', 'friendly-hwp-sparse-v5.yaml');
-const REAL_SNAPSHOT = path.resolve(__dirname, '../../../local/m0/tactical-m1-04.yaml');
+const FIXTURE_ROSTER_EIGHT_HOSTILE_HWP_V2 = path.join(
+  __dirname,
+  'fixtures',
+  'roster-eight-hostile-hwp-sparse-v2.yaml',
+);
 
 describe('tactical snapshot validation', () => {
   it('accepts a valid schema v2 snapshot', () => {
@@ -33,12 +37,23 @@ describe('tactical snapshot validation', () => {
     assert.equal(tactical.units.length, 3);
   });
 
-  it('accepts the real local tactical YAML', () => {
-    const text = fs.readFileSync(REAL_SNAPSHOT, 'utf8');
+  it('accepts pinned eight-roster schema v2 snapshot with sparse hostile HWP', () => {
+    const text = fs.readFileSync(FIXTURE_ROSTER_EIGHT_HOSTILE_HWP_V2, 'utf8');
     const tactical = loadAndValidateSnapshotFromText(text, YAML);
+    assert.equal(tactical.schemaVersion, 2);
+    assert.deepEqual(tactical.map, { width: 50, height: 50, depth: 4 });
     assert.equal(tactical.units.length, 9);
-    assert.equal(tactical.units[8].id, 1000000);
-    assert.equal(tactical.units[8].health, undefined);
+    const roster = tactical.units.filter((u) => u.id < 1_000_000);
+    assert.equal(roster.length, 8);
+    assert.ok(roster.every((u) => typeof u.name === 'string' && u.name.length > 0));
+    assert.ok(roster.some((u) => u.position[2] === 1), 'multi-level roster positions');
+    const hostileHwp = tactical.units[8];
+    assert.equal(hostileHwp.id, 1_000_000);
+    assert.equal(hostileHwp.faction, FACTION_HOSTILE);
+    assert.equal(hostileHwp.originalFaction, FACTION_HOSTILE);
+    assert.equal(hostileHwp.health, undefined);
+    assert.equal(hostileHwp.name, undefined);
+    assert.equal(hostileHwp.timeUnits, undefined);
   });
 
   it('rejects malformed YAML', () => {
@@ -237,7 +252,7 @@ describe('publish-tactical-once CLI', () => {
   it('defaults to dry-run without network publish', () => {
     const out = execFileSync(process.execPath, [
       path.join(__dirname, '..', 'publish-tactical-once.cjs'),
-      '--path', REAL_SNAPSHOT,
+      '--path', FIXTURE_ROSTER_EIGHT_HOSTILE_HWP_V2,
     ], {
       encoding: 'utf8',
       env: {
