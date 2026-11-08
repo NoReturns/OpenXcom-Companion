@@ -49,7 +49,7 @@ describe('companion on-demand relay M1-25E4', () => {
     if (fs.existsSync(pidPath)) {
       try {
         const pid = JSON.parse(fs.readFileSync(pidPath, 'utf8')).pid;
-        if (pid) {
+        if (pid && isProcessRunning(pid)) {
           stopProcessTree(pid);
         }
       } catch {
@@ -72,6 +72,10 @@ describe('companion on-demand relay M1-25E4', () => {
       encoding: 'utf8',
       timeout: 30000,
       windowsHide: true,
+      env: {
+        ...process.env,
+        COMPANION_ON_DEMAND_TEST_NO_LIVE_REUSE: '1',
+      },
     });
     const helperElapsedMs = Date.now() - startedAt;
 

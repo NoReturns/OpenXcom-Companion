@@ -107,10 +107,35 @@ function isLikelySyntheticJournalRecord(record) {
   return false;
 }
 
+function classifyProductionJournalActive(journal) {
+  if (!journal || !journal.active || !journal.active.command_id) {
+    return { kind: 'none', active: null, record: null };
+  }
+  const commandId = journal.active.command_id;
+  const record = journal.records && journal.records[commandId] ? journal.records[commandId] : null;
+  if (!record) {
+    return { kind: 'orphan_active', active: journal.active, record: null };
+  }
+  if (record.phase === 'delivered_local' && record.command_id === commandId) {
+    return { kind: 'pending_relay_completion', active: journal.active, record };
+  }
+  if (record.phase === 'published_terminal' && !record.remote_retired_at && !record.retirement_closed_at) {
+    return { kind: 'pending_remote_retirement', active: journal.active, record };
+  }
+  return { kind: 'active_other', active: journal.active, record };
+}
+
 function auditProductionCommandRelayJournal() {
   const filePath = getProductionCommandRelayJournalPath();
   if (!fs.existsSync(filePath)) {
-    return { filePath, records: [], synthetic: [], inconsistent: [] };
+    return {
+      filePath,
+      records: [],
+      synthetic: [],
+      inconsistent: [],
+      journal: null,
+      activeClassification: { kind: 'none', active: null, record: null },
+    };
   }
   const journal = JSON.parse(fs.readFileSync(filePath, 'utf8'));
   const records = Object.values(journal.records || {});
@@ -126,7 +151,14 @@ function auditProductionCommandRelayJournal() {
     }
     return false;
   });
-  return { filePath, journal, records, synthetic, inconsistent };
+  return {
+    filePath,
+    journal,
+    records,
+    synthetic,
+    inconsistent,
+    activeClassification: classifyProductionJournalActive(journal),
+  };
 }
 
 module.exports = {
@@ -140,5 +172,6 @@ module.exports = {
   assertSubprocessRelayStateDirIsolated,
   assertCommandRelayStateDirForTests,
   isLikelySyntheticJournalRecord,
+  classifyProductionJournalActive,
   auditProductionCommandRelayJournal,
 };

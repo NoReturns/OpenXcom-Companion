@@ -1,0 +1,67 @@
+{
+  "requestId": "f631285351a82251c313935e9b6e0640",
+  "ui": {
+    "phase": "completed",
+    "message": "Retrieve complete.",
+    "terminal": true
+  },
+  "deliverLocalCalls": 0,
+  "remoteDeleteCalls": 0,
+  "markedRetiredEvents": 1,
+  "publishedEvents": 1,
+  "retrieve_tx": {
+    "transactionId": "f631285351a82251c313935e9b6e0640",
+    "deliveredCommandId": null,
+    "publishedResult": true,
+    "completedExecution": false,
+    "retiredRemote": true,
+    "completionKind": "engine_reported"
+  },
+  "journal": {
+    "active": null,
+    "phase": "retired_remote",
+    "status": "FAILED",
+    "remote_retired_at": "2026-11-04T23:26:03.321Z"
+  },
+  "journalFingerprint": {
+    "filePath": "E:\\Open X-Com Companion\\companion\\m0-publish\\.command-relay-sidecar-state\\command-relay-journal.json",
+    "exists": true,
+    "sha256": "8e8419cb95c01d110219efd5c47d3c13243aaaee061fbd78ed96ddbbe89418d5",
+    "byteLength": 29647,
+    "mtimeMs": 1793834763321.87
+  },
+  "localResult": {
+    "status": "FAILED",
+    "command_id": "2b737d8422bef12932d4586140b9abf7",
+    "shaUnchanged": true,
+    "before": "05C3BF295B6ED8B2F294748A67DC394C3CD6D269557935EAA8852F950BB51681",
+    "after": "05C3BF295B6ED8B2F294748A67DC394C3CD6D269557935EAA8852F950BB51681"
+  },
+  "savedMission": {
+    "shaUnchanged": true
+  },
+  "github": {
+    "inboxAbsent": true,
+    "resultSha": "58e2414f7ca83d12791e501c4b26c5b226511cfe",
+    "resultStatus": "FAILED",
+    "resultCommandId": "2b737d8422bef12932d4586140b9abf7",
+    "rejectedShaPreservedInHistory": "e65799c6af4b4748ce2dfea9568437e4f084fc36"
+  },
+  "additionalRetrieveTransactions": 1,
+  "pendingRequest": null,
+  "githubApiInvocations": 0,
+  "eventPhases": [
+    "transaction_open",
+    "request_dequeued",
+    "daemon_processing_started",
+    "retrieving",
+    "retrieve_transaction_begin",
+    "internal_poll_start",
+    "remote_result_published",
+    "remote_command_marked_retired",
+    "internal_poll_end",
+    "retrieve_disposition",
+    "completed"
+  ],
+  "pass": true
+}

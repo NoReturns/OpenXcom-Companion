@@ -1,0 +1,282 @@
+{
+  "schemaVersion": 1,
+  "encoding": "full-ascii-battlefield-v1",
+  "role": "derived_tactical_presentation",
+  "authoritativeNote": "Derived for AI/human map reading only. Command authority and snapshot_id bind to full engine YAML (packed-v1); this is not a lossless terrain database.",
+  "map": {
+    "width": 14,
+    "height": 10,
+    "depth": 2
+  },
+  "memoryNote": "Representative P4 fixture",
+  "legend": {
+    "visibility": {
+      "?": "undiscovered",
+      ":": "discovered_off_los",
+      ".": "currently_visible"
+    },
+    "floor": {
+      "?": "undiscovered",
+      "o": "open_floor",
+      "x": "impassable_floor_or_body",
+      "O": "ufo_interior_or_special_floor",
+      "A": "open_air_void",
+      ":": "discovered_off_los_floor",
+      "G": "grav_lift_floor_currently_visible",
+      "g": "grav_lift_floor_discovered_remembered"
+    },
+    "edgeNorth": {
+      "?": "undiscovered",
+      " ": "no_north_wall_on_this_tile",
+      ".": "discovered_no_emitted_wall",
+      "W": "impassable_wall",
+      "p": "passable_structural_edge_exported_wall_part",
+      "D": "door_closed_confirmed_in_los",
+      "d": "door_open_confirmed_in_los",
+      "U": "door_remembered_off_los_state_unknown",
+      ":": "off_los_remembered_wall"
+    },
+    "edgeWest": {
+      "?": "undiscovered",
+      " ": "no_west_wall_on_this_tile",
+      ".": "discovered_no_emitted_wall",
+      "W": "impassable_wall",
+      "p": "passable_structural_edge_exported_wall_part",
+      "D": "door_closed_confirmed_in_los",
+      "d": "door_open_confirmed_in_los",
+      "U": "door_remembered_off_los_state_unknown",
+      ":": "off_los_remembered_wall"
+    },
+    "unit": {
+      "@": "friendly_player",
+      "H": "hostile",
+      "N": "neutral",
+      "M": "mind_controlled_roster"
+    }
+  },
+  "presentationOmissions": [
+    "Numeric walkF/walkO TU costs (255 vs passable thresholds)",
+    "blockSight and sight-line geometry",
+    "Smoke, fire, and terrain destruction / damage generation",
+    "Full pathfinding guarantees for grav lifts (unit size, occupancy, flying alternate routes)",
+    "Off-LOS door open vs closed (U = door remembered, current state unknown)",
+    "South and east walls (derived from neighbor north/west in engine; not separate channels)",
+    "Unit positions (remain in tactical.units and visibility-gated export)"
+  ],
+  "levels": [
+    {
+      "z": 0,
+      "channels": {
+        "visibility": [
+          ".........:::::",
+          ".........:::::",
+          ".........:::::",
+          ".........:::::",
+          "........::::::",
+          ".........:::::",
+          ".........:::::",
+          "::::::::::::::",
+          "::::::::::::??",
+          "::::::::::::??"
+        ],
+        "floor": [
+          "ooooooooo:::::",
+          "ooooooooo:::::",
+          "ooooooooo:::::",
+          "ooooooooo:::::",
+          "oooooooo::::::",
+          "oooooooGo:::::",
+          "ooooooooo:::::",
+          "::::::::::::::",
+          "::::::::::::??",
+          "::::::::::::??"
+        ],
+        "edgeNorth": [
+          ".........:::::",
+          "W........:::::",
+          "W........:::::",
+          "W........:::::",
+          "W....d..U:::::",
+          "W........:::::",
+          "W........:::::",
+          "::::::::::::::",
+          "::::::::::::??",
+          "::::::::::::??"
+        ],
+        "edgeWest": [
+          ".WWWWWWWW:::::",
+          ".........:::::",
+          ".........:::::",
+          ".........:::::",
+          "........::::::",
+          ".........:::::",
+          ".........:::::",
+          "::::::::::::::",
+          "::::::::::::??",
+          "::::::::::::??"
+        ]
+      }
+    },
+    {
+      "z": 1,
+      "channels": {
+        "visibility": [
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "???????:??????",
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "??????????????"
+        ],
+        "floor": [
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "???????g??????",
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "??????????????"
+        ],
+        "edgeNorth": [
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "???????:??????",
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "??????????????"
+        ],
+        "edgeWest": [
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "???????:??????",
+          "??????????????",
+          "??????????????",
+          "??????????????",
+          "??????????????"
+        ]
+      }
+    }
+  ],
+  "hints": {
+    "schemaVersion": 2,
+    "vertical": [
+      {
+        "p": [
+          7,
+          5,
+          0
+        ],
+        "part": "body",
+        "category": "GRAV_LIFT",
+        "observation": "CURRENTLY_VISIBLE"
+      },
+      {
+        "p": [
+          7,
+          5,
+          1
+        ],
+        "part": "body",
+        "category": "GRAV_LIFT",
+        "observation": "DISCOVERED_NOT_CURRENTLY_VISIBLE"
+      }
+    ],
+    "gravLiftStructures": {
+      "schemaVersion": 1,
+      "floorCells": [
+        [
+          7,
+          5,
+          0
+        ],
+        [
+          7,
+          5,
+          1
+        ]
+      ],
+      "components": [
+        {
+          "id": "glf-0",
+          "z": 0,
+          "cells": [
+            [
+              7,
+              5,
+              0
+            ]
+          ],
+          "cellCount": 1,
+          "footprint": {
+            "bbox": [
+              7,
+              5,
+              7,
+              5
+            ],
+            "describedRect": "1x1",
+            "status": "partial"
+          },
+          "observation": "CURRENTLY_VISIBLE"
+        },
+        {
+          "id": "glf-1",
+          "z": 1,
+          "cells": [
+            [
+              7,
+              5,
+              1
+            ]
+          ],
+          "cellCount": 1,
+          "footprint": {
+            "bbox": [
+              7,
+              5,
+              7,
+              5
+            ],
+            "describedRect": "1x1",
+            "status": "partial"
+          },
+          "observation": "DISCOVERED_NOT_CURRENTLY_VISIBLE"
+        }
+      ],
+      "links": [
+        {
+          "from": [
+            7,
+            5,
+            0
+          ],
+          "to": [
+            7,
+            5,
+            1
+          ],
+          "rule": "engine_same_xy_floor_grav",
+          "geometryVerified": true,
+          "pathfindingGuaranteed": false,
+          "note": "Same (x,y) adjacent z with exported floorGravLift on both levels; unit size/occupancy not validated.",
+          "observation": "MIXED_VISIBLE_AND_REMEMBERED",
+          "mayBeStaleOffLos": true
+        }
+      ]
+    }
+  }
+}

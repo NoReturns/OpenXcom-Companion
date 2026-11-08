@@ -81,9 +81,15 @@ function tileToQueryCell(tile) {
     p: tile.p,
     visibility: classified.visibility,
     observationNote: classified.visibility === VIS_DISCOVERED_OFF_LOS
-      ? 'discovered_export_live_engine_state_not_historical_memory'
+      ? 'discovered_structure_identity_off_los_door_state_redacted'
       : (classified.visibility === VIS_CURRENT ? 'currently_in_player_los_at_export' : undefined),
     disc: tile.disc,
+    ...(classified.terrainSemantics.length
+      ? { terrainSemantics: classified.terrainSemantics }
+      : {}),
+    ...(classified.structureFacets?.length
+      ? { structureFacets: classified.structureFacets }
+      : {}),
     ...(tile.body ? { body: tile.body } : {}),
     ...(tile.west ? { west: tile.west } : {}),
     ...(tile.north ? { north: tile.north } : {}),

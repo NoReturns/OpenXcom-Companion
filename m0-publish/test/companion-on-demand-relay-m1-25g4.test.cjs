@@ -130,11 +130,31 @@ describe('M1-25G4 node test isolation and instrumentation correction', () => {
   it('read-only audit flags synthetic records and inconsistent retirement metadata', () => {
     const audit = auditProductionCommandRelayJournal();
     assert.ok(audit.synthetic.length > 0);
-    const inconsistent = audit.inconsistent.filter((record) => !audit.synthetic.some((s) => s.command_id === record.command_id));
-    assert.ok(Array.isArray(inconsistent));
+    const nonSyntheticInconsistent = audit.inconsistent.filter(
+      (record) => !audit.synthetic.some((s) => s.command_id === record.command_id),
+    );
+    assert.equal(
+      nonSyntheticInconsistent.length,
+      0,
+      `unexpected inconsistent non-synthetic records: ${nonSyntheticInconsistent.map((r) => r.command_id).join(', ')}`,
+    );
     const cc2 = audit.records.find((record) => record.command_id === 'cc2f9bd224cd44105264d5aa19cb563f');
     assert.ok(cc2, 'cc2f9bd2 record must remain present for operator review');
     assert.equal(cc2.phase, 'delivered_local');
-    assert.equal(audit.journal.active, null);
+
+    const { activeClassification } = audit;
+    assert.ok(activeClassification, 'audit must classify journal.active');
+    if (activeClassification.kind === 'none') {
+      assert.equal(audit.journal.active, null);
+    } else if (activeClassification.kind === 'pending_relay_completion') {
+      assert.ok(audit.journal.active);
+      assert.equal(activeClassification.record.phase, 'delivered_local');
+      assert.equal(activeClassification.active.command_id, activeClassification.record.command_id);
+      assert.match(activeClassification.active.remote_sha256, /^[0-9a-f]{40}$/i);
+    } else if (activeClassification.kind === 'pending_remote_retirement') {
+      assert.equal(activeClassification.record.phase, 'published_terminal');
+    } else {
+      assert.fail(`production journal active classification not allowed in audit: ${activeClassification.kind}`);
+    }
   });
 });

@@ -25,6 +25,7 @@ function main() {
     resultStatus: result.value && result.value.status,
     resultParseError: result.parseError,
     inboxValue: inbox.value,
+    resultCommandId: result.value && result.value.command_id,
     snapshotBinding: readSnapshotExportBinding(
       layout.snapshotYaml,
       fs.readFileSync,

@@ -2,6 +2,11 @@ schemaVersion: 5
 turn: 1
 side: 0
 selectedUnitId: 1
+missionContext:
+  schemaVersion: 1
+  missionType: STR_UFO_CRASH_RECOVERY
+  missionClass: ufo_crash
+  siteKind: ufo_site
 map:
   width: 10
   height: 10

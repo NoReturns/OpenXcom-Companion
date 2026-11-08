@@ -1,0 +1,26 @@
+{
+  "requestId": "f631285351a82251c313935e9b6e0640",
+  "before": {
+    "journal": {
+      "filePath": "E:\\Open X-Com Companion\\companion\\m0-publish\\.command-relay-sidecar-state\\command-relay-journal.json",
+      "exists": true,
+      "sha256": "19786e959cc191c1813578bf40175c3dd6ce99889014a7432566222d9f048fa7",
+      "byteLength": 29643,
+      "mtimeMs": 1793829915226.2512
+    },
+    "localResult": {
+      "filePath": "E:\\Open X-Com Companion\\local\\m0\\tactical-result.json",
+      "exists": true,
+      "sha256": "05C3BF295B6ED8B2F294748A67DC394C3CD6D269557935EAA8852F950BB51681",
+      "byteLength": 596
+    },
+    "savedMission": {
+      "filePath": "E:\\Open X-Com Companion\\local\\m0\\tactical-live.yaml",
+      "exists": true,
+      "sha256": "25D739EBD5190BEBD8212FD9A4EA2DCF6B7E661FE45BD7E543A9B2026822CD9C",
+      "byteLength": 69801
+    },
+    "rejectedResultSha": "e65799c6af4b4748ce2dfea9568437e4f084fc36"
+  },
+  "enqueuedAt": 1793834761072
+}

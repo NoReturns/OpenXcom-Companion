@@ -251,6 +251,257 @@ describe('post-command tactical publish', () => {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('M1-29D: retained pre-action sha+yaml with COMPLETED MOVE fails snapshot_stale_unchanged when delivered binding present', async () => {
+    const text = fs.readFileSync(FIXTURE_V5, 'utf8');
+    const tactical = loadAndValidateSnapshotFromText(text, YAML);
+    const oldDigest = sha256HexLower(Buffer.from(text, 'utf8'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'post-cmd-export-fail-delivered-'));
+    try {
+      const snapshotPath = path.join(root, 'tactical-live.yaml');
+      fs.writeFileSync(snapshotPath, text, 'utf8');
+      const relayPublishes = [];
+      const result = makeCompletedResult(tactical, oldDigest, {
+        final_position: { x: 3, y: 3, z: 0 },
+        remaining_tu: 50,
+      });
+      const outcome = await tryPublishPostCommandTacticalState({
+        snapshotPath,
+        result,
+        commandId: result.command_id,
+        journal: { version: 1, active: null, records: {} },
+        record: { delivered_command_snapshot_sha256: oldDigest },
+        publishRelayState: async (relay) => {
+          relayPublishes.push(relay);
+          return { skipped: false };
+        },
+        readFileSync: fs.readFileSync,
+        existsSync: fs.existsSync,
+      });
+      assert.equal(outcome.action, 'fail_closed');
+      assert.equal(outcome.reason, 'snapshot_stale_unchanged');
+      assert.equal(relayPublishes.length, 0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('M1-29D: retained pre-action sha+yaml with COMPLETED MOVE fails final_position_mismatch without delivered record', async () => {
+    const text = fs.readFileSync(FIXTURE_V5, 'utf8');
+    const tactical = loadAndValidateSnapshotFromText(text, YAML);
+    const oldDigest = sha256HexLower(Buffer.from(text, 'utf8'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'post-cmd-export-fail-pos-'));
+    try {
+      const snapshotPath = path.join(root, 'tactical-live.yaml');
+      fs.writeFileSync(snapshotPath, text, 'utf8');
+      const relayPublishes = [];
+      const result = makeCompletedResult(tactical, oldDigest, {
+        final_position: { x: 3, y: 3, z: 0 },
+        remaining_tu: 50,
+      });
+      const outcome = await tryPublishPostCommandTacticalState({
+        snapshotPath,
+        result,
+        commandId: result.command_id,
+        journal: { version: 1, active: null, records: {} },
+        record: null,
+        publishRelayState: async (relay) => {
+          relayPublishes.push(relay);
+          return { skipped: false };
+        },
+        readFileSync: fs.readFileSync,
+        existsSync: fs.existsSync,
+      });
+      assert.equal(outcome.action, 'fail_closed');
+      assert.equal(outcome.reason, 'final_position_mismatch');
+      assert.equal(relayPublishes.length, 0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('M1-29D: post-action result sha with stale on-disk yaml fails snapshot_sha256_mismatch', async () => {
+    const baseText = fs.readFileSync(FIXTURE_V5, 'utf8');
+    const updatedText = makeUpdatedSnapshot(baseText, {
+      unitId: 1,
+      position: [3, 3, 0],
+      timeUnits: 50,
+    });
+    const oldDigest = sha256HexLower(Buffer.from(baseText, 'utf8'));
+    const newDigest = sha256HexLower(Buffer.from(updatedText, 'utf8'));
+    assert.notEqual(oldDigest, newDigest);
+    const updatedTactical = loadAndValidateSnapshotFromText(updatedText, YAML);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'post-cmd-export-fail-sha-'));
+    try {
+      const snapshotPath = path.join(root, 'tactical-live.yaml');
+      fs.writeFileSync(snapshotPath, baseText, 'utf8');
+      const relayPublishes = [];
+      const result = makeCompletedResult(updatedTactical, newDigest, {
+        final_position: { x: 3, y: 3, z: 0 },
+        remaining_tu: 50,
+      });
+      const outcome = await tryPublishPostCommandTacticalState({
+        snapshotPath,
+        result,
+        commandId: result.command_id,
+        journal: { version: 1, active: null, records: {} },
+        record: { delivered_command_snapshot_sha256: oldDigest },
+        publishRelayState: async (relay) => {
+          relayPublishes.push(relay);
+          return { skipped: false };
+        },
+        readFileSync: fs.readFileSync,
+        existsSync: fs.existsSync,
+      });
+      assert.equal(outcome.action, 'fail_closed');
+      assert.equal(outcome.reason, 'snapshot_sha256_mismatch');
+      assert.equal(relayPublishes.length, 0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('M1-29D: COMPLETED KNEEL with unchanged snapshot bytes fails before publish', async () => {
+    const text = fs.readFileSync(FIXTURE_V5, 'utf8');
+    const tactical = loadAndValidateSnapshotFromText(text, YAML);
+    const digest = sha256HexLower(Buffer.from(text, 'utf8'));
+    const actor = tactical.units.find((u) => u.id === 1);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'post-cmd-export-fail-kneel-'));
+    try {
+      const snapshotPath = path.join(root, 'tactical-live.yaml');
+      fs.writeFileSync(snapshotPath, text, 'utf8');
+      const relayPublishes = [];
+      const result = {
+        schema_version: 1,
+        command_id: 'kneel-export-fail-1',
+        command_type: 'KNEEL',
+        status: 'COMPLETED',
+        session_id: tactical.eventLog.sessionId,
+        turn: tactical.turn,
+        actor_unit_id: 1,
+        final_position: { x: actor.position[0], y: actor.position[1], z: actor.position[2] },
+        remaining_tu: actor.timeUnits - 4,
+        kneeled: true,
+        destination_reached: false,
+        snapshot_sha256: digest,
+      };
+      const outcome = await tryPublishPostCommandTacticalState({
+        snapshotPath,
+        result,
+        commandId: result.command_id,
+        journal: { version: 1, active: null, records: {} },
+        record: { delivered_command_snapshot_sha256: digest },
+        publishRelayState: async (relay) => {
+          relayPublishes.push(relay);
+          return { skipped: false };
+        },
+        readFileSync: fs.readFileSync,
+        existsSync: fs.existsSync,
+      });
+      assert.equal(outcome.action, 'fail_closed');
+      assert.equal(outcome.reason, 'snapshot_stale_unchanged');
+      assert.equal(relayPublishes.length, 0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('M1-29D: COMPLETED KNEEL without delivered binding fails kneeled_mismatch on unchanged yaml', async () => {
+    const text = fs.readFileSync(FIXTURE_V5, 'utf8');
+    const tactical = loadAndValidateSnapshotFromText(text, YAML);
+    const digest = sha256HexLower(Buffer.from(text, 'utf8'));
+    const actor = tactical.units.find((u) => u.id === 1);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'post-cmd-export-fail-kneel2-'));
+    try {
+      const snapshotPath = path.join(root, 'tactical-live.yaml');
+      fs.writeFileSync(snapshotPath, text, 'utf8');
+      const relayPublishes = [];
+      const result = {
+        schema_version: 1,
+        command_id: 'kneel-export-fail-2',
+        command_type: 'KNEEL',
+        status: 'COMPLETED',
+        session_id: tactical.eventLog.sessionId,
+        turn: tactical.turn,
+        actor_unit_id: 1,
+        final_position: { x: actor.position[0], y: actor.position[1], z: actor.position[2] },
+        remaining_tu: actor.timeUnits,
+        kneeled: true,
+        destination_reached: false,
+        snapshot_sha256: digest,
+      };
+      const outcome = await tryPublishPostCommandTacticalState({
+        snapshotPath,
+        result,
+        commandId: result.command_id,
+        journal: { version: 1, active: null, records: {} },
+        record: null,
+        publishRelayState: async (relay) => {
+          relayPublishes.push(relay);
+          return { skipped: false };
+        },
+        readFileSync: fs.readFileSync,
+        existsSync: fs.existsSync,
+      });
+      assert.equal(outcome.action, 'fail_closed');
+      assert.equal(outcome.reason, 'kneeled_mismatch');
+      assert.equal(relayPublishes.length, 0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('M1-29D: duplicate terminal result observation skips republish when post-command sha already recorded', async () => {
+    const baseText = fs.readFileSync(FIXTURE_V5, 'utf8');
+    const updatedText = makeUpdatedSnapshot(baseText, {
+      unitId: 1,
+      position: [3, 3, 0],
+      timeUnits: 50,
+    });
+    const oldDigest = sha256HexLower(Buffer.from(baseText, 'utf8'));
+    const newDigest = sha256HexLower(Buffer.from(updatedText, 'utf8'));
+    const updatedTactical = loadAndValidateSnapshotFromText(updatedText, YAML);
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'post-cmd-export-fail-dup-'));
+    try {
+      const snapshotPath = path.join(root, 'tactical-live.yaml');
+      fs.writeFileSync(snapshotPath, updatedText, 'utf8');
+      const result = makeCompletedResult(updatedTactical, newDigest, {
+        final_position: { x: 3, y: 3, z: 0 },
+        remaining_tu: 50,
+      });
+      const journal = {
+        version: 1,
+        active: null,
+        records: {
+          [result.command_id]: {
+            post_command_tactical_sha256: newDigest,
+          },
+        },
+      };
+      const relayPublishes = [];
+      const outcome = await tryPublishPostCommandTacticalState({
+        snapshotPath,
+        result,
+        commandId: result.command_id,
+        journal,
+        record: {
+          delivered_command_snapshot_sha256: oldDigest,
+          post_command_tactical_sha256: newDigest,
+        },
+        publishRelayState: async (relay) => {
+          relayPublishes.push(relay);
+          return { skipped: false };
+        },
+        readFileSync: fs.readFileSync,
+        existsSync: fs.existsSync,
+      });
+      assert.equal(outcome.action, 'skip');
+      assert.equal(outcome.reason, 'already_published');
+      assert.equal(relayPublishes.length, 0);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe('CommandRelayWatcher post-command integration', () => {

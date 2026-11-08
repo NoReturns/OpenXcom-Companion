@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "command_id": "2b737d8422bef12932d4586140b9abf7",
+  "command_type": "MOVE",
+  "status": "FAILED",
+  "session_id": "6b1cae643ce1b48228a55b3459c334b3",
+  "turn": 4,
+  "actor_unit_id": 1,
+  "starting_position": { "x": 9, "y": 18, "z": 0 },
+  "final_position": { "x": 9, "y": 20, "z": 0 },
+  "remaining_tu": 24,
+  "kneeled": false,
+  "destination_reached": true,
+  "snapshot_sha256": "06b9b14e5a6787f8f5432f64013910e71250d0b9df5054dc6b8098dbaf5aee7e",
+  "inbox_sha256": "dd4f99bb988944ae621c293fafd5c3b6c0dd955e77bab6e6e708ac462482aaae",
+  "completed_at": "engine-local"
+}

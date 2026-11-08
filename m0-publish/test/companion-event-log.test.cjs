@@ -77,7 +77,7 @@ describe('schema v4 weapon fire event log (mocked validation)', () => {
       target: [5, 5, 0],
     });
     raw.eventLog.latestSeq = 4;
-    assert.throws(() => parseAndValidate(raw), /friendly soldier/);
+    assert.throws(() => parseAndValidate(raw), /friendly soldier or recorded roster combatant/);
   });
 
   it('requires autoShotIndex for auto fire and forbids it for snap', () => {

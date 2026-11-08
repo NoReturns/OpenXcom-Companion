@@ -14,6 +14,7 @@ const outcome = startOnDemandDaemonVerified({
   cwd,
   commandRelayStateDir,
   extraArgs: ['--dry-run'],
+  disableLiveDaemonReuse: true,
 });
 
 process.stdout.write(`${JSON.stringify(outcome)}\n`);

@@ -265,7 +265,6 @@ describe('BriefingWatcher', () => {
       },
     });
     h.writeRequest(makeRequest({ request_id: 'ffffffffffffffffffffffffffffffff' }));
-    h.watcher.start();
     await h.watcher._pollOnce();
     assert.equal(h.publishes.length, 0);
     const ack = JSON.parse(fs.readFileSync(h.ackPath, 'utf8'));

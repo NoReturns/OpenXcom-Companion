@@ -1,6 +1,18 @@
 'use strict';
 
 const { decodePackedV1Base64 } = require('./terrain-packed-v1.cjs');
+const {
+  categoryLabel,
+} = require('./terrain-semantics-sparse-v1.cjs');
+const {
+  decodeSparseSemanticsBase64,
+  attachSemanticsToTiles,
+} = require('./terrain-semantics-sparse-v2.cjs');
+const {
+  collectStructureFacets,
+  buildStructureObservations,
+  OBS_REMEMBERED,
+} = require('./terrain-structure-wp8.cjs');
 
 const DEFAULT_MAX_BYTES = 16 * 1024;
 const FACTION_PLAYER = 0;
@@ -33,23 +45,67 @@ function visibilityLabel(tile) {
   return tile.inLos ? VIS_CURRENT : VIS_DISCOVERED_OFF_LOS;
 }
 
+function stripLegacyOffLosSemantics(tile) {
+  if (tile.inLos || !tile.sem) {
+    return tile;
+  }
+  const { sem, ...rest } = tile;
+  return rest;
+}
+
+function redactOffLosStructureMeta(tile) {
+  if (tile.inLos || !tile.structureMeta) {
+    return tile;
+  }
+  const { doorState, ...restMeta } = tile.structureMeta;
+  return {
+    ...tile,
+    structureMeta: Object.keys(restMeta).length ? restMeta : undefined,
+  };
+}
+
 function decodeTerrainTiles(tactical) {
   if (!tactical.terrain) {
     return [];
   }
+  let tiles;
   if (tactical.terrain.encoding === 'packed-v1') {
-    const { tiles } = decodePackedV1Base64(tactical.terrain.data, tactical.map, {
+    const { tiles: decoded } = decodePackedV1Base64(tactical.terrain.data, tactical.map, {
       expectedRecordCount: tactical.terrain.recordCount,
     });
+    tiles = decoded;
+    if (tactical.terrain.semantics) {
+      const semanticsEncoding = tactical.terrain.semantics.encoding;
+      const { byPos } = decodeSparseSemanticsBase64(
+        tactical.terrain.semantics.data,
+        semanticsEncoding,
+        { expectedRecordCount: tactical.terrain.semantics.recordCount },
+      );
+      tiles = attachSemanticsToTiles(tiles, byPos);
+      tiles = tiles.map(redactOffLosStructureMeta);
+      if (semanticsEncoding === 'sparse-v1') {
+        tiles = tiles.map(stripLegacyOffLosSemantics);
+      }
+      return tiles;
+    }
     return tiles;
   }
-  return tactical.terrain.tiles ?? [];
+  tiles = tactical.terrain.tiles ?? [];
+  return tiles.map(redactOffLosStructureMeta);
 }
 
 /**
  * Classify one discovered terrain record using only packed/verbose export fields.
  * Does not infer object identity (doors, lifts, stairs).
  */
+function semPartLabel(tile, part) {
+  const id = tile.sem?.[part];
+  if (id === undefined) {
+    return null;
+  }
+  return categoryLabel(id);
+}
+
 function classifyDiscoveredTile(tile) {
   const visibility = visibilityLabel(tile);
   const p = tile.p;
@@ -57,7 +113,27 @@ function classifyDiscoveredTile(tile) {
   const movementObstruction = [];
   const knownBarriers = [];
   const elevationNotes = [];
+  const terrainSemantics = [];
   let openTerrain = null;
+
+  const pushSemantic = (part, edge) => {
+    const label = semPartLabel(tile, part);
+    if (!label || label === 'UNKNOWN') {
+      return;
+    }
+    terrainSemantics.push({
+      ...(edge ? { edge } : { p }),
+      visibility: tile.inLos ? VIS_CURRENT : OBS_REMEMBERED,
+      category: label,
+      certainty: tile.inLos ? 'current_observation' : 'discovered_structure_identity',
+    });
+  };
+
+  pushSemantic('west', 'west');
+  pushSemantic('north', 'north');
+  pushSemantic('body');
+
+  const structureFacets = collectStructureFacets(tile);
 
   if ((tile.disc & DISC_WEST) !== 0 && !tile.west) {
     knownBarriers.push({
@@ -157,6 +233,7 @@ function classifyDiscoveredTile(tile) {
         if (
           tile.body.walkO !== WALK_IMPASSABLE
           && (tile.body.blockSightO || tile.body.walkO >= 8)
+          && !tile.sem?.body
         ) {
           knownBarriers.push({
             p,
@@ -180,6 +257,8 @@ function classifyDiscoveredTile(tile) {
     movementObstruction,
     knownBarriers,
     elevationNotes,
+    terrainSemantics,
+    structureFacets,
   };
 }
 
@@ -189,6 +268,8 @@ function aggregateClassifications(tiles) {
   const knownBarriers = [];
   const elevationChanges = [];
   const knownOpen = [];
+  const terrainSemantics = [];
+  const structureFacets = [];
 
   for (const tile of tiles) {
     const c = classifyDiscoveredTile(tile);
@@ -196,6 +277,14 @@ function aggregateClassifications(tiles) {
     movementObstruction.push(...c.movementObstruction);
     knownBarriers.push(...c.knownBarriers);
     elevationChanges.push(...c.elevationNotes);
+    if (c.terrainSemantics?.length) {
+      for (const sem of c.terrainSemantics) {
+        terrainSemantics.push(sem);
+      }
+    }
+    if (c.structureFacets?.length) {
+      structureFacets.push(...c.structureFacets);
+    }
     if (c.openTerrain) {
       knownOpen.push({ p: c.p, ...c.openTerrain });
     }
@@ -218,6 +307,8 @@ function aggregateClassifications(tiles) {
     knownBarriers,
     elevationChanges,
     knownOpen,
+    terrainSemantics,
+    structureFacets,
   };
 }
 
@@ -232,12 +323,20 @@ function buildNearFocusEntries(tiles, focus, radius) {
       continue;
     }
     const classified = classifyDiscoveredTile(tile);
+    const primarySem = classified.terrainSemantics[0];
     entries.push({
       p: pos,
       visibility: classified.visibility,
       disc: tile.disc,
       distance: manhattan3(pos, focus),
       ...(classified.openTerrain ? { open: classified.openTerrain.kind } : {}),
+      ...(primarySem ? { terrainCategory: primarySem.category } : {}),
+      ...(classified.structureFacets[0]
+        ? {
+          structureKind: classified.structureFacets[0].structureKind,
+          observationStatus: classified.structureFacets[0].observationStatus,
+        }
+        : {}),
       ...(tile.body && !tile.body.air && tile.body.elev !== undefined ? { elev: tile.body.elev } : {}),
       ...(tile.body?.walkF !== undefined ? { walkF: tile.body.walkF } : {}),
       ...(tile.body?.walkO !== undefined ? { walkO: tile.body.walkO } : {}),
@@ -294,32 +393,37 @@ function buildTerrainBrief(tactical, options = {}) {
     .sort((a, b) => (a.distanceFromFocus ?? 0) - (b.distanceFromFocus ?? 0));
 
   const shrinkTiers = [
-    { nearFocusTiles: 80, sightObstruction: 60, movementObstruction: 40, knownBarriers: 40, elevationChanges: 40, knownOpen: 30, compactMeta: false },
-    { nearFocusTiles: 50, sightObstruction: 35, movementObstruction: 25, knownBarriers: 25, elevationChanges: 25, knownOpen: 20, compactMeta: false },
-    { nearFocusTiles: 30, sightObstruction: 20, movementObstruction: 15, knownBarriers: 15, elevationChanges: 15, knownOpen: 10, compactMeta: true },
-    { nearFocusTiles: 15, sightObstruction: 10, movementObstruction: 8, knownBarriers: 8, elevationChanges: 8, knownOpen: 5, compactMeta: true },
+    { nearFocusTiles: 80, sightObstruction: 60, movementObstruction: 40, knownBarriers: 40, elevationChanges: 40, knownOpen: 30, terrainSemantics: 40, structureFacets: 40, compactMeta: false },
+    { nearFocusTiles: 50, sightObstruction: 35, movementObstruction: 25, knownBarriers: 25, elevationChanges: 25, knownOpen: 20, terrainSemantics: 25, structureFacets: 25, compactMeta: false },
+    { nearFocusTiles: 30, sightObstruction: 20, movementObstruction: 15, knownBarriers: 15, elevationChanges: 15, knownOpen: 10, terrainSemantics: 15, structureFacets: 15, compactMeta: true },
+    { nearFocusTiles: 15, sightObstruction: 10, movementObstruction: 8, knownBarriers: 8, elevationChanges: 8, knownOpen: 5, terrainSemantics: 8, structureFacets: 8, compactMeta: true },
   ];
 
   const baseWarnings = [
     'Derived summary only; packed terrain blob is the lossless source of truth.',
     'Full terrain.memoryNote is on the snapshot YAML, not duplicated here.',
-    'Off-LOS export is live engine state, not authoritative remembered history.',
+    'Off-LOS structure identity uses MapData on discovered tiles; door open/closed is disclosed only in current LOS.',
     'This summary never labels paths safe or shots clear.',
   ];
 
   const fullSemanticLimits = {
     notExported: [
-      'MapData object type (door vs wall vs UFO door vs grav lift vs stairs)',
-      'MCD metadata for undiscovered tile parts',
+      'Undiscovered tile parts and map volumes',
       'Guaranteed cover quality or shot clearance',
       'Historical last-seen geometry for off-LOS tiles',
+      'Raw MapData / MCD identifiers',
+    ],
+    exportedWhenReliable: [
+      'Engine-derived terrain categories on discovered parts (sparse-v2 / tile.sem)',
+      'UFO dataset association via mod UFO battlescape terrain map sets',
+      'Door open/closed on classified doors when tile is in player LOS at export',
     ],
     offLosGeometryNote:
       'DISCOVERED_NOT_CURRENTLY_VISIBLE records reflect live engine tiles at export time, not a separate memory snapshot.',
     movementTu255Note:
       'walk TU 255 marks that map part impassable for walking; other directions or movement modes may differ.',
     sightBlockNote:
-      'blockSight flags mark sight-blocking geometry for that part; does not by itself identify a solid wall.',
+      'blockSight flags mark sight-blocking geometry for that part; semantic category names structure when engine can classify reliably.',
   };
 
   const compactSemanticLimits = {
@@ -328,18 +432,24 @@ function buildTerrainBrief(tactical, options = {}) {
   };
 
   const futureEngineExtensionProposal = {
-    name: 'packed-v2-optional-semantics',
+    name: 'packed-v2-memory-semantics',
     optionalFields: [
-      'objectSpecialType enum per body (door, ufoDoor, gravLift, stair, none) when body discovered',
+      'lastDirectlyObservedTurn per record for true off-LOS memory semantics',
       'destructionGeneration flag when tile part is damaged replacement geometry',
-      'lastDirectlyObservedTurn per record for true memory semantics',
     ],
-    wireRule: 'Add optional tail bytes after formatVersion bump; packed-v1 decoders ignore unknown versions.',
+    wireRule: 'Future packed-v2 tail; sparse-v1 categories remain compatible.',
   };
 
+  const semanticSummary = {};
+  for (const entry of aggregated.terrainSemantics) {
+    semanticSummary[entry.category] = (semanticSummary[entry.category] ?? 0) + 1;
+  }
+
   const buildBriefForTier = (tier, truncated) => {
+    const structureObservations = buildStructureObservations(tiles, { focusPosition: focus, maxLines: 12 });
     const brief = {
-      schemaVersion: 2,
+      schemaVersion: 4,
+      ...(tactical.missionContext ? { missionContext: tactical.missionContext } : {}),
       visibilityLabels: {
         inPlayerLosNow: VIS_CURRENT,
         discoveredNotInLosNow: VIS_DISCOVERED_OFF_LOS,
@@ -359,6 +469,10 @@ function buildTerrainBrief(tactical, options = {}) {
       knownBarriers: aggregated.knownBarriers.slice(0, tier.knownBarriers),
       elevationChanges: aggregated.elevationChanges.slice(0, tier.elevationChanges),
       knownOpenTerrain: aggregated.knownOpen.slice(0, tier.knownOpen),
+      terrainSemantics: aggregated.terrainSemantics.slice(0, tier.terrainSemantics),
+      structureFacets: aggregated.structureFacets.slice(0, tier.structureFacets),
+      structureObservations,
+      semanticSummary,
       semanticLimits: tier.compactMeta ? compactSemanticLimits : fullSemanticLimits,
       warnings: baseWarnings,
       omittedDueToBudget: {},
@@ -388,6 +502,12 @@ function buildTerrainBrief(tactical, options = {}) {
     if (aggregated.knownOpen.length > brief.knownOpenTerrain.length) {
       o.knownOpenTerrain = aggregated.knownOpen.length - brief.knownOpenTerrain.length;
     }
+    if (aggregated.structureFacets.length > brief.structureFacets.length) {
+      o.structureFacets = aggregated.structureFacets.length - brief.structureFacets.length;
+    }
+    if (aggregated.terrainSemantics.length > brief.terrainSemantics.length) {
+      o.terrainSemantics = aggregated.terrainSemantics.length - brief.terrainSemantics.length;
+    }
     brief.omittedDueToBudget = o;
     return brief;
   };
@@ -401,7 +521,8 @@ function buildTerrainBrief(tactical, options = {}) {
   }
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 4,
+    ...(tactical.missionContext ? { missionContext: tactical.missionContext } : {}),
     visibilityLabels: {
       inPlayerLosNow: VIS_CURRENT,
       discoveredNotInLosNow: VIS_DISCOVERED_OFF_LOS,

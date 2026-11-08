@@ -63,10 +63,18 @@ function createRelayRateLimitGate(options = {}) {
   const openSync = options.openSync ?? fs.openSync;
   const closeSync = options.closeSync ?? fs.closeSync;
   const unlinkSync = options.unlinkSync ?? fs.unlinkSync;
-  const lockTimeoutMs = options.lockTimeoutMs ?? 10_000;
+  const lockTimeoutMs = options.lockTimeoutMs ?? 30_000;
 
   function mergeLockPath() {
     return `${gatePath}.merge.lock`;
+  }
+
+  /** Short synchronous wait so concurrent `wx` lock contenders can yield (Windows-friendly). */
+  function syncSleepMs(ms) {
+    const end = Date.now() + Math.max(1, ms);
+    while (Date.now() < end) {
+      /* spin */
+    }
   }
 
   function withMergeLock(fn) {
@@ -77,6 +85,7 @@ function createRelayRateLimitGate(options = {}) {
     const lockPath = mergeLockPath();
     const deadline = nowFn() + lockTimeoutMs;
     let lockFd = null;
+    let backoffMs = 2;
     while (nowFn() < deadline) {
       try {
         lockFd = openSync(lockPath, 'wx');
@@ -85,6 +94,8 @@ function createRelayRateLimitGate(options = {}) {
         if (error.code !== 'EEXIST') {
           throw error;
         }
+        syncSleepMs(backoffMs);
+        backoffMs = Math.min(backoffMs * 2, 50);
       }
     }
     if (lockFd === null) {

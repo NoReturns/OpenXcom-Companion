@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "command_id": "2b737d8422bef12932d4586140b9abf7",
+  "command_type": "MOVE",
+  "actor_unit_id": 1,
+  "destination": {
+    "x": 9,
+    "y": 20,
+    "z": 0
+  },
+  "snapshot_sha256": "89740bc122d294ac875a5c56222591f6296e43889bfed70ac5704996fc01306d",
+  "session_id": "6b1cae643ce1b48228a55b3459c334b3",
+  "turn": 4,
+  "state_version": 14
+}

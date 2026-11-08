@@ -8,6 +8,8 @@ const {
 const { readSnapshotByteBuffer, sha256HexLower } = require('./briefing-snapshot.cjs');
 const { isTerminalStatus } = require('./tactical-command.cjs');
 const { markCommandRecord } = require('./command-journal.cjs');
+const path = require('node:path');
+const { writeTacticalPublicationConfirmAtomic } = require('./tactical-publication-confirm.cjs');
 
 const SNAPSHOT_SHA_PATTERN = /^[a-f0-9]{64}$/;
 const POST_COMMAND_PUBLISH_STATUSES = new Set(['COMPLETED', 'INTERRUPTED', 'FAILED']);
@@ -140,6 +142,14 @@ async function tryPublishPostCommandTacticalState(input) {
       post_command_tactical_snapshot_id: relay.snapshot_id,
       post_command_tactical_published_at: publishedAt,
       post_command_tactical_skipped_remote: Boolean(publishOutcome && publishOutcome.skipped),
+    });
+    writeTacticalPublicationConfirmAtomic(path.dirname(snapshotPath), {
+      session_id: result.session_id,
+      turn: result.turn,
+      state_version: tactical.eventLog?.latestSeq ?? 0,
+      snapshot_sha256: digest,
+      source: 'post_command',
+      status: publishOutcome && publishOutcome.skipped ? 'skipped_unchanged' : 'published',
     });
     const skipped = publishOutcome && publishOutcome.skipped;
     log(

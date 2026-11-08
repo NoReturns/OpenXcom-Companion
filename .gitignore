@@ -38,3 +38,7 @@ logs/
 *.tmp
 .DS_Store
 Thumbs.db
+
+# M1-34E isolated GitHub config (local secrets / test repo name)
+m0-publish/config/m1-34e-relay-isolation.local.json
+**/m1-34e-relay-isolation.local.json

@@ -66,6 +66,7 @@ function createTacticalRelaySidecar(options) {
     signal: options.signal,
     notify: options.notify,
     now: options.now,
+    assertCommandDeliveryAllowed: options.assertCommandDeliveryAllowed,
     publishRemoteRelayState: (relay) => relayPublisher.publishRelayState(relay),
     readRemoteCommand: () => Promise.resolve(
       content.readFile(paths.tacticalCommand, DEFAULT_COMMAND_MAX_BYTES),

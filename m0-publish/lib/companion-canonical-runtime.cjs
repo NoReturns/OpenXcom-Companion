@@ -6,8 +6,17 @@ const path = require('node:path');
 
 const SCHEMA_VERSION = 1;
 
-/** Verified Win32 Release build (M1-30D quota HUD deploy). */
-const VERIFIED_BUILD_SHA256 = 'ea30870b2c2315139b0893fc84caead4d0fefde562932dfc75cbb8c7fc653631';
+/**
+ * Single source of truth for deploy + launcher SHA-256 gate (`deploy-openxcom.ps1`,
+ * `Start-CompanionOpenXcom.ps1`, `verify-deploy-hash-gate.cjs`). When promoting a new
+ * verified isolated Win32 Release binary, set this to the lowercase SHA-256 of that
+ * `openxcom.exe` and commit together with any doc updates — do not deploy a build whose
+ * hash is not reflected here.
+ *
+ * Verified Win32 Release build (M1 combined: AUTO RETRIEVE, relay diagnostics, casualty settlement,
+ * STAND, SEND freshness, uniform shooting spread, Inventory compile fix).
+ */
+const VERIFIED_BUILD_SHA256 = '08442e36b745f9dd91e756291d62f556a58f4a395fa8bd67d0fc9257233f6cd9';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 
@@ -134,12 +143,28 @@ function evaluateInboxQuarantine({
   resultStatus,
   resultParseError,
   inboxValue,
+  resultCommandId,
   snapshotBinding,
 }) {
   if (!inboxExists) {
     return { action: 'none', reason: 'no_inbox' };
   }
   if (resultExists && (resultStatus === 'EXECUTING' || resultStatus === 'ACCEPTED')) {
+    const inboxCommandId = inboxValue && typeof inboxValue.command_id === 'string'
+      ? inboxValue.command_id
+      : '';
+    if (
+      inboxCommandId
+      && resultCommandId
+      && inboxCommandId === resultCommandId
+    ) {
+      return {
+        action: 'warn',
+        reason: 'orphan_executing_resume',
+        message:
+          'non-terminal EXECUTING result matches local inbox; engine may close orphaned command on launch',
+      };
+    }
     return {
       action: 'block_launch',
       reason: 'non_terminal_result',

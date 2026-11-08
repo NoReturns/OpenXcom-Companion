@@ -112,7 +112,24 @@ describe('terrain semantic classification from export fields only', () => {
     assert.ok(c.knownBarriers.every((b) => b.note.includes('no emittable')));
   });
 
-  it('does not assert door, stair, or grav lift identities as definitive facts', () => {
+  it('uses engine semantics when present instead of door-like inference', () => {
+    const brief = buildTerrainBrief(baseTactical({
+      terrain: {
+        memoryNote: 'n',
+        tiles: [{
+          p: [0, 0, 0],
+          disc: 4,
+          inLos: true,
+          body: { noFloor: false, elev: 0, walkO: 12, blockSightO: true },
+          sem: { body: 6 },
+        }],
+      },
+    }));
+    assert.ok(brief.terrainSemantics.some((s) => s.category === 'ORDINARY_DOOR'));
+    assert.ok(!brief.knownBarriers.some((b) => b.note && b.note.includes('door-like')));
+  });
+
+  it('does not assert door identities without semantics export', () => {
     const brief = buildTerrainBrief(baseTactical({
       terrain: {
         memoryNote: 'n',
@@ -128,7 +145,7 @@ describe('terrain semantic classification from export fields only', () => {
       assert.notEqual(barrier.kind, 'door');
       assert.notEqual(barrier.objectType, 'door');
     }
-    assert.ok(brief.semanticLimits.notExported.some((s) => s.includes('door')));
+    assert.ok(brief.semanticLimits.notExported.some((s) => s.includes('Undiscovered')));
   });
 });
 
@@ -186,7 +203,7 @@ describe('terrainBrief budget and packed source', () => {
     const tactical = loadAndValidateSnapshotFromText(fs.readFileSync(FIXTURE_V5, 'utf8'), YAML);
     const brief = buildTerrainBrief(tactical);
     assert.ok(Buffer.byteLength(JSON.stringify(brief), 'utf8') <= DEFAULT_MAX_BYTES);
-    assert.equal(brief.schemaVersion, 2);
+    assert.equal(brief.schemaVersion, 4);
   });
 
   it('reports omittedDueToBudget when lists are capped', () => {

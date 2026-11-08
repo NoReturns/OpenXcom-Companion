@@ -62,7 +62,7 @@ Duplicate after restart:
 | `COMMAND_EXECUTING` | Wait; do not publish another MOVE |
 | `COMMAND_INTERRUPTED` | Review battlefield; may need new F6 + new command id |
 | `RELAY_DISCONNECTED` | Check `gh auth status`, network; sidecar retries on next poll |
-| `BRIEFING_PUBLISHED` | AI/owner may read `m0/state.json` |
+| `BRIEFING_PUBLISHED` | AI/owner may read `m0/state.json`; run mandatory `unitStateBrief.exceptions` review first (`AGENTS.md`, `lib/tactical-briefing-ai-workflow.cjs`) |
 
 ## Wiring
 

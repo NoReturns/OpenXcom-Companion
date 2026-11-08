@@ -37,6 +37,7 @@ function getRecord(journal, requestId) {
 function isTerminalRecord(record) {
   if (!record) return false;
   if (record.status === 'published') return true;
+  if (record.status === 'manual_upload_required') return true;
   if (record.terminal === true) return true;
   return false;
 }

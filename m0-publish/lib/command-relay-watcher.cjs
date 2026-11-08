@@ -21,6 +21,7 @@ const {
 const { evaluateRemoteCommandRetirement, RETIREMENT_CLOSE_ON_SKIP } = require('./command-relay-retirement.cjs');
 const { tryPublishPostCommandTacticalState } = require('./post-command-tactical-publish.cjs');
 const { writeJsonAtomic, writeTextAtomic, removeFileIfExists } = require('./local-atomic.cjs');
+const { appendDiagnosticEvent } = require('./on-demand-daemon-diagnostics.cjs');
 const {
   RELAY_CONTENT_PATHS,
   DEFAULT_COMMAND_MAX_BYTES,
@@ -98,12 +99,15 @@ class CommandRelayWatcher {
     this.retireRemoteCommand = options.retireRemoteCommand ?? null;
     this.publishRemoteRelayState = options.publishRemoteRelayState ?? null;
     this.signal = options.signal;
+    this.transactionTrace = options.transactionTrace ?? null;
+    this._retrievePollIndex = 0;
     this.notify = options.notify;
     this._relayReachable = true;
     this._lastRemoteCommandSha = null;
     this._loggedRetirementBlocked = new Set();
     this._retrieveTransaction = null;
     this._lastRetrievePollSnapshot = null;
+    this.assertCommandDeliveryAllowed = options.assertCommandDeliveryAllowed ?? null;
 
     this.local = localRelayPaths(this.snapshotPath);
     this.running = false;
@@ -228,7 +232,7 @@ class CommandRelayWatcher {
           this.persistJournal(journal);
           this.log(`Remote result already ${result.status} for ${commandId.slice(0, 8)}; skipping publish.`);
           await publishPostCommand();
-          this._noteRetrievePublished();
+          this._noteRetrievePublished(result);
           await this._maybeRetireRemoteCommand(journal, commandId, result);
           return;
         }
@@ -245,6 +249,7 @@ class CommandRelayWatcher {
       });
       journal.active = null;
       this.persistJournal(journal);
+      this._noteRetrievePublished(result);
       await publishPostCommand();
       await this._maybeRetireRemoteCommand(journal, commandId, result);
       return;
@@ -257,8 +262,12 @@ class CommandRelayWatcher {
     });
     journal.active = null;
     this.persistJournal(journal);
-    this._noteRetrievePublished();
+    this._noteRetrievePublished(result);
     this.log(`Published result ${commandId.slice(0, 8)} status ${result.status}.`);
+    this._emitTransactionTrace('remote_result_published', {
+      command_id: commandId,
+      status: result.status,
+    });
     await publishPostCommand();
     await this._maybeRetireRemoteCommand(journal, commandId, result);
   }
@@ -286,16 +295,31 @@ class CommandRelayWatcher {
     });
     journal.active = null;
     this.persistJournal(journal);
+    this._noteRetrieveRetired(commandId);
+  }
+
+  _emitTransactionTrace(phase, detail = {}) {
+    if (this.transactionTrace && typeof this.transactionTrace.record === 'function') {
+      this.transactionTrace.record(phase, detail);
+    }
   }
 
   beginRetrieveTransaction(transactionId) {
     this._retrieveTransaction = {
       transactionId: transactionId ?? null,
       deliveredCommandId: null,
+      publishedCommandId: null,
+      sidecarRejectCode: null,
       publishedResult: false,
       completedExecution: false,
+      retiredRemote: false,
+      completionKind: null,
     };
     this._lastRetrievePollSnapshot = null;
+    this._retrievePollIndex = 0;
+    this._emitTransactionTrace('retrieve_transaction_begin', {
+      transaction_id: transactionId ?? null,
+    });
   }
 
   getLastRetrievePollSnapshot() {
@@ -348,9 +372,19 @@ class CommandRelayWatcher {
     }
   }
 
-  _noteRetrievePublished() {
-    if (this._retrieveTransaction) {
-      this._retrieveTransaction.publishedResult = true;
+  _noteRetrievePublished(result) {
+    if (!this._retrieveTransaction) {
+      return;
+    }
+    this._retrieveTransaction.publishedResult = true;
+    if (result && result.command_id) {
+      this._retrieveTransaction.publishedCommandId = result.command_id;
+    }
+    if (result && result.sidecar_reject_code) {
+      this._retrieveTransaction.sidecarRejectCode = result.sidecar_reject_code;
+      this._retrieveTransaction.completionKind = 'sidecar_rejected';
+    } else if (result && isTerminalStatus(result.status)) {
+      this._retrieveTransaction.completionKind = 'engine_reported';
     }
   }
 
@@ -358,6 +392,20 @@ class CommandRelayWatcher {
     if (this._retrieveTransaction) {
       this._retrieveTransaction.completedExecution = true;
     }
+    this._emitTransactionTrace('engine_terminal_result_observed');
+  }
+
+  _noteRetrieveRetired(commandId) {
+    if (!this._retrieveTransaction || !commandId) {
+      return;
+    }
+    const journal = this.loadJournal();
+    const scopeId = this._retrieveTransaction.deliveredCommandId
+      ?? (journal.active && journal.active.command_id ? journal.active.command_id : null);
+    if (scopeId && scopeId !== commandId) {
+      return;
+    }
+    this._retrieveTransaction.retiredRemote = true;
   }
 
   _finalizeRetrievePollSnapshot(journal, remote) {
@@ -471,12 +519,17 @@ class CommandRelayWatcher {
       } else if (decision.action === 'delete') {
         this.log(`Dry-run would retire remote command ${commandId.slice(0, 8)}; journal unchanged.`);
       }
+      this._noteRetrieveRetired(commandId);
       return;
     }
 
     if (decision.action === 'mark_retired') {
       this._markRetiredRemote(journal, commandId, { retirement_reason: decision.reason });
       this.log(`Remote command already absent; marked retired for ${commandId.slice(0, 8)}.`);
+      this._emitTransactionTrace('remote_command_marked_retired', {
+        command_id: commandId,
+        reason: decision.reason,
+      });
       return;
     }
 
@@ -497,6 +550,9 @@ class CommandRelayWatcher {
         retirement_next_attempt_at: null,
       });
       this.log(`Retired remote command ${commandId.slice(0, 8)} on GitHub.`);
+      this._emitTransactionTrace('remote_command_retired', {
+        command_id: commandId,
+      });
     } catch (error) {
       if (decision.action === 'delete') {
         const attempts = (record.retirement_delete_attempts ?? 0) + 1;
@@ -631,6 +687,29 @@ class CommandRelayWatcher {
   }
 
   deliverLocal(command, remoteSha, journal) {
+    if (typeof this.assertCommandDeliveryAllowed === 'function') {
+      const gate = this.assertCommandDeliveryAllowed();
+      if (!gate || !gate.ok) {
+        const reason = gate?.reason || 'command_delivery_blocked';
+        this.log(`Command delivery blocked (${reason}); refusing local inbox write.`);
+        try {
+          appendDiagnosticEvent(path.dirname(this.snapshotPath), {
+            kind: 'command_delivery_rejected',
+            reason,
+            command_id: command.command_id,
+          });
+        } catch {
+          // diagnostics must not block rejection
+        }
+        this._emitTransactionTrace('local_command_delivery_blocked', {
+          reason,
+          command_id: command.command_id,
+        });
+        const error = new Error(`command_delivery_blocked:${reason}`);
+        error.code = 'COMMAND_DELIVERY_BLOCKED';
+        throw error;
+      }
+    }
     removeFileIfExists(this.local.result, this.existsSync, this.unlinkSync);
     const serialized = `${JSON.stringify(command, null, 2)}\n`;
     writeTextAtomic(this.local.command, serialized, this.writeFileSync, this.renameSync);
@@ -648,6 +727,10 @@ class CommandRelayWatcher {
     };
     this.persistJournal(journal);
     this.log(`Delivered command ${command.command_id.slice(0, 8)} to local inbox.`);
+    this._emitTransactionTrace('local_command_delivered', {
+      command_id: command.command_id,
+      command_type: command.command_type,
+    });
     this._noteRetrieveDelivered(command.command_id);
     this._emitNotify(notificationFromMoveCommand(command, {
       code: NOTIFICATION_CODES.COMMAND_DELIVERED,
@@ -691,6 +774,9 @@ class CommandRelayWatcher {
     }
     this._inFlight = true;
     let inboxRemote = undefined;
+    const pollIndex = this._retrievePollIndex + 1;
+    this._retrievePollIndex = pollIndex;
+    this._emitTransactionTrace('internal_poll_start', { poll_index: pollIndex });
     try {
       let journal = this.loadJournal();
       if (await this._resumeActive(journal)) {
@@ -753,6 +839,22 @@ class CommandRelayWatcher {
 
       const localResult = this.readLocalResult();
       const openStatus = localResult && !localResult.__parseError ? localResult.status : null;
+
+      if (
+        localResult
+        && !localResult.__parseError
+        && localResult.command_id === command.command_id
+        && isTerminalStatus(localResult.status)
+      ) {
+        this._notifyObservedLocalResult(localResult);
+        await this.publishResult(localResult, localResult.command_id, journal);
+        return;
+      }
+
+      if (existing && existing.remote_sha256 === remote.sha && existing.phase === 'delivered_local') {
+        return;
+      }
+
       if (!canAcceptNewCommand(openStatus)) {
         if (localResult && localResult.command_id && isTerminalStatus(localResult.status)) {
           this._notifyObservedLocalResult(localResult);
@@ -772,11 +874,14 @@ class CommandRelayWatcher {
         return;
       }
 
-      if (existing && existing.remote_sha256 === remote.sha && existing.phase === 'delivered_local') {
-        return;
+      try {
+        this.deliverLocal(command, remote.sha ?? '', journal);
+      } catch (error) {
+        if (error && error.code === 'COMMAND_DELIVERY_BLOCKED') {
+          return;
+        }
+        throw error;
       }
-
-      this.deliverLocal(command, remote.sha ?? '', journal);
     } finally {
       if (inboxRemote !== undefined) {
         try {
@@ -785,6 +890,14 @@ class CommandRelayWatcher {
           // journal unreadable; skip retrieve snapshot
         }
       }
+      const snap = this._lastRetrievePollSnapshot;
+      this._emitTransactionTrace('internal_poll_end', {
+        poll_index: pollIndex,
+        needs_second_poll: Boolean(snap && snap.needsSecondPoll),
+        delivered_this_tx: Boolean(snap && snap.deliveredThisTx),
+        published_this_tx: Boolean(snap && snap.publishedThisTx),
+        pending_retirement: Boolean(snap && snap.pendingRetirement),
+      });
       this._inFlight = false;
     }
   }

@@ -3,6 +3,12 @@
 const { execFileSyncHidden } = require('./exec-file-sync.cjs');
 const { isRateLimitBlob } = require('./relay-rate-limit-gate.cjs');
 const { parseGhApiIncludeStdout } = require('./github-quota-telemetry.cjs');
+const {
+  prepareRelayPayloadForPublish,
+  RELAY_SHRINK_EXHAUSTED,
+  RELAY_PUBLISH_TARGET_BYTES,
+} = require('./relay-payload-adaptive-shrink.cjs');
+const { resolveFullAsciiRelayEnabled } = require('./terrain-full-ascii-relay.cjs');
 
 const DEFAULTS = {
   repo: 'NoReturns/OpenXcom-Aster-Relay',
@@ -16,7 +22,10 @@ const RELAY_CONTENT_PATHS = {
   tacticalResult: 'm0/tactical-result.json',
   terrainQuery: 'm0/terrain-query.json',
   terrainQueryResult: 'm0/terrain-query-result.json',
+  rulesReference: 'm0/rules-reference.json',
 };
+
+const DEFAULT_RULES_REFERENCE_MAX_BYTES = 256 * 1024;
 
 const DEFAULT_COMMAND_MAX_BYTES = 8 * 1024;
 const DEFAULT_RESULT_MAX_BYTES = 16 * 1024;
@@ -174,7 +183,55 @@ function readRemoteContentFile(deps, contentPath, maxRemoteBytes) {
   };
 }
 
+function normalizeRemoteContentPutError(error, contentPath) {
+  const stderr = error.stderr ? String(error.stderr) : '';
+  if (/409|Conflict/i.test(stderr) || /422|Unprocessable Entity/i.test(stderr)) {
+    const conflict = new Error(`SHA conflict while publishing ${contentPath}; stop and retry manually.`);
+    conflict.code = 'SHA_CONFLICT';
+    conflict.stderr = stderr;
+    return conflict;
+  }
+  if (error.code === 'AUTH_FAILED') {
+    return error;
+  }
+  if (error.code === 'RATE_LIMIT' || isRateLimitBlob(`${stderr}\n${error.message}`)) {
+    return error.code === 'RATE_LIMIT' ? error : normalizeGhApiExecError(error);
+  }
+  if (/401|authentication|Bad credentials/i.test(stderr + String(error.message))) {
+    const auth = new Error('GitHub authentication failed.');
+    auth.code = 'AUTH_FAILED';
+    auth.stderr = stderr;
+    return auth;
+  }
+  if (/403/.test(stderr) && !/rate limit/i.test(stderr)) {
+    const auth = new Error('GitHub authentication failed.');
+    auth.code = 'AUTH_FAILED';
+    auth.stderr = stderr;
+    return auth;
+  }
+  return error;
+}
+
+function putRemoteContentFileCreate(deps, contentPath, serializedUtf8, commitMessage) {
+  assertRelayMutationAllowed(deps, contentPath);
+  if (Buffer.byteLength(serializedUtf8, 'utf8') > deps.maxRemoteBytes) {
+    throw new Error(`Remote payload for ${contentPath} exceeds size limit`);
+  }
+  const body = {
+    message: commitMessage,
+    content: Buffer.from(serializedUtf8, 'utf8').toString('base64'),
+    branch: deps.branch,
+  };
+  try {
+    deps.ghApi('PUT', `repos/${deps.repo}/contents/${contentPath}`, body);
+  } catch (error) {
+    throw normalizeRemoteContentPutError(error, contentPath);
+  }
+  return { created: true };
+}
+
 function publishRemoteContentFile(deps, contentPath, serializedUtf8, commitMessage) {
+  assertRelayMutationAllowed(deps, contentPath);
   if (Buffer.byteLength(serializedUtf8, 'utf8') > deps.maxRemoteBytes) {
     throw new Error(`Remote payload for ${contentPath} exceeds size limit`);
   }
@@ -190,29 +247,13 @@ function publishRemoteContentFile(deps, contentPath, serializedUtf8, commitMessa
   try {
     deps.ghApi('PUT', `repos/${deps.repo}/contents/${contentPath}`, body);
   } catch (error) {
-    const stderr = error.stderr ? String(error.stderr) : '';
-    if (/409|Conflict/i.test(stderr)) {
-      const conflict = new Error(`SHA conflict while publishing ${contentPath}; stop and retry manually.`);
-      conflict.code = 'SHA_CONFLICT';
-      throw conflict;
-    }
-    if (error.code === 'AUTH_FAILED') {
-      throw error;
-    }
-    if (isRateLimitBlob(`${stderr}\n${error.message}`)) {
-      throw error.code === 'RATE_LIMIT' ? error : normalizeGhApiExecError(error);
-    }
-    if (/401|authentication|Bad credentials/i.test(stderr + String(error.message))) {
-      const auth = new Error('GitHub authentication failed.');
-      auth.code = 'AUTH_FAILED';
-      throw auth;
-    }
-    throw error;
+    throw normalizeRemoteContentPutError(error, contentPath);
   }
   return { skipped: false };
 }
 
 function deleteRemoteContentFile(deps, contentPath, sha, commitMessage) {
+  assertRelayMutationAllowed(deps, contentPath);
   if (!sha) {
     throw new Error(`Cannot delete ${contentPath} without content SHA`);
   }
@@ -249,11 +290,78 @@ function deleteRemoteContentFile(deps, contentPath, sha, commitMessage) {
   }
 }
 
+function resolveRelayContentPaths(options = {}) {
+  const override = options.contentPaths ?? options.content_paths;
+  if (!override) {
+    return { ...RELAY_CONTENT_PATHS };
+  }
+  const merged = { ...RELAY_CONTENT_PATHS, ...override };
+  for (const key of Object.keys(RELAY_CONTENT_PATHS)) {
+    if (typeof merged[key] !== 'string' || !merged[key].trim()) {
+      throw new Error(`Invalid relay contentPaths.${key}`);
+    }
+  }
+  return merged;
+}
+
+function assertRelayMutationAllowed(deps, contentPath) {
+  if (!deps || deps.isolationEnforced !== true) {
+    assertRelayIsolationContract(deps, contentPath);
+    return;
+  }
+  const repo = String(deps.repo || DEFAULTS.repo);
+  const branch = String(deps.branch || DEFAULTS.branch);
+  if (repo === DEFAULTS.repo && branch === DEFAULTS.branch) {
+    throw new Error(
+      `Refusing isolated-enforced GitHub mutation on production cooperative branch for ${contentPath}`,
+    );
+  }
+  const productionPathSet = new Set(Object.values(RELAY_CONTENT_PATHS));
+  if (repo === DEFAULTS.repo && productionPathSet.has(contentPath)) {
+    throw new Error(
+      `Refusing isolated-enforced GitHub mutation on production relay path ${contentPath}`,
+    );
+  }
+  assertRelayIsolationContract(deps, contentPath);
+}
+
+function assertRelayIsolationContract(deps, contentPath) {
+  const contract = deps && deps.relayIsolationContract;
+  if (!contract) {
+    return;
+  }
+  const repo = String(deps.repo || DEFAULTS.repo).trim();
+  const branch = String(deps.branch || DEFAULTS.branch).trim();
+  if (repo !== contract.repo || branch !== contract.branch) {
+    const err = new Error(
+      `RELAY_ISOLATION_CONTRACT_VIOLATION: mutation on ${repo}@${branch} `
+      + `does not match contract ${contract.repo}@${contract.branch} (${contentPath})`,
+    );
+    err.code = 'RELAY_ISOLATION_CONTRACT_VIOLATION';
+    throw err;
+  }
+  const paths = resolveRelayContentPaths(deps);
+  for (const key of Object.keys(contract.contentPaths)) {
+    if (paths[key] !== contract.contentPaths[key]) {
+      const err = new Error(
+        `RELAY_ISOLATION_CONTRACT_VIOLATION: content path ${key}=${paths[key]} `
+        + `does not match contract ${contract.contentPaths[key]}`,
+      );
+      err.code = 'RELAY_ISOLATION_CONTRACT_VIOLATION';
+      throw err;
+    }
+  }
+}
+
 function createRelayContentClient(options = {}) {
+  const contentPaths = resolveRelayContentPaths(options);
   const deps = {
     repo: options.repo ?? DEFAULTS.repo,
     branch: options.branch ?? DEFAULTS.branch,
     maxRemoteBytes: options.maxRemoteBytes ?? DEFAULTS.maxRemoteBytes,
+    contentPaths,
+    isolationEnforced: options.isolationEnforced === true,
+    relayIsolationContract: options.relayIsolationContract ?? null,
     ghApi: options.ghApi ?? createGhApiExec({
       rateLimitGate: options.rateLimitGate,
       quotaTelemetryStore: options.quotaTelemetryStore,
@@ -266,7 +374,7 @@ function createRelayContentClient(options = {}) {
 
   return {
     deps,
-    paths: RELAY_CONTENT_PATHS,
+    paths: contentPaths,
     readFile: (contentPath, maxBytes = deps.maxRemoteBytes) =>
       readRemoteContentFile(deps, contentPath, maxBytes),
     publishFile: (contentPath, value, commitMessage, maxBytes = deps.maxRemoteBytes) => {
@@ -284,12 +392,27 @@ function createRelayContentClient(options = {}) {
   };
 }
 
+function buildRelayPublishPrepareOptions(deps) {
+  return {
+    maxBytes: deps.maxRemoteBytes,
+    targetBytes: deps.relayPublishTargetBytes ?? RELAY_PUBLISH_TARGET_BYTES,
+    includeTerrainFullAsciiBattlefield: resolveFullAsciiRelayEnabled({
+      includeTerrainFullAsciiBattlefield: deps.includeTerrainFullAsciiBattlefield,
+    }),
+  };
+}
+
 function createRelayPublisher(options = {}) {
+  const contentPaths = resolveRelayContentPaths(options);
   const deps = {
     repo: options.repo ?? DEFAULTS.repo,
     branch: options.branch ?? DEFAULTS.branch,
     statePath: options.statePath ?? DEFAULTS.statePath,
     maxRemoteBytes: options.maxRemoteBytes ?? DEFAULTS.maxRemoteBytes,
+    relayPublishTargetBytes: options.relayPublishTargetBytes ?? RELAY_PUBLISH_TARGET_BYTES,
+    includeTerrainFullAsciiBattlefield: options.includeTerrainFullAsciiBattlefield,
+    contentPaths,
+    isolationEnforced: options.isolationEnforced === true,
     ghApi: options.ghApi ?? createGhApiExec({
       rateLimitGate: options.rateLimitGate,
       quotaTelemetryStore: options.quotaTelemetryStore,
@@ -301,29 +424,44 @@ function createRelayPublisher(options = {}) {
   };
 
   async function publishRelayState(relayJson) {
-    const serialized = JSON.stringify(relayJson, null, 2) + '\n';
-    if (Buffer.byteLength(serialized, 'utf8') > deps.maxRemoteBytes) {
-      throw new Error('Relay payload exceeds 256 KiB limit');
+    assertRelayMutationAllowed(deps, deps.statePath);
+    let prepared;
+    try {
+      prepared = prepareRelayPayloadForPublish(relayJson, buildRelayPublishPrepareOptions(deps));
+    } catch (error) {
+      if (error.code === RELAY_SHRINK_EXHAUSTED) {
+        const sizeError = new Error(
+          `Relay payload exceeds ${deps.maxRemoteBytes} byte cap after adaptive shrink.`
+        );
+        sizeError.code = RELAY_SHRINK_EXHAUSTED;
+        sizeError.initialBytes = error.initialBytes;
+        sizeError.finalBytes = error.finalBytes;
+        sizeError.steps = error.steps;
+        throw sizeError;
+      }
+      throw error;
     }
+    const publishRelay = prepared.relay;
+    const serialized = prepared.serialized;
 
     const remote = readRemoteStateMeta(deps);
     if (remote) {
       const { value } = decodeRemoteState(remote, deps.maxRemoteBytes);
-      if (value && value.snapshot_id === relayJson.snapshot_id) {
-        if (!relayJson.request_id) {
+      if (value && value.snapshot_id === publishRelay.snapshot_id) {
+        if (!publishRelay.request_id) {
           return { skipped: true, reason: 'remote_unchanged' };
         }
-        if (value.request_id === relayJson.request_id) {
+        if (value.request_id === publishRelay.request_id) {
           return { skipped: true, reason: 'remote_unchanged' };
         }
       }
     }
 
-    const messageSuffix = relayJson.request_id
-      ? ` req ${relayJson.request_id.slice(0, 8)}`
+    const messageSuffix = publishRelay.request_id
+      ? ` req ${publishRelay.request_id.slice(0, 8)}`
       : '';
     const body = {
-      message: `M1 tactical snapshot ${relayJson.snapshot_id.slice(0, 12)} turn ${relayJson.source.turn}${messageSuffix}`,
+      message: `M1 tactical snapshot ${publishRelay.snapshot_id.slice(0, 12)} turn ${publishRelay.source.turn}${messageSuffix}`,
       content: Buffer.from(serialized, 'utf8').toString('base64'),
       branch: deps.branch,
     };
@@ -362,21 +500,29 @@ function createRelayPublisher(options = {}) {
 }
 
 module.exports = {
+  RELAY_SHRINK_EXHAUSTED,
   DEFAULTS,
   RELAY_CONTENT_PATHS,
+  resolveRelayContentPaths,
   DEFAULT_COMMAND_MAX_BYTES,
   DEFAULT_RESULT_MAX_BYTES,
   DEFAULT_TERRAIN_QUERY_MAX_BYTES,
   DEFAULT_TERRAIN_QUERY_RESULT_MAX_BYTES,
+  DEFAULT_RULES_REFERENCE_MAX_BYTES,
   checkGhAuthReadiness,
   createGhApiExec,
+  buildRelayPublishPrepareOptions,
   createRelayPublisher,
   createRelayContentClient,
   readRemoteStateMeta,
   readRemoteContentMeta,
   readRemoteContentFile,
   publishRemoteContentFile,
+  putRemoteContentFileCreate,
+  normalizeRemoteContentPutError,
   deleteRemoteContentFile,
+  assertRelayMutationAllowed,
+  assertRelayIsolationContract,
   decodeRemoteState,
   decodeRemoteFileContent,
   isNotFoundError,

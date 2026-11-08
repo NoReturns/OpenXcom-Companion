@@ -119,6 +119,16 @@ async function pollUntil(h, predicate, maxTicks = 20) {
 }
 
 describe('CommandRelayWatcher', () => {
+  it('refuses local inbox write when game session delivery gate rejects', async () => {
+    const h = makeHarness();
+    h.watcher.assertCommandDeliveryAllowed = () => ({ ok: false, reason: 'game_not_running' });
+    h.setRemoteCommand(makeMoveCommand(h.tactical, h.digest));
+    await h.watcher._pollOnce();
+    assert.ok(!fs.existsSync(h.local.command));
+    assert.ok(h.logs.some((line) => line.includes('Command delivery blocked')));
+    fs.rmSync(h.root, { recursive: true, force: true });
+  });
+
   it('delivers valid remote MOVE to local inbox atomically', async () => {
     const h = makeHarness();
     h.setRemoteCommand(makeMoveCommand(h.tactical, h.digest));
@@ -236,6 +246,63 @@ describe('CommandRelayWatcher', () => {
     })}\n`, 'utf8');
     h.setRemoteCommand(makeMoveCommand(h.tactical, h.digest, { command_id: 'move-blocked' }));
     await h.watcher._pollOnce();
+    assert.ok(!fs.existsSync(h.local.command));
+    fs.rmSync(h.root, { recursive: true, force: true });
+  });
+
+  it('M1-32D: publishes COMPLETED engine result instead of revalidating stale remote binding', async () => {
+    const h = makeHarness({ dryRun: false });
+    const commandId = '9f4d6c2a1b7e4d9f8a53c02eb176d49a';
+    const kneelCommand = makeKneelCommand(h.tactical, h.digest, { command_id: commandId });
+    h.setRemoteCommand(kneelCommand);
+    await pollUntil(h, () => fs.existsSync(h.local.command));
+
+    const postTactical = structuredClone(h.tactical);
+    postTactical.units[0].kneeled = true;
+    postTactical.units[0].timeUnits = 52;
+    const postYaml = `${YAML.stringify(postTactical)}\n`;
+    fs.writeFileSync(h.snapshotPath, postYaml, 'utf8');
+    const postDigest = sha256HexLower(Buffer.from(postYaml, 'utf8'));
+    assert.notEqual(postDigest, h.digest);
+
+    h.setLocalResult({
+      schema_version: 1,
+      command_id: commandId,
+      command_type: 'KNEEL',
+      status: 'COMPLETED',
+      session_id: h.tactical.eventLog.sessionId,
+      turn: h.tactical.turn,
+      actor_unit_id: 1,
+      starting_position: { x: 1, y: 2, z: 0 },
+      final_position: { x: 1, y: 2, z: 0 },
+      remaining_tu: 52,
+      kneeled: true,
+      destination_reached: false,
+      snapshot_sha256: postDigest,
+    });
+
+    await pollUntil(h, () => h.publishes.length === 1);
+    assert.equal(h.publishes[0].status, 'COMPLETED');
+    assert.equal(h.publishes[0].command_id, commandId);
+    assert.notEqual(h.publishes[0].sidecar_reject_code, 'SIDECAR_VALIDATION');
+    await h.watcher._pollOnce();
+    assert.equal(h.publishes.length, 1, 'must not publish synthetic REJECTED over COMPLETED');
+    fs.rmSync(h.root, { recursive: true, force: true });
+  });
+
+  it('M1-32D: still rejects genuinely stale remote command before delivery', async () => {
+    const h = makeHarness({ dryRun: false });
+    const postTactical = structuredClone(h.tactical);
+    postTactical.units[0].kneeled = true;
+    const postYaml = `${YAML.stringify(postTactical)}\n`;
+    fs.writeFileSync(h.snapshotPath, postYaml, 'utf8');
+    const postDigest = sha256HexLower(Buffer.from(postYaml, 'utf8'));
+    h.setRemoteCommand(makeKneelCommand(h.tactical, h.digest, {
+      command_id: 'kneel-stale-pre-delivery',
+    }));
+    await pollUntil(h, () => h.publishes.length === 1);
+    assert.equal(h.publishes[0].status, 'REJECTED');
+    assert.match(h.publishes[0].public_reason, /snapshot_sha256 mismatch/);
     assert.ok(!fs.existsSync(h.local.command));
     fs.rmSync(h.root, { recursive: true, force: true });
   });

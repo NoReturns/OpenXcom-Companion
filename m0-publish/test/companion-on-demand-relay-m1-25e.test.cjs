@@ -82,7 +82,9 @@ describe('companion on-demand relay (M1-25E)', () => {
         },
       },
     });
-    const result = await require('../lib/companion-on-demand-relay.cjs').processPendingRequest(ctx);
+    const result = await require('../lib/companion-on-demand-relay.cjs').processPendingRequest(ctx, {
+      preserveWatcherIo: true,
+    });
     assert.equal(result.processed, true);
     assert.equal(publishCalls, 1);
     assert.equal(fs.existsSync(paths.requestPath), false);
@@ -128,7 +130,9 @@ describe('companion on-demand relay (M1-25E)', () => {
       },
     });
     ctx.commandWatcher.readRemoteCommand = async () => null;
-    const result = await require('../lib/companion-on-demand-relay.cjs').processPendingRequest(ctx);
+    const result = await require('../lib/companion-on-demand-relay.cjs').processPendingRequest(ctx, {
+      preserveWatcherIo: true,
+    });
     assert.equal(result.processed, true);
     const status = JSON.parse(fs.readFileSync(paths.statusPath, 'utf8'));
     assert.equal(status.phase, RETRIEVE_PHASE.NO_NEW_ORDERS);
@@ -170,7 +174,10 @@ describe('companion on-demand relay (M1-25E)', () => {
       },
     });
     const outcome = await runSendOnce(ctx);
-    assert.equal(outcome.phase, SEND_PHASE.FAILED);
+    assert.equal(outcome.phase, SEND_PHASE.SENDING);
+    assert.equal(outcome.outcome, 'deferred');
+    assert.equal(outcome.terminal, false);
+    assert.equal(outcome.error_code, 'RATE_LIMIT');
     assert.match(outcome.message, /rate/i);
   });
 });

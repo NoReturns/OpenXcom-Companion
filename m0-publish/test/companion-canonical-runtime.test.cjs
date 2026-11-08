@@ -32,14 +32,30 @@ describe('companion canonical runtime (M1-25A)', () => {
     assert.equal(decision.action, 'quarantine');
   });
 
-  it('blocks launch on EXECUTING result with inbox present', () => {
+  it('blocks launch on EXECUTING result when inbox command_id does not match', () => {
     const decision = evaluateInboxQuarantine({
       inboxExists: true,
       resultExists: true,
       resultStatus: 'EXECUTING',
       resultParseError: false,
+      inboxValue: { command_id: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+      resultCommandId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     });
     assert.equal(decision.action, 'block_launch');
+  });
+
+  it('allows launch for matching orphan EXECUTING inbox (engine resume on first tick)', () => {
+    const commandId = 'a7f0e2d51c9b4f8da65b30c192e74f06';
+    const decision = evaluateInboxQuarantine({
+      inboxExists: true,
+      resultExists: true,
+      resultStatus: 'EXECUTING',
+      resultParseError: false,
+      inboxValue: { command_id: commandId },
+      resultCommandId: commandId,
+    });
+    assert.equal(decision.action, 'warn');
+    assert.equal(decision.reason, 'orphan_executing_resume');
   });
 
   it('does not quarantine when inbox absent', () => {

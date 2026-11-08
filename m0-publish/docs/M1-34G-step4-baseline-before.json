@@ -1,0 +1,87 @@
+﻿{
+  "baseline": {
+    "journal": {
+      "filePath": "E:\\Open X-Com Companion\\companion\\m0-publish\\.command-relay-sidecar-state\\command-relay-journal.json",
+      "exists": true,
+      "sha256": "19786e959cc191c1813578bf40175c3dd6ce99889014a7432566222d9f048fa7",
+      "byteLength": 29643,
+      "mtimeMs": 1793829915226.2512
+    },
+    "localJson": {
+      "snapshotDir": "E:\\Open X-Com Companion\\local\\m0",
+      "files": {
+        "tactical-command.json": {
+          "filePath": "E:\\Open X-Com Companion\\local\\m0\\tactical-command.json",
+          "exists": true,
+          "sha256": "DD4F99BB988944AE621C293FAFD5C3B6C0DD955E77BAB6E6E708AC462482AAAE",
+          "byteLength": 363
+        },
+        "tactical-result.json": {
+          "filePath": "E:\\Open X-Com Companion\\local\\m0\\tactical-result.json",
+          "exists": true,
+          "sha256": "05C3BF295B6ED8B2F294748A67DC394C3CD6D269557935EAA8852F950BB51681",
+          "byteLength": 596
+        },
+        "companion-on-demand-request.json": {
+          "filePath": "E:\\Open X-Com Companion\\local\\m0\\companion-on-demand-request.json",
+          "exists": true,
+          "sha256": "6DB2C8B9B5B62695FA674FC8DA7C13149667D4416F688ABD1D6EBC0C49355A4A",
+          "byteLength": 174
+        },
+        "companion-on-demand-status.json": {
+          "filePath": "E:\\Open X-Com Companion\\local\\m0\\companion-on-demand-status.json",
+          "exists": true,
+          "sha256": "9E33F3ED316DBCE59325CCB343F888E273BEE178A7BF3170EC070F744BD9330E",
+          "byteLength": 192
+        },
+        "tactical-command-journal.json": {
+          "filePath": "E:\\Open X-Com Companion\\local\\m0\\tactical-command-journal.json",
+          "exists": true,
+          "sha256": "9BC413ABD86D4976A051A775A6AB0E7993D020AA2D9320E0DF81C6AE859D74AA",
+          "byteLength": 1529
+        }
+      }
+    },
+    "github": {
+      "ok": true,
+      "repo": "NoReturns/OpenXcom-Aster-Relay",
+      "branch": "main",
+      "command": null,
+      "result": {
+        "sha": "e65799c6af4b4748ce2dfea9568437e4f084fc36",
+        "byteLength": 287
+      }
+    }
+  },
+  "ownership": {
+    "schema_version": 1,
+    "updated_at_ms": 1793827285013,
+    "snapshot_path": "E:\\Open X-Com Companion\\local\\m0\\tactical-live.yaml",
+    "pid": 16048,
+    "ownership_token": "42260c03402401b03329cfb408d2c98e",
+    "started_at_ms": 1793827285013,
+    "owner": "daemon"
+  },
+  "pidRecord": 16048,
+  "health": {
+    "healthy": true,
+    "state": "ready",
+    "reason": "ok",
+    "pid": 16048,
+    "ready": {
+      "pid": 16048,
+      "ready_at_ms": 1793827285018,
+      "script": "companion-on-demand-relay-daemon.cjs"
+    },
+    "health": {
+      "schema_version": 1,
+      "script": "companion-on-demand-relay-daemon.cjs",
+      "updated_at_ms": 1793834561125,
+      "pid": 16048,
+      "state": "ready"
+    }
+  },
+  "requestStatus": "completed",
+  "requestAction": "retrieve",
+  "pid16048Running": true
+}

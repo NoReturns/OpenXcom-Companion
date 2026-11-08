@@ -81,19 +81,43 @@ describe('schema v3 equipment validation', () => {
     }), 0, 3);
   });
 
-  it('accepts empty firearm with empty true only', () => {
+  it('accepts firearm with no magazine inserted', () => {
     const unit = validateUnit(friendlyV3Base({
       hands: {
         right: {
           itemType: 'STR_RIFLE',
           battleType: BT_FIREARM,
+          inventorySlotType: 'hand',
+          slot: 'STR_RIGHT_HAND',
+          hand: 'right',
+          noMagazineInserted: true,
+        },
+        left: null,
+      },
+    }), 0, 3);
+    assert.equal(unit.hands.right.noMagazineInserted, true);
+    assert.equal(unit.hands.right.loaded, undefined);
+    assert.equal(unit.hands.right.empty, undefined);
+  });
+
+  it('accepts firearm with dry inserted magazine', () => {
+    const unit = validateUnit(friendlyV3Base({
+      hands: {
+        right: {
+          itemType: 'STR_RIFLE',
+          battleType: BT_FIREARM,
+          inventorySlotType: 'hand',
+          slot: 'STR_RIGHT_HAND',
+          hand: 'right',
           empty: true,
+          nestedAmmo: { battleItemId: 90, ammoType: 'STR_RIFLE_CLIP', rounds: 0 },
+          loaded: { ammoType: 'STR_RIFLE_CLIP', rounds: 0, battleItemId: 90 },
         },
         left: null,
       },
     }), 0, 3);
     assert.equal(unit.hands.right.empty, true);
-    assert.equal(unit.hands.right.loaded, undefined);
+    assert.equal(unit.hands.right.loaded.rounds, 0);
   });
 
   it('accepts spare ammunition clip without empty or loaded', () => {
@@ -159,9 +183,9 @@ describe('schema v3 equipment validation', () => {
         faction: FACTION_PLAYER,
         originalFaction: FACTION_HOSTILE,
         position: [1, 2, 0],
-        kneeled: false,
+        activeHand: 'STR_RIGHT_HAND',
       }, 0, 3),
-      /must not include kneeled/
+      /must not include activeHand/
     );
   });
 
@@ -265,17 +289,25 @@ describe('schema v3 equipment validation', () => {
     }
   });
 
-  it('rejects v3-only soldier fields on visible hostiles for schema 4 and 5', () => {
+  it('allows visible hostile kneeled and facing but rejects other v3 soldier fields', () => {
     for (const schemaVersion of [4, 5]) {
+      validateUnit({
+        id: 1000000,
+        faction: FACTION_HOSTILE,
+        originalFaction: FACTION_HOSTILE,
+        position: [5, 5, 0],
+        kneeled: true,
+        facing: { direction: 4, label: 'south', vector: { dx: 0, dy: 1 } },
+      }, 0, schemaVersion);
       assert.throws(
         () => validateUnit({
           id: 1000000,
           faction: FACTION_HOSTILE,
           originalFaction: FACTION_HOSTILE,
           position: [5, 5, 0],
-          kneeled: false,
+          hands: { right: null, left: null },
         }, 0, schemaVersion),
-        /must not include kneeled/
+        /must not include hands/
       );
     }
   });

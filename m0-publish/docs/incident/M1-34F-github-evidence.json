@@ -1,0 +1,25 @@
+{
+  "incident": "M1-34F",
+  "description": "Isolated harness accidentally published SIDECAR_VALIDATION REJECTED to production cooperative result slot and retired production inbox.",
+  "production_repo": "NoReturns/OpenXcom-Aster-Relay",
+  "production_branch": "main",
+  "authoritative_engine_command_id": "2b737d8422bef12932d4586140b9abf7",
+  "authoritative_engine_status": "FAILED",
+  "prior_shared_result_command_id": "3cd1c56d000000000000000000000000",
+  "git_evidence": {
+    "production_command_pre_retire_blob_sha": "e1f2fb54b86d38183922de0cba2aaeb722882860",
+    "prior_result_3cd1c56d_failed_blob_sha": "b8ef8e1",
+    "incident_rejected_result_commit_short": "03f06d8",
+    "incident_retire_commit_short": "c2e3c7a",
+    "post_incident_result_blob_sha_prefix": "e65799c6"
+  },
+  "operator_decisions": {
+    "restore_remote_inbox": false,
+    "restore_prior_result_to_live_slot": false,
+    "production_retrieve": "hold",
+    "engine_failed_authoritative": true,
+    "github_rejected_incorrect_cooperative_record": true
+  },
+  "trace_hint": "%TEMP%\\m1-34e-*\\companion-on-demand-relay-transactions.jsonl",
+  "note": "Read-only manifest. Live GitHub is not modified by this file. Recovery design: docs/M1-34G-recovery-design.md"
+}
