@@ -20,8 +20,12 @@ const {
   buildPsychologicalHistoricalLines,
   getPsychologicalPerceptionContractMarkdown,
 } = require('./psychological-perception-consumer.cjs');
+const {
+  getEquipmentReviewContractMarkdown,
+  runMandatoryTacticalEquipmentReview,
+} = require('./tactical-equipment-brief.cjs');
 
-const WORKFLOW_VERSION = 1;
+const WORKFLOW_VERSION = 2;
 
 const MANDATORY_F6_REVIEW_SEQUENCE = [
   {
@@ -60,6 +64,12 @@ const MANDATORY_F6_REVIEW_SEQUENCE = [
     detail:
       'State confirmed MC, confirmed panic/berserk, historical psych events, and heuristic morale/energy in plain language. Separate current export status from perceptionLog history (e.g. panicked during turn N; current standing unless readiness confirms panic).',
   },
+  {
+    step: 7,
+    title: 'Mandatory tactical equipment review',
+    detail:
+      'Before terrain or MOVE planning, inspect hands, belt/backpack inventory, actor groundInventory, and map groundItems from tactical.units. Include human-owned soldiers for awareness only; Companion orders stay on AI-owned binding actors. Classify grenades, explosives, medikits, firearms, and ammunition; dedupe battleItemId across hands and inventory; do not assume usability from presence alone.',
+  },
 ];
 
 const CONFIRMED_READINESS = new Set(['panicking', 'berserk']);
@@ -81,6 +91,8 @@ function getAiBriefingInstructionsMarkdown() {
     getHostileIntelligenceContractMarkdown(),
     '',
     getPsychologicalPerceptionContractMarkdown(),
+    '',
+    getEquipmentReviewContractMarkdown(),
     '',
     '## Stage D reference assessment (Battleship harness, turn 3)',
     '',
@@ -205,6 +217,24 @@ function runMandatoryBattlefieldStatusReview(relay) {
   };
 }
 
+/**
+ * Status review + equipment review (same consumer sequence agents must follow).
+ * @param {object} relay
+ * @param {{ aiCommandActorIds?: number[]|Set|null }} [options]
+ */
+function runMandatoryBriefingPrelude(relay, options = {}) {
+  const status = runMandatoryBattlefieldStatusReview(relay);
+  const equipment = runMandatoryTacticalEquipmentReview(relay, {
+    aiCommandActorIds: options.aiCommandActorIds,
+    statusReview: status,
+  });
+  return {
+    workflowVersion: WORKFLOW_VERSION,
+    status,
+    equipment,
+  };
+}
+
 module.exports = {
   WORKFLOW_VERSION,
   MANDATORY_F6_REVIEW_SEQUENCE,
@@ -212,6 +242,9 @@ module.exports = {
   getAiBriefingInstructionsMarkdown,
   getHostileIntelligenceContractMarkdown,
   runMandatoryBattlefieldStatusReview,
+  runMandatoryTacticalEquipmentReview,
+  runMandatoryBriefingPrelude,
+  getEquipmentReviewContractMarkdown,
   assertSamePerceptionSession,
   mergePerceptionEventsSameSessionOnly,
   classifyCurrentHostileObservation,

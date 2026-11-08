@@ -33,10 +33,12 @@ if ([string]::IsNullOrWhiteSpace($buildExe) -or -not (Test-Path -LiteralPath $bu
 
 $buildSha = (Get-FileHash -LiteralPath $buildExe -Algorithm SHA256).Hash.ToLowerInvariant()
 # Expected hash is VERIFIED_BUILD_SHA256 in companion\m0-publish\lib\companion-canonical-runtime.cjs
-$expectedSha = node -e "console.log(require(process.argv[1]).VERIFIED_BUILD_SHA256)" $Core
-if ($buildSha -ne $expectedSha) {
-  throw "Build SHA-256 mismatch. Got $buildSha expected $expectedSha. Set VERIFIED_BUILD_SHA256 in companion-canonical-runtime.cjs to this build's hash (then redeploy), or use the build that matches the pin."
+$hashJson = node -e "const m=require(process.argv[1]); console.log(JSON.stringify(m.verifyExecutableHashAgainstPin(process.argv[2])));" $Core $buildExe
+$hashCheck = $hashJson | ConvertFrom-Json
+if (-not $hashCheck.ok) {
+  throw "Build SHA-256 mismatch. Got $($hashCheck.runtimeSha256) expected $($hashCheck.expectedSha256). Set VERIFIED_BUILD_SHA256 in companion-canonical-runtime.cjs to this build's hash (then redeploy), or use the build that matches the pin."
 }
+$buildSha = $hashCheck.runtimeSha256
 
 $dllCheck = node -e "const m=require(process.argv[1]); const l=m.companionRuntimeLayout(process.argv[2]); console.log(JSON.stringify(m.checkRuntimeDllDependencies(l.runtimeBin)));" $Core $WorkspaceRoot
 $dll = $dllCheck | ConvertFrom-Json

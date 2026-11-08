@@ -1,6 +1,7 @@
 'use strict';
 
 const { SNAPSHOT_SHA256_RE } = require('./briefing-request.cjs');
+const { isFriendlyRosterSoldier } = require('./unit-state-brief.cjs');
 
 const BINDING_SCHEMA_VERSION = 1;
 
@@ -16,7 +17,7 @@ function assert(condition, message) {
 }
 
 function isPlayerSoldier(unit) {
-  return unit && unit.faction === 0 && unit.originalFaction === 0;
+  return isFriendlyRosterSoldier(unit);
 }
 
 /**

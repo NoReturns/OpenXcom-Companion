@@ -6,7 +6,7 @@ Workspace layout: [docs/WORKSPACE-LAYOUT.md](docs/WORKSPACE-LAYOUT.md). Live coo
 
 ## Tactical briefing (F6 → `m0/state.json`)
 
-After a **fresh** F6 export or `BRIEFING_PUBLISHED` notification, read GitHub `m0/state.json` and run the **mandatory battlefield status review** before planning or authoring commands.
+After a **fresh** F6 export or `BRIEFING_PUBLISHED` notification, read GitHub `m0/state.json` and run the **mandatory battlefield status review** and **mandatory tactical equipment review** before planning or authoring commands.
 
 Full sequence and Stage D example: `m0-publish/lib/tactical-briefing-ai-workflow.cjs` (`getAiBriefingInstructionsMarkdown()`).
 

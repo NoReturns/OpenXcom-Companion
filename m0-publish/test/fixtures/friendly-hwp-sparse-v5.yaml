@@ -1,0 +1,82 @@
+# Pinned M1 regression — friendly HWP (unit id >= 1_000_000) with sparse export fields only.
+# Do not repoint tests at local/m0/tactical-live.yaml (mutable live battle state).
+schemaVersion: 5
+turn: 1
+side: 0
+selectedUnitId: 1
+missionContext:
+  schemaVersion: 1
+  missionType: STR_UFO_CRASH_RECOVERY
+  missionClass: ufo_crash
+  siteKind: ufo_site
+map:
+  width: 10
+  height: 10
+  depth: 2
+terrain:
+  memoryNote: Pinned fixture terrain (not live export).
+  tiles:
+    - p: [1, 2, 0]
+      disc: 4
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+units:
+  - id: 1
+    faction: 0
+    originalFaction: 0
+    position: [1, 2, 0]
+    name: Roster Alpha
+    health: 40
+    timeUnits: 50
+    kneeled: false
+    activeHand: STR_RIGHT_HAND
+    hands:
+      right:
+        itemType: STR_RIFLE
+        battleType: 1
+        loaded:
+          ammoType: STR_RIFLE_CLIP
+          rounds: 25
+      left: null
+    inventory: []
+  - id: 2
+    faction: 0
+    originalFaction: 0
+    position: [2, 2, 0]
+    name: Roster Beta
+    health: 35
+    timeUnits: 45
+    kneeled: true
+    activeHand: STR_RIGHT_HAND
+    hands:
+      right:
+        itemType: STR_HEAVY_CANNON
+        battleType: 1
+        loaded:
+          ammoType: STR_HC_AP_AMMO
+          rounds: 4
+      left: null
+    inventory: []
+  - id: 1000000
+    faction: 0
+    originalFaction: 0
+    position: [8, 8, 0]
+eventLog:
+  sessionId: f6e5d4c3b2a19081726354433221100a
+  oldestSeq: 1
+  latestSeq: 1
+  droppedCount: 0
+  events:
+    - seq: 1
+      type: weapon_fired
+      turn: 1
+      actorUnitId: 1
+      weaponItemType: STR_RIFLE
+      actionType: snap
+      target:
+        x: 8
+        y: 8
+        z: 0

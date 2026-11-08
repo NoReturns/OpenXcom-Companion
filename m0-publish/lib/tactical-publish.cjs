@@ -8,7 +8,14 @@ const { buildTerrainBrief } = require('./terrain-brief.cjs');
 const { buildTerrainMapBrief } = require('./terrain-map-brief.cjs');
 const { buildUnitStateBrief } = require('./unit-state-brief.cjs');
 const { buildCommandBinding } = require('./command-binding.cjs');
-const { isRosterSoldierUnitId } = require('./unit-state-brief.cjs');
+const {
+  isRosterSoldierUnitId,
+  isFriendlyRosterSoldier,
+  isMindControlledRosterSoldier,
+  isNeutralCivilianUnit,
+  isGenuineHostileUnit,
+  isXcomControlledHostileUnit,
+} = require('./unit-state-brief.cjs');
 
 const FACTION_PLAYER = 0;
 const FACTION_HOSTILE = 1;
@@ -80,6 +87,7 @@ const UNIT_FRIENDLY_V3_KEYS = new Set([
   'encumbranceRatio',
 ]);
 const UNIT_FRIENDLY_WP2_KEYS = new Set(['facing', 'condition', 'readiness']);
+const UNIT_OBSERVATION_KEYS = new Set(['observedUnitType', 'displayLabel']);
 const UNIT_FACING_KEYS = new Set(['direction', 'label', 'vector', 'turning']);
 const UNIT_FACING_VECTOR_KEYS = new Set(['dx', 'dy']);
 const ALLOWED_FACING_LABELS = new Set([
@@ -431,6 +439,7 @@ function isRosterSoldierCasualtySubjectNameAllowed(subjectUnitId, units) {
 
 function allowedUnitKeys(schemaVersion) {
   const keys = new Set(UNIT_BASE_KEYS);
+  for (const k of UNIT_OBSERVATION_KEYS) keys.add(k);
   if (schemaVersion === 2) {
     for (const k of UNIT_FRIENDLY_V2_KEYS) keys.add(k);
     return keys;
@@ -1018,13 +1027,21 @@ function validateUnit(raw, index, schemaVersion = 2) {
   };
 
   const friendly = isFriendlyPlayerControlled(unit);
+  const friendlyRosterSoldier = isFriendlyRosterSoldier(unit);
+  const mindControlledRoster = isMindControlledRosterSoldier(unit);
+  const neutralCivilian = isNeutralCivilianUnit(unit);
+  const genuineHostile = isGenuineHostileUnit(unit);
+  const xcomControlledHostile = isXcomControlledHostileUnit(unit);
   const v2Extras = ['name', 'health', 'timeUnits'];
   const v3Extras = [...UNIT_FRIENDLY_V3_KEYS];
   const wp2FriendlyOnlyExtras = ['condition', 'readiness'];
   const schemaSupportsV3UnitFields = schemaVersion >= 3;
 
   for (const key of v2Extras) {
-    if (Object.prototype.hasOwnProperty.call(raw, key) && !friendly) {
+    if (key === 'name' && mindControlledRoster) {
+      continue;
+    }
+    if (Object.prototype.hasOwnProperty.call(raw, key) && !friendlyRosterSoldier) {
       throw new ValidationError(`units[${index}] must not include ${key}`);
     }
   }
@@ -1032,7 +1049,7 @@ function validateUnit(raw, index, schemaVersion = 2) {
     if (key === 'kneeled' && !friendly && Object.prototype.hasOwnProperty.call(raw, 'kneeled')) {
       continue;
     }
-    if (schemaSupportsV3UnitFields && Object.prototype.hasOwnProperty.call(raw, key) && !friendly) {
+    if (schemaSupportsV3UnitFields && Object.prototype.hasOwnProperty.call(raw, key) && !friendlyRosterSoldier) {
       throw new ValidationError(`units[${index}] must not include ${key}`);
     }
     if (schemaVersion === 2 && Object.prototype.hasOwnProperty.call(raw, key)) {
@@ -1040,7 +1057,7 @@ function validateUnit(raw, index, schemaVersion = 2) {
     }
   }
   for (const key of wp2FriendlyOnlyExtras) {
-    if (Object.prototype.hasOwnProperty.call(raw, key) && !friendly) {
+    if (Object.prototype.hasOwnProperty.call(raw, key) && !friendlyRosterSoldier) {
       throw new ValidationError(`units[${index}] must not include ${key}`);
     }
     if (schemaVersion === 2 && Object.prototype.hasOwnProperty.call(raw, key)) {
@@ -1057,7 +1074,11 @@ function validateUnit(raw, index, schemaVersion = 2) {
     unit.kneeled = requireBool(raw.kneeled, `units[${index}].kneeled`);
   }
 
-  if (friendly) {
+  if (friendlyRosterSoldier) {
+    if (Object.prototype.hasOwnProperty.call(raw, 'observedUnitType')
+      || Object.prototype.hasOwnProperty.call(raw, 'displayLabel')) {
+      throw new ValidationError(`units[${index}] must not include observed unit identity fields`);
+    }
     assert(typeof raw.name === 'string' && raw.name.length > 0, `units[${index}].name required`);
     unit.name = raw.name;
     unit.health = requireInt(raw.health, `units[${index}].health`, { min: 0, allowNegative: false });
@@ -1109,13 +1130,42 @@ function validateUnit(raw, index, schemaVersion = 2) {
     }
   } else {
     for (const key of [...v2Extras, ...(schemaSupportsV3UnitFields ? v3Extras : []), ...wp2FriendlyOnlyExtras]) {
-      if ((key === 'kneeled' || key === 'facing') && Object.prototype.hasOwnProperty.call(raw, key)) {
+      if ((key === 'kneeled' || key === 'facing') && !friendly && Object.prototype.hasOwnProperty.call(raw, key)) {
+        continue;
+      }
+      if (key === 'name' && mindControlledRoster) {
         continue;
       }
       assert(!Object.prototype.hasOwnProperty.call(raw, key), `units[${index}] must not include ${key}`);
     }
     if (schemaVersion === 2 && Object.prototype.hasOwnProperty.call(raw, 'actionCosts')) {
       throw new ValidationError(`units[${index}] must not include actionCosts`);
+    }
+    if (mindControlledRoster && Object.prototype.hasOwnProperty.call(raw, 'name')) {
+      unit.name = requireString(raw.name, `units[${index}].name`, { maxLength: 96 });
+    } else if (Object.prototype.hasOwnProperty.call(raw, 'name')) {
+      throw new ValidationError(`units[${index}] must not include name`);
+    }
+    if (Object.prototype.hasOwnProperty.call(raw, 'observedUnitType')) {
+      if (mindControlledRoster || neutralCivilian || friendly) {
+        throw new ValidationError(`units[${index}] must not include observedUnitType`);
+      }
+      if (!genuineHostile && !xcomControlledHostile) {
+        throw new ValidationError(`units[${index}] must not include observedUnitType`);
+      }
+      unit.observedUnitType = requireString(raw.observedUnitType, `units[${index}].observedUnitType`, {
+        maxLength: 64,
+      });
+      assert(
+        unit.observedUnitType.startsWith('STR_'),
+        `units[${index}].observedUnitType must be a mod unit type id`,
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(raw, 'displayLabel')) {
+      if (!Object.prototype.hasOwnProperty.call(unit, 'observedUnitType')) {
+        throw new ValidationError(`units[${index}].displayLabel requires observedUnitType`);
+      }
+      unit.displayLabel = requireString(raw.displayLabel, `units[${index}].displayLabel`, { maxLength: 96 });
     }
   }
 

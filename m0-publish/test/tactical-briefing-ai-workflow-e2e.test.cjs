@@ -12,6 +12,7 @@ const {
   MANDATORY_F6_REVIEW_SEQUENCE,
   getAiBriefingInstructionsMarkdown,
   runMandatoryBattlefieldStatusReview,
+  runMandatoryBriefingPrelude,
 } = require('../lib/tactical-briefing-ai-workflow.cjs');
 
 const REPO_ROOT = path.join(__dirname, '..', '..', '..');
@@ -87,7 +88,12 @@ describe('M1 tactical briefing AI workflow (consumer E2E)', () => {
     const md = getAiBriefingInstructionsMarkdown();
     assert.ok(md.includes('Virender Shah (#3)'));
     assert.ok(md.includes('Eric Reyes (#1)'));
+    assert.match(md, /Mandatory tactical equipment review/);
     assert.match(md, /Hostile intelligence fair-play/);
     assert.match(md, /sessionId/);
+
+    const prelude = runMandatoryBriefingPrelude(relay);
+    assert.equal(prelude.workflowVersion, 2);
+    assert.ok(prelude.equipment.soldiers.length > 0);
   });
 });

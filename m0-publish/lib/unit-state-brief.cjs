@@ -11,6 +11,11 @@ function isFriendlyPlayerControlled(unit) {
   return unit.originalFaction === FACTION_PLAYER && unit.faction === FACTION_PLAYER;
 }
 
+/** X-COM roster soldier under player control (excludes friendly HWP / id >= MAX_SOLDIER_ID). */
+function isFriendlyRosterSoldier(unit) {
+  return isFriendlyPlayerControlled(unit) && isRosterSoldierUnitId(unit.id);
+}
+
 function isRosterSoldierUnitId(unitId) {
   return Number.isInteger(unitId) && unitId > 0 && unitId < MAX_ROSTER_UNIT_ID_EXCLUSIVE;
 }
@@ -151,6 +156,12 @@ function buildUnitStateBrief(tactical, options = {}) {
     id: unit.id,
     position: unit.position,
     ...(unit.kneeled !== undefined ? { kneeled: unit.kneeled } : {}),
+    ...(typeof unit.observedUnitType === 'string' && unit.observedUnitType.length > 0
+      ? { observedUnitType: unit.observedUnitType }
+      : {}),
+    ...(typeof unit.displayLabel === 'string' && unit.displayLabel.length > 0
+      ? { displayLabel: unit.displayLabel }
+      : {}),
     facing: unit.facing,
   }));
 
@@ -184,6 +195,7 @@ function buildUnitStateBrief(tactical, options = {}) {
 module.exports = {
   buildUnitStateBrief,
   isFriendlyPlayerControlled,
+  isFriendlyRosterSoldier,
   isMindControlledRosterSoldier,
   isXcomControlledHostileUnit,
   isGenuineHostileUnit,

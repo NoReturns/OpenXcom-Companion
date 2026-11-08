@@ -49,10 +49,12 @@ if (-not (Test-Path -LiteralPath $runtimeExe)) {
 }
 
 $runtimeSha = (Get-FileHash -LiteralPath $runtimeExe -Algorithm SHA256).Hash.ToLowerInvariant()
-$expectedSha = node -e "console.log(require(process.argv[1]).VERIFIED_BUILD_SHA256)" $Core
-if (-not $SkipDeployVerify -and $runtimeSha -ne $expectedSha) {
-  throw "Runtime SHA-256 mismatch. Expected $expectedSha got $runtimeSha. Align companion-canonical-runtime.cjs with this binary or run deploy-openxcom.example.ps1 for the build matching the pin."
+$hashJson = node -e "const m=require(process.argv[1]); const l=m.companionRuntimeLayout(process.argv[2]); console.log(JSON.stringify(m.verifyExecutableHashAgainstPin(l.runtimeExe)));" $Core $RepoRoot
+$hashCheck = $hashJson | ConvertFrom-Json
+if (-not $SkipDeployVerify -and -not $hashCheck.ok) {
+  throw "Runtime SHA-256 mismatch. Expected $($hashCheck.expectedSha256) got $($hashCheck.runtimeSha256). Align companion-canonical-runtime.cjs with this binary or run deploy-openxcom.example.ps1 for the build matching the pin."
 }
+$runtimeSha = $hashCheck.runtimeSha256
 
 $manifestSha = $null
 if (Test-Path -LiteralPath $layout.deployManifest) {

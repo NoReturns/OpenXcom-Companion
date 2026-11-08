@@ -92,7 +92,7 @@ Before **every** publish:
 ## Operational loop
 
 ```
-READ m0/state.json → status review → one-active-command checks → publish
+READ m0/state.json → status review → equipment review → one-active-command checks → publish
 → RETRIEVE → terminal result → fresh state/binding → repeat
 ```
 
@@ -107,6 +107,21 @@ READ m0/state.json → status review → one-active-command checks → publish
 3. Confirmed vs heuristic morale/panic/MC per [AGENTS.md](../../AGENTS.md) / `tactical-briefing-ai-workflow.cjs`.
 4. Actors ⊆ `commandBinding.player_soldiers` **and** operator-confirmed AI set.
 5. Hostile fair-play: `units[]` + `facing`; `perceptionLog` / `last_seen` not live tracking.
+
+## Mandatory tactical equipment review
+
+**Before terrain planning or MOVE/shot proposals**, inspect `tactical.units` for every friendly roster soldier (including **human-owned** for awareness):
+
+| Source | Meaning |
+|--------|---------|
+| `hands` | Equipped / in-hand (weapons, held grenades, primed explosives) |
+| `inventory` | Belt/backpack |
+| `groundInventory` | Items on the actor’s tile (not personal carry) |
+| `groundItems` | Map observations of abandoned gear (separate counts) |
+
+Note grenades (standard, smoke, proximity), high explosives, medikit charges, loaded weapons vs spare ammo, primed vs unprimed. **Do not assume usability** from export alone — TU, ownership, and command support still gate orders. Human-owned soldiers are **not** Companion command actors even when listed in binding.
+
+Programmatic mirror: `runMandatoryTacticalEquipmentReview()` / `runMandatoryBriefingPrelude()` in `companion/m0-publish/lib/tactical-briefing-ai-workflow.cjs` (derived from existing snapshot data only).
 
 ---
 
