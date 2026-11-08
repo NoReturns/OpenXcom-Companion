@@ -46,6 +46,25 @@ function makeBriefingRequest(overrides = {}) {
   };
 }
 
+/** Wait for start()-driven async tick poll (not a second _pollOnce) to reach hard stop + ack. */
+async function awaitBriefingWatcherHardStop(watcher, ackPath, { maxSpins = 500, maxWaitMs = 5000 } = {}) {
+  const deadline = Date.now() + maxWaitMs;
+  for (let spin = 0; spin < maxSpins; spin += 1) {
+    if (!watcher.running && fs.existsSync(ackPath)) {
+      return;
+    }
+    if (Date.now() >= deadline) {
+      assert.fail(
+        `BriefingWatcher hard-stop timed out after ${maxWaitMs}ms: running=${watcher.running} ack=${fs.existsSync(ackPath)} inFlight=${watcher.publishInFlight}`,
+      );
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  assert.fail(
+    `BriefingWatcher did not hard-stop after ${maxSpins} spins: running=${watcher.running} ack=${fs.existsSync(ackPath)} inFlight=${watcher.publishInFlight}`,
+  );
+}
+
 describe('M1-23F6G rate-limit classification', () => {
   it('distinguishes quota 403 from bad credentials', () => {
     const rate = normalizeGhApiExecError(Object.assign(new Error('fail'), {
@@ -367,6 +386,7 @@ describe('M1-23F6H briefing shared rate-limit gate', () => {
       request_id: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
     }), null, 2)}\n`, 'utf8');
 
+    const ackPath = path.join(root, 'briefing-ack.json');
     const watcher = new BriefingWatcher({
       requestPath,
       snapshotPath,
@@ -381,9 +401,10 @@ describe('M1-23F6H briefing shared rate-limit gate', () => {
       },
     });
     watcher.start();
-    await watcher._pollOnce();
+    await awaitBriefingWatcherHardStop(watcher, ackPath);
     assert.equal(watcher.running, false);
-    const ack = JSON.parse(fs.readFileSync(path.join(root, 'briefing-ack.json'), 'utf8'));
+    assert.equal(watcher._timer, null, 'hard stop must clear poll interval');
+    const ack = JSON.parse(fs.readFileSync(ackPath, 'utf8'));
     assert.equal(ack.error_code, 'AUTH_FAILED');
 
     const rate = normalizeGhApiExecError(Object.assign(new Error('x'), {

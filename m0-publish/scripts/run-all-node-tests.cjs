@@ -16,7 +16,7 @@ const files = fs.readdirSync(testDir)
   .filter((name) => name.endsWith('.test.cjs'))
   .map((name) => path.join(testDir, name));
 
-const result = spawnSync(process.execPath, ['--test', ...files], {
+const result = spawnSync(process.execPath, ['--test', '--test-concurrency=1', ...files], {
   cwd: path.join(__dirname, '..'),
   env,
   stdio: 'inherit',

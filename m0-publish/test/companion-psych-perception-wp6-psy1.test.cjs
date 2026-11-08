@@ -23,7 +23,11 @@ const {
 } = require('../lib/tactical-briefing-ai-workflow.cjs');
 
 const FIXTURE_V4 = path.join(__dirname, 'fixtures', 'valid-v4.yaml');
-const LIVE_SNAPSHOT = path.join(__dirname, '..', '..', '..', 'local', 'm0', 'tactical-live.yaml');
+const WP6_ALIEN_BASE_TURN2_FIXTURE = path.join(
+  __dirname,
+  'fixtures',
+  'wp6-alien-base-turn2-mind-control-synthetic-v5.yaml',
+);
 
 function v4Root(overrides = {}) {
   const base = YAML.parse(fs.readFileSync(FIXTURE_V4, 'utf8'));
@@ -405,14 +409,15 @@ describe('M1-WP6-PSY-1 psychological perceptionLog', () => {
     assert.throws(() => parseAndValidate(raw), /subjectName only allowed for roster soldiers/);
   });
 
-  const liveIt = fs.existsSync(LIVE_SNAPSHOT) ? it : it.skip;
-  liveIt('alien base turn-2 live snapshot passes perceptionLog subjectName validation', () => {
-    const text = fs.readFileSync(LIVE_SNAPSHOT, 'utf8');
+  it('alien base turn-2 synthetic fixture passes perceptionLog subjectName validation', () => {
+    const text = fs.readFileSync(WP6_ALIEN_BASE_TURN2_FIXTURE, 'utf8');
     const tactical = loadAndValidateSnapshotFromText(text, YAML);
     const mc = tactical.perceptionLog.events.find(
       (ev) => ev.type === 'soldier_mind_controlled_observed' && ev.subjectName === 'Jolienne Tshiamanina',
     );
     assert.ok(mc);
     assert.equal(mc.subjectUnitId, 2);
+    assert.equal(mc.turn, 2);
+    assert.equal(tactical.missionContext.missionClass, 'alien_base');
   });
 });

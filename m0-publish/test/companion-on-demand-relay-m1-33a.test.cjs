@@ -25,6 +25,7 @@ const {
   assertProductionCommandRelayJournalUnchanged,
   isolatedCommandRelayStateDir,
 } = require('../lib/relay-test-isolation.cjs');
+const { allowIsolatedRetrieveCommandDelivery } = require('./helpers/on-demand-retrieve-harness.cjs');
 
 function sha256HexLower(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
@@ -88,6 +89,7 @@ describe('M1-33A relay transaction observability', () => {
       snapshotPath,
       commandRelayStateDir: relayStateDir,
       dryRun: true,
+      assertCommandDeliveryAllowed: allowIsolatedRetrieveCommandDelivery(),
       contentClient: {
         paths: {},
         readFile: () => null,

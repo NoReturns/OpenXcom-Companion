@@ -181,38 +181,45 @@ describe('M1 play session game lifecycle watchdog', () => {
   });
 
   it('unregistered split-brain daemon exits when registered owner exists', () => {
+    const registeredOwnerPid = 60005;
+    const unregisteredDaemonPid = 60006;
+    const ownerCreationMs = Date.now() - 5000;
     const session = beginCompanionPlaySession({ snapshotPath, launcherPid: 424242 });
     const gamePid = 50005;
-    registerPlaySessionDaemonPid(snapshotPath, session.sessionId, 60005);
+    registerPlaySessionDaemonPid(snapshotPath, session.sessionId, registeredOwnerPid);
     registerPlaySessionGamePid(snapshotPath, session.sessionId, gamePid, openxcomDeps(gamePid));
 
     const daemonLine = `"${process.execPath}" "${path.join(__dirname, '..', 'companion-on-demand-relay-daemon.cjs')}" --snapshot-path "${snapshotPath}"`;
+    const daemonCreationIdentity = (pid, creationMs) => ({
+      ok: true,
+      creationMs,
+      executablePath: process.execPath,
+      commandLine: daemonLine,
+    });
     const deps = {
       ...openxcomDeps(gamePid),
-      isProcessRunning: (pid) => pid === gamePid || pid === 60005 || pid === 60006,
+      isProcessRunning: (pid) => pid === gamePid || pid === registeredOwnerPid || pid === unregisteredDaemonPid,
       getProcessCreationIdentity: (pid) => {
         if (pid === gamePid) {
           return openxcomDeps(gamePid).getProcessCreationIdentity(gamePid);
         }
-        if (pid === 60005 || pid === 60006) {
-          return {
-            ok: true,
-            creationMs: Date.now(),
-            executablePath: process.execPath,
-            commandLine: daemonLine,
-          };
+        if (pid === registeredOwnerPid) {
+          return daemonCreationIdentity(pid, ownerCreationMs);
+        }
+        if (pid === unregisteredDaemonPid) {
+          return daemonCreationIdentity(pid, ownerCreationMs + 1000);
         }
         return { ok: false, reason: 'process_not_found' };
       },
       listProcesses: () => ([
-        { pid: 60005, commandLine: daemonLine },
-        { pid: 60006, commandLine: daemonLine },
+        { pid: registeredOwnerPid, commandLine: daemonLine },
+        { pid: unregisteredDaemonPid, commandLine: daemonLine },
       ]),
     };
 
     const state = {
       snapshotPath,
-      daemonPid: 60006,
+      daemonPid: unregisteredDaemonPid,
       daemonStartedAtMs: Date.now(),
       boundSessionId: session.sessionId,
       gameEverVerified: true,
@@ -220,9 +227,10 @@ describe('M1 play session game lifecycle watchdog', () => {
 
     fs.writeFileSync(path.join(snapshotDir, '.companion-on-demand-daemon-ownership.json'), `${JSON.stringify({
       schema_version: 1,
-      pid: 60005,
+      pid: registeredOwnerPid,
       ownership_token: 'owner-a',
       started_at_ms: Date.now(),
+      process_creation_ms: ownerCreationMs,
       owner: 'daemon',
     })}\n`);
 

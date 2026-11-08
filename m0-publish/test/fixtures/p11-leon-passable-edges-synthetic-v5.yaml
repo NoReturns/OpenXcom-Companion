@@ -1,0 +1,4093 @@
+# SYNTHETIC fixture — explicit P1.1 passable-edge regression; NOT an archived F6 export.
+schemaVersion: 5
+turn: 2
+side: 0
+selectedUnitId: 8
+missionContext:
+  schemaVersion: 1
+  missionType: STR_ALIEN_BASE_ASSAULT
+  missionClass: alien_base
+  siteKind: ufo_site
+map:
+  width: 40
+  height: 40
+  depth: 1
+terrain:
+  memoryNote: SYNTHETIC P1.1 regression — passable structural edges at row y=27;
+    not a live engine capture.
+  tiles:
+    - p:
+        - 15
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 18
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 19
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 20
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 21
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 22
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 23
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 24
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 25
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 26
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+      north:
+        walk: 255
+        blockSight: true
+    - p:
+        - 31
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+      north:
+        walk: 255
+        blockSight: true
+    - p:
+        - 32
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+      north:
+        walk: 255
+        blockSight: true
+    - p:
+        - 33
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+      north:
+        walk: 255
+        blockSight: true
+    - p:
+        - 34
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+      north:
+        walk: 8
+        blockSight: false
+    - p:
+        - 35
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+      west:
+        walk: 8
+        blockSight: false
+    - p:
+        - 36
+        - 27
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 28
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 29
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 30
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 31
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 32
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 33
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 34
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 35
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 36
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 15
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 16
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 17
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 18
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 19
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 20
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 21
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 22
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 23
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 24
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 25
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 26
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 27
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 28
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 29
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 30
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 31
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 32
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 33
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p:
+        - 34
+        - 37
+        - 0
+      disc: 7
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+units:
+  - id: 8
+    faction: 0
+    originalFaction: 0
+    position:
+      - 25
+      - 28
+      - 0
+    name: Leon Laroche
+    health: 44
+    timeUnits: 59
+    kneeled: false
+    activeHand: STR_RIGHT_HAND
+    hands:
+      right:
+        itemType: STR_HEAVY_CANNON
+        battleType: 1
+      left: null
+    inventory: []
+    readiness:
+      summary: ready_to_act
+      engineStatus: standing
+      liveRosterSoldier: true
+      engineActingUnitAvailable: true
+      observationNote: Synthetic fixture; readiness fields satisfy v5 validation only.
+eventLog:
+  sessionId: a1b2c3d4e5f6789012345678abcdef01
+  oldestSeq: 0
+  latestSeq: 0
+  droppedCount: 0
+  events: []
+perceptionLog:
+  sessionId: a1b2c3d4e5f6789012345678abcdef01
+  oldestSeq: 0
+  latestSeq: 0
+  droppedCount: 0
+  events: []

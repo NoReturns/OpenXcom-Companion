@@ -21,6 +21,7 @@ const {
   assertProductionCommandRelayJournalUnchanged,
   isolatedCommandRelayStateDir,
 } = require('../lib/relay-test-isolation.cjs');
+const { allowIsolatedRetrieveCommandDelivery } = require('./helpers/on-demand-retrieve-harness.cjs');
 
 function sha256HexLower(buf) {
   return crypto.createHash('sha256').update(buf).digest('hex');
@@ -60,10 +61,14 @@ function buildCommandFixture(snapshotPath, commandId, commandType = 'KNEEL') {
 }
 
 function createRetrieveTestContext(root, snapshotPath, relayStateDir, hooks = {}) {
+  const deliveryGate = hooks.assertCommandDeliveryAllowed
+    ?? hooks.contextOptions?.assertCommandDeliveryAllowed
+    ?? allowIsolatedRetrieveCommandDelivery();
   const ctx = createOnDemandRelayContext({
     snapshotPath,
     commandRelayStateDir: relayStateDir,
     dryRun: hooks.dryRun ?? false,
+    assertCommandDeliveryAllowed: deliveryGate,
     contentClient: {
       paths: {},
       readFile: () => null,
@@ -71,6 +76,7 @@ function createRetrieveTestContext(root, snapshotPath, relayStateDir, hooks = {}
       deleteFile: async () => {},
     },
     ...hooks.contextOptions,
+    assertCommandDeliveryAllowed: deliveryGate,
   });
   if (hooks.readRemoteCommand) {
     ctx.commandWatcher.readRemoteCommand = hooks.readRemoteCommand;

@@ -71,9 +71,15 @@ npm ci
 npm test
 ```
 
-### Test baseline (M1 closeout, experimental)
+### Test baseline (M1 closeout)
 
-Full suite (`npm test` via `scripts/run-all-node-tests.cjs`): **813** tests, **798** passing, **15** failing at the `97face1` preparation base. Failures are pre-existing integration/terrain harness issues on some hosts — **the suite is not all-green**. Do not treat M1 as a release-quality gate until those tests are triaged.
+Full suite: `npm test` → `scripts/run-all-node-tests.cjs` (all `test/*.test.cjs`, synthetic relay env via `test/helpers/synthetic-relay-env.cjs`).
+
+The runner passes **`--test-concurrency=1`** to Node’s test runner so **only one test file runs at a time**. That is intentional on this repo: many harnesses spawn real `companion-on-demand-relay-daemon.cjs` children and wait up to ~15s for live startup verification. When Node runs test files in parallel (the default when concurrency is unset), concurrent subprocess spawns contend for CPU and process discovery; readiness often misses the deadline even though isolated runs pass. Serial test-file execution is the **deterministic baseline** for the canonical `npm test` command. A full run typically takes on the order of **several minutes** (often roughly 4–5 minutes on Windows with the current 813-test count); runtime varies by machine load.
+
+This does **not** imply that every OS must use serial execution forever — only that **this** runner opts into serial test-file scheduling so integration coverage stays stable while still exercising live daemon reuse inside each file (`COMPANION_ON_DEMAND_TEST_NO_LIVE_REUSE` is cleared for the suite).
+
+With the M1 repair batches (A–D) applied, expect **813** tests and **813** passing when run via `npm test` in a clean `m0-publish/` tree — no active game or live relay required beyond what individual tests spawn in dry-run/isolated state dirs.
 
 ## Repository layout
 

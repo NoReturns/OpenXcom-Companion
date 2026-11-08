@@ -16,6 +16,7 @@ const { writeJsonAtomic, writeTextAtomic } = require('../lib/local-atomic.cjs');
 const { loadCommandJournal, persistCommandJournal, markCommandRecord } = require('../lib/command-journal.cjs');
 const { createGhApiCallLog: createGhApiCallLogDirect } = require('../lib/github-api-instrumentation.cjs');
 const { isolatedCommandRelayStateDir } = require('../lib/relay-test-isolation.cjs');
+const { allowIsolatedRetrieveCommandDelivery } = require('./helpers/on-demand-retrieve-harness.cjs');
 const { loadAndValidateSnapshotFromText } = require('../lib/tactical-publish.cjs');
 const YAML = require('yaml');
 const crypto = require('node:crypto');
@@ -159,6 +160,7 @@ describe('M1-25G2 retrieve quota and journal correction', () => {
       snapshotPath,
       commandRelayStateDir: path.join(root, 'relay-state-kneel'),
       dryRun: false,
+      assertCommandDeliveryAllowed: allowIsolatedRetrieveCommandDelivery(),
       contentClient: {
         paths: {},
         readFile: () => null,

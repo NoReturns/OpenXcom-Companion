@@ -21,7 +21,11 @@ const {
 const { decodeTerrainTiles } = require('../lib/terrain-brief.cjs');
 const { computeFocusWindow } = require('../lib/terrain-map-brief.cjs');
 
-const LIVE_SNAPSHOT = path.join(__dirname, '..', '..', '..', 'local', 'm0', 'tactical-live.yaml');
+const P11_SYNTHETIC_FIXTURE = path.join(
+  __dirname,
+  'fixtures',
+  'p11-leon-passable-edges-synthetic-v5.yaml',
+);
 const LEON_POS = [25, 28, 0];
 
 function tileAt(tactical, x, y, z) {
@@ -29,11 +33,11 @@ function tileAt(tactical, x, y, z) {
   return tiles.find((t) => t.p[0] === x && t.p[1] === y && t.p[2] === z);
 }
 
-describe('P1.1 passable structural edges (Leon alien-base fixture)', () => {
-  const liveIt = fs.existsSync(LIVE_SNAPSHOT) ? it : it.skip;
+describe('P1.1 passable structural edges (Leon alien-base synthetic regression fixture)', () => {
+  const fixtureText = () => fs.readFileSync(P11_SYNTHETIC_FIXTURE, 'utf8');
 
-  liveIt('edge glyphs distinguish passable structural parts from impassable walls', () => {
-    const tactical = loadAndValidateSnapshotFromText(fs.readFileSync(LIVE_SNAPSHOT, 'utf8'), YAML);
+  it('edge glyphs distinguish passable structural parts from impassable walls', () => {
+    const tactical = loadAndValidateSnapshotFromText(fixtureText(), YAML);
     const leon = tactical.units.find((u) => u.id === 8);
     assert.ok(leon);
     assert.deepEqual(leon.position, LEON_POS);
@@ -57,8 +61,8 @@ describe('P1.1 passable structural edges (Leon alien-base fixture)', () => {
     assert.notEqual(northEdgeGlyph(openNorth), 'W');
   });
 
-  liveIt('interleaved map shows -p- and p for Leon 20×20 window without x=35', () => {
-    const tactical = loadAndValidateSnapshotFromText(fs.readFileSync(LIVE_SNAPSHOT, 'utf8'), YAML);
+  it('interleaved map shows -p- and p for Leon 20×20 window without x=35', () => {
+    const tactical = loadAndValidateSnapshotFromText(fixtureText(), YAML);
     const leon = tactical.units.find((u) => u.id === 8);
     const crop = computeFocusWindow(tactical.map, leon.position, DEFAULT_WINDOW_SIZE);
     assert.equal(crop.x0, 15);
@@ -103,8 +107,8 @@ describe('P1.1 passable structural edges (Leon alien-base fixture)', () => {
     assert.equal(level.layers.edgeWest[relY(27)].length, crop.width);
   });
 
-  liveIt('terrainMapBrief stays within byte ceiling with new edge glyphs', () => {
-    const tactical = loadAndValidateSnapshotFromText(fs.readFileSync(LIVE_SNAPSHOT, 'utf8'), YAML);
+  it('terrainMapBrief stays within byte ceiling with new edge glyphs', () => {
+    const tactical = loadAndValidateSnapshotFromText(fixtureText(), YAML);
     const leon = tactical.units.find((u) => u.id === 8);
     const brief = buildTerrainMapBrief(tactical, {
       focus: {
