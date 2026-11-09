@@ -171,9 +171,10 @@ const EQUIPMENT_ITEM_KEYS = new Set([
   'fuseTimer',
   'explosiveKind',
   'medikitCharges',
+  'researchUsable',
 ]);
-const LOADED_KEYS = new Set(['ammoType', 'rounds', 'battleItemId']);
-const NESTED_AMMO_KEYS = new Set(['battleItemId', 'ammoType', 'rounds']);
+const LOADED_KEYS = new Set(['ammoType', 'rounds', 'battleItemId', 'researchUsable']);
+const NESTED_AMMO_KEYS = new Set(['battleItemId', 'ammoType', 'rounds', 'researchUsable']);
 const MEDIKIT_CHARGES_KEYS = new Set(['heal', 'painKiller', 'stimulant']);
 const INVENTORY_SLOT_TYPES = new Set(['slot', 'hand', 'ground']);
 const HAND_IDENTITY = new Set(['right', 'left']);
@@ -193,6 +194,7 @@ const INVENTORY_ENTRY_KEYS = new Set([
   'fuseTimer',
   'explosiveKind',
   'medikitCharges',
+  'researchUsable',
 ]);
 const MAX_EVENT_LOG_EVENTS = 256;
 const MAX_SESSION_ID_LENGTH = 32;
@@ -236,6 +238,7 @@ const GROUND_ITEM_ENTRY_KEYS = new Set([
   'quantity',
   'primed',
   'concealedOnTile',
+  'researchUsable',
 ]);
 const ALLOWED_GROUND_OBS_STATUS = new Set(['CONFIRMED_IN_LOS', 'REMEMBERED_OFF_LOS']);
 const ALLOWED_GROUND_ITEM_CATEGORIES = new Set([
@@ -629,6 +632,9 @@ function validateLoaded(raw, label) {
       allowNegative: false,
     });
   }
+  if (Object.prototype.hasOwnProperty.call(raw, 'researchUsable')) {
+    loaded.researchUsable = requireBool(raw.researchUsable, `${label}.researchUsable`);
+  }
   return loaded;
 }
 
@@ -640,7 +646,7 @@ function validateNestedAmmo(raw, label) {
   assert(Object.prototype.hasOwnProperty.call(raw, 'battleItemId'), `${label}.battleItemId required`);
   assert(Object.prototype.hasOwnProperty.call(raw, 'ammoType'), `${label}.ammoType required`);
   assert(Object.prototype.hasOwnProperty.call(raw, 'rounds'), `${label}.rounds required`);
-  return {
+  const out = {
     battleItemId: requireInt(raw.battleItemId, `${label}.battleItemId`, {
       min: 0,
       max: MAX_BATTLE_ITEM_ID,
@@ -649,6 +655,10 @@ function validateNestedAmmo(raw, label) {
     ammoType: requireString(raw.ammoType, `${label}.ammoType`, { maxLength: MAX_ITEM_TYPE_LENGTH }),
     rounds: requireInt(raw.rounds, `${label}.rounds`, { min: 0, allowNegative: false }),
   };
+  if (Object.prototype.hasOwnProperty.call(raw, 'researchUsable')) {
+    out.researchUsable = requireBool(raw.researchUsable, `${label}.researchUsable`);
+  }
+  return out;
 }
 
 function validateMedikitCharges(raw, label) {
@@ -841,6 +851,9 @@ function validateEquipmentItem(raw, label) {
   if (Object.prototype.hasOwnProperty.call(raw, 'medikitCharges')) {
     item.medikitCharges = validateMedikitCharges(raw.medikitCharges, `${label}.medikitCharges`);
   }
+  if (Object.prototype.hasOwnProperty.call(raw, 'researchUsable')) {
+    item.researchUsable = requireBool(raw.researchUsable, `${label}.researchUsable`);
+  }
   assertEquipmentFieldSemantics(item, label, raw);
   return item;
 }
@@ -927,6 +940,9 @@ function validateGroundInventory(raw, label) {
     if (Object.prototype.hasOwnProperty.call(entry, 'medikitCharges')) {
       row.medikitCharges = validateMedikitCharges(entry.medikitCharges, `${entryLabel}.medikitCharges`);
     }
+    if (Object.prototype.hasOwnProperty.call(entry, 'researchUsable')) {
+      row.researchUsable = requireBool(entry.researchUsable, `${entryLabel}.researchUsable`);
+    }
     assertEquipmentFieldSemantics(row, entryLabel, entry);
     return row;
   });
@@ -1004,6 +1020,9 @@ function validateInventory(raw, label) {
     }
     if (Object.prototype.hasOwnProperty.call(entry, 'medikitCharges')) {
       row.medikitCharges = validateMedikitCharges(entry.medikitCharges, `${entryLabel}.medikitCharges`);
+    }
+    if (Object.prototype.hasOwnProperty.call(entry, 'researchUsable')) {
+      row.researchUsable = requireBool(entry.researchUsable, `${entryLabel}.researchUsable`);
     }
     assertEquipmentFieldSemantics(row, entryLabel, entry);
     return row;
@@ -1836,6 +1855,13 @@ function validateGroundItemEntry(raw, obsIndex, itemIndex) {
   }
   if (Object.prototype.hasOwnProperty.call(raw, 'concealedOnTile')) {
     out.concealedOnTile = requireBool(raw.concealedOnTile, `${label}.concealedOnTile`);
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'researchUsable')) {
+    assert(
+      itemCategory !== 'additional_ground_item',
+      `${label} must not include researchUsable for concealed stack rows`,
+    );
+    out.researchUsable = requireBool(raw.researchUsable, `${label}.researchUsable`);
   }
   return out;
 }

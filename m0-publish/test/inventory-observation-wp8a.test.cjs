@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const YAML = require('yaml');
 const {
   loadAndValidateSnapshotFromText,
+  buildRelayPayload,
   ValidationError,
   FACTION_PLAYER,
   BT_FIREARM,
@@ -162,6 +163,115 @@ describe('WP8A inventory observation (tactical-publish)', () => {
       ],
     }));
     loadAndValidateSnapshotFromText(YAML.stringify(doc), YAML);
+  });
+
+  it('accepts groundInventory researchUsable on actionable tile rows', () => {
+    const doc = snapshotDoc(baseUnit({
+      hands: { right: null, left: null },
+      inventory: [],
+      groundInventory: [
+        {
+          battleItemId: 501,
+          slot: 'STR_GROUND',
+          inventorySlotType: 'ground',
+          inventoryX: 0,
+          inventoryY: 0,
+          itemType: 'STR_PLASMA_RIFLE',
+          battleType: BT_FIREARM,
+          researchUsable: false,
+        },
+      ],
+    }));
+    loadAndValidateSnapshotFromText(YAML.stringify(doc), YAML);
+  });
+
+  it('accepts groundItems researchUsable on identified primary rows', () => {
+    const doc = snapshotDoc(baseUnit({ hands: { right: null, left: null }, inventory: [] }));
+    doc.groundItems.observations = [
+      {
+        position: { x: 1, y: 1, z: 0 },
+        observationStatus: 'CONFIRMED_IN_LOS',
+        items: [
+          {
+            itemCategory: 'firearm',
+            battleType: BT_FIREARM,
+            itemType: 'STR_RIFLE',
+            researchUsable: true,
+          },
+        ],
+      },
+    ];
+    loadAndValidateSnapshotFromText(YAML.stringify(doc), YAML);
+  });
+
+  it('rejects researchUsable on concealed additional_ground_item rows', () => {
+    const doc = snapshotDoc(baseUnit({ hands: { right: null, left: null }, inventory: [] }));
+    doc.groundItems.observations = [
+      {
+        position: { x: 1, y: 1, z: 0 },
+        observationStatus: 'CONFIRMED_IN_LOS',
+        items: [
+          {
+            itemCategory: 'additional_ground_item',
+            battleType: BT_AMMO,
+            concealedOnTile: true,
+            researchUsable: true,
+          },
+        ],
+      },
+    ];
+    assert.throws(
+      () => loadAndValidateSnapshotFromText(YAML.stringify(doc), YAML),
+      ValidationError,
+    );
+  });
+
+  it('accepts carried researchUsable on hands inventory and nested ammo', () => {
+    const doc = snapshotDoc(baseUnit({
+      hands: {
+        right: {
+          battleItemId: 600,
+          itemType: 'STR_RIFLE',
+          battleType: BT_FIREARM,
+          inventorySlotType: 'hand',
+          slot: 'STR_RIGHT_HAND',
+          hand: 'right',
+          researchUsable: true,
+          nestedAmmo: {
+            battleItemId: 601,
+            ammoType: 'STR_RIFLE_CLIP',
+            rounds: 12,
+            researchUsable: false,
+          },
+          loaded: {
+            ammoType: 'STR_RIFLE_CLIP',
+            rounds: 12,
+            battleItemId: 601,
+            researchUsable: false,
+          },
+        },
+        left: null,
+      },
+      inventory: [
+        {
+          battleItemId: 602,
+          slot: 'STR_BELT',
+          inventorySlotType: 'slot',
+          inventoryX: 0,
+          inventoryY: 0,
+          itemType: 'STR_RIFLE_CLIP',
+          battleType: BT_AMMO,
+          researchUsable: true,
+        },
+      ],
+    }));
+    const tactical = loadAndValidateSnapshotFromText(YAML.stringify(doc), YAML);
+    const relay = buildRelayPayload(tactical, '2026-11-09T12:00:00.000Z');
+    const unit = relay.tactical.units[0];
+    assert.equal(unit.hands.right.researchUsable, true);
+    assert.equal(unit.hands.right.nestedAmmo.researchUsable, false);
+    assert.equal(unit.hands.right.loaded.researchUsable, false);
+    assert.equal(unit.inventory[0].researchUsable, true);
   });
 
   it('accepts medikit charges', () => {
