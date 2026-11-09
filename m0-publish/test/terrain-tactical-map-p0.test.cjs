@@ -17,7 +17,11 @@ const {
   VIS_UNDISCOVERED,
 } = require('../lib/terrain-tactical-map.cjs');
 
-const LIVE_SNAPSHOT = path.join(__dirname, '..', '..', '..', 'local', 'm0', 'tactical-live.yaml');
+const FIXTURE_NOVOSIBIRSK_OSO = path.join(
+  __dirname,
+  'fixtures',
+  'terrain-map-brief-novosibirsk-oso-v5.yaml',
+);
 
 function baseTactical(overrides = {}) {
   return {
@@ -144,8 +148,6 @@ describe('terrain tactical map P0 (edge-joined)', () => {
     }
   });
 
-  const liveIt = fs.existsSync(LIVE_SNAPSHOT) ? it : it.skip;
-
   it('edge-interleaved map keeps walkable floors separate from wall edges', () => {
     const tactical = baseTactical({
       map: { width: 3, height: 2, depth: 1 },
@@ -168,26 +170,20 @@ describe('terrain tactical map P0 (edge-joined)', () => {
     assert.ok(northRow.includes('---'), 'north impassable edges render as ---');
   });
 
-  liveIt('Novosibirsk Oso house crop shows north wall belt and does not invent doors from TU', () => {
-    const text = fs.readFileSync(LIVE_SNAPSHOT, 'utf8');
+  it('Novosibirsk Oso house crop shows north wall belt and does not invent doors from TU', () => {
+    const text = fs.readFileSync(FIXTURE_NOVOSIBIRSK_OSO, 'utf8');
     const tactical = loadAndValidateSnapshotFromText(text, YAML);
     const view = buildTacticalMapView(tactical, {
       levels: [0],
       crop: { x0: 12, y0: 26, x1: 17, y1: 32 },
     });
     const level = view.levels[0].layers;
-    const osoMarker = level.tacticalWithUnits[4]?.[2];
-    if (osoMarker !== '@') {
-      assert.ok(true, 'live snapshot is not Novosibirsk Oso fixture; skipping house belt assertions');
-      return;
-    }
+    assert.equal(level.tacticalWithUnits[4]?.[2], '@', 'Oso at 14,30 relative y=30-26=4 x=14-12=2');
     assert.equal(level.edgeNorth[1][1], 'W', '13,27 north wall impassable');
     assert.equal(level.edgeNorth[1][3], 'W', '15,27 north wall impassable');
     const northAt1529 = level.edgeNorth[3][3];
     assert.ok(northAt1529 === 'p' || northAt1529 === '.', '15,29 north is passable structural or open boundary, not semantic door');
     assert.notEqual(northAt1529, 'D');
-    const oso = level.tacticalWithUnits[4][2];
-    assert.equal(oso, '@', 'Oso at 14,30 relative y=30-26=4 x=14-12=2');
     const il = view.levels[0].interleavedAscii;
     const row30 = il.annotatedRows.find((r) => r.y === 30 && r.kind === 'floor_row').text;
     assert.ok(row30.includes('@'), 'Oso on interleaved floor row');

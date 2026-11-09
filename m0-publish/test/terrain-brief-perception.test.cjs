@@ -19,6 +19,11 @@ const { PackedTerrainError } = require('../lib/terrain-packed-v1.cjs');
 const { loadAndValidateSnapshotFromText } = require('../lib/tactical-publish.cjs');
 
 const FIXTURE_V5 = path.join(__dirname, 'fixtures', 'valid-v5.yaml');
+const FIXTURE_NEAR_FOCUS_DENSITY = path.join(
+  __dirname,
+  'fixtures',
+  'terrain-brief-near-focus-density-v5.yaml',
+);
 
 function baseTactical(overrides = {}) {
   return {
@@ -255,16 +260,16 @@ describe('terrainBrief fog-of-war invariants', () => {
   });
 
   it('keeps semantic near-focus detail on live-scale discovered density within budget', () => {
-    const livePath = path.join(__dirname, '../../../local/m0/tactical-live.yaml');
-    if (!fs.existsSync(livePath)) {
-      return;
-    }
-    const tactical = loadAndValidateSnapshotFromText(fs.readFileSync(livePath, 'utf8'), YAML);
+    const tactical = loadAndValidateSnapshotFromText(
+      fs.readFileSync(FIXTURE_NEAR_FOCUS_DENSITY, 'utf8'),
+      YAML,
+    );
     const brief = buildTerrainBrief(tactical);
     assert.ok(Buffer.byteLength(JSON.stringify(brief), 'utf8') <= DEFAULT_MAX_BYTES);
     assert.ok(Array.isArray(brief.nearFocusTiles));
     assert.ok(brief.nearFocusTiles.length > 0);
     assert.ok(brief.nearFocusCandidateCount > brief.nearFocusTiles.length);
+    assert.ok(brief.nearFocusTiles.some((t) => (t.sightBlocks ?? 0) > 0 || (t.moveBlocks ?? 0) > 0));
   });
 
   it('labels adjacent known and unknown via nearFocus plus visibilityTotals', () => {

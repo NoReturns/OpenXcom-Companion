@@ -24,15 +24,22 @@ const {
 const { parseCommandBinding } = require('../lib/command-binding.cjs');
 const { sha256HexLower } = require('../lib/briefing-snapshot.cjs');
 
-const LIVE_SNAPSHOT = path.join(__dirname, '..', '..', '..', 'local', 'm0', 'tactical-live.yaml');
+const FIXTURE_NOVOSIBIRSK_OSO = path.join(
+  __dirname,
+  'fixtures',
+  'terrain-map-brief-novosibirsk-oso-v5.yaml',
+);
+
+function loadNovosibirskFixture() {
+  const text = fs.readFileSync(FIXTURE_NOVOSIBIRSK_OSO, 'utf8');
+  const tactical = loadAndValidateSnapshotFromText(text, YAML);
+  const digest = sha256HexLower(Buffer.from(text, 'utf8'));
+  return { text, tactical, digest };
+}
 
 describe('terrainMapBrief P1 relay', () => {
-  const liveIt = fs.existsSync(LIVE_SNAPSHOT) ? it : it.skip;
-
-  liveIt('Novosibirsk relay includes edge-interleaved map with Oso and wall belt', () => {
-    const text = fs.readFileSync(LIVE_SNAPSHOT, 'utf8');
-    const tactical = loadAndValidateSnapshotFromText(text, YAML);
-    const digest = sha256HexLower(Buffer.from(text, 'utf8'));
+  it('Novosibirsk relay includes edge-interleaved map with Oso and wall belt', () => {
+    const { tactical, digest } = loadNovosibirskFixture();
     const snapshotId = computeSnapshotId(tactical);
     const relay = buildRelayPayload(
       tactical,
@@ -50,16 +57,17 @@ describe('terrainMapBrief P1 relay', () => {
     assert.equal(relay.terrainMapBrief.presentation, 'edge_interleaved');
     assert.equal(relay.terrainMapBrief.provenance, PROVENANCE_LIVE_EXPORT);
     assert.ok(relay.terrainMapBrief.byteLength <= MAX_TERRAIN_MAP_BRIEF_BYTES);
+    assert.equal(relay.terrainMapBrief.focus.soldierName, 'Oso Vega');
+    assert.deepEqual(relay.terrainMapBrief.focus.position, [14, 30, 0]);
     assert.ok(relay.terrainMapBrief.mapText.includes('@'));
-    assert.ok(relay.terrainMapBrief.mapText.includes('---'));
+    assert.match(relay.terrainMapBrief.mapText, /^27n.*---/m, 'north edge row shows impassable wall belt (---)');
+    assert.match(relay.terrainMapBrief.mapText, /^30\s+.*@/m, 'Oso stands on walkable floor row');
     assert.ok(!relay.terrainMapBrief.mapText.includes('wwwwowwooo'), 'composite wall tiles must not appear');
     parseCommandBinding(relay.commandBinding);
   });
 
-  liveIt('terrainMapBrief survives adaptive shrink on Novosibirsk live payload', () => {
-    const text = fs.readFileSync(LIVE_SNAPSHOT, 'utf8');
-    const tactical = loadAndValidateSnapshotFromText(text, YAML);
-    const digest = sha256HexLower(Buffer.from(text, 'utf8'));
+  it('terrainMapBrief survives adaptive shrink on Novosibirsk pinned payload', () => {
+    const { tactical, digest } = loadNovosibirskFixture();
     const snapshotId = computeSnapshotId(tactical);
     const relay = buildRelayPayload(
       tactical,
