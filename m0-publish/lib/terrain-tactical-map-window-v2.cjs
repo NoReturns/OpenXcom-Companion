@@ -65,6 +65,40 @@ function friendlyOccupiedLevels(tactical) {
   return [...levels].sort((a, b) => a - b);
 }
 
+/**
+ * Same (x,y) discovered floor grav on primaryZ and both adjacent Z — engine grav column geometry only.
+ * Undiscovered cells absent from byPos; open air never qualifies.
+ */
+function gravColumnSymmetricLevelsInWindow(crop, primaryZ, mapDepth, byPos) {
+  const confirmed = new Set();
+  const zLo = primaryZ - 1;
+  const zHi = primaryZ + 1;
+  if (zLo < 0 || zHi >= mapDepth) {
+    return confirmed;
+  }
+  for (let y = crop.y0; y <= crop.y1; y += 1) {
+    for (let x = crop.x0; x <= crop.x1; x += 1) {
+      const tFocus = byPos.get(tileKey(x, y, primaryZ));
+      const tLo = byPos.get(tileKey(x, y, zLo));
+      const tHi = byPos.get(tileKey(x, y, zHi));
+      if (
+        tFocus
+        && tLo
+        && tHi
+        && isFloorGravLiftTile(tFocus)
+        && isFloorGravLiftTile(tLo)
+        && isFloorGravLiftTile(tHi)
+      ) {
+        confirmed.add(zLo);
+        confirmed.add(primaryZ);
+        confirmed.add(zHi);
+        return confirmed;
+      }
+    }
+  }
+  return confirmed;
+}
+
 function verticalInterestLevels(tactical, crop, primaryZ, byPos) {
   const extra = new Set();
   const { map } = tactical;
@@ -101,9 +135,26 @@ function selectLevels(tactical, focus, crop, byPos, options = {}) {
   const maxExtra = options.maxExtraLevels ?? 2;
   const friendlyLevels = friendlyOccupiedLevels(tactical);
   const verticalLevels = verticalInterestLevels(tactical, crop, primaryZ, byPos);
+  const gravSymmetric = gravColumnSymmetricLevelsInWindow(
+    crop,
+    primaryZ,
+    tactical.map.depth,
+    byPos,
+  );
+  const gravTripleInWindow = gravSymmetric.size === 3;
+  const gravColumnExpanded = gravTripleInWindow && maxExtra >= 1;
+  const effectiveMaxExtra = gravColumnExpanded ? Math.max(maxExtra, 2) : maxExtra;
+
   const included = new Set([primaryZ]);
+  if (gravColumnExpanded) {
+    for (const z of [...gravSymmetric].sort((a, b) => a - b)) {
+      if (z !== primaryZ) {
+        included.add(z);
+      }
+    }
+  }
   for (const z of verticalLevels) {
-    if (z !== primaryZ && included.size < 1 + maxExtra) {
+    if (z !== primaryZ && included.size < 1 + effectiveMaxExtra) {
       included.add(z);
     }
   }
@@ -122,10 +173,13 @@ function selectLevels(tactical, focus, crop, byPos, options = {}) {
     omittedLevels: omitted,
     friendlyLevels,
     onDemandLevels: [...onDemand].sort((a, b) => a - b),
+    ...(gravColumnExpanded ? { gravColumnInWindow: true } : {}),
     note:
       onDemand.size > 0
         ? 'Additional Z levels occupied by friendlies or outside window require on-demand terrain-query.'
-        : 'Primary and vertically linked levels included in this publish.',
+        : gravColumnExpanded
+          ? 'Three-level grav column at focus: adjacent grav-linked Z levels included (observation only; engine pathfinding authoritative).'
+          : 'Primary and vertically linked levels included in this publish.',
   };
 }
 
@@ -398,6 +452,7 @@ module.exports = {
   VIS_UNDISCOVERED,
   DOOR_STATE_UNKNOWN_OFF_LOS,
   computeFocusWindow,
+  gravColumnSymmetricLevelsInWindow,
   selectLevels,
   collectVerticalTransitions,
   buildTacticalMapWindowV2,

@@ -197,7 +197,7 @@ Optional MOVE fields: `starting_position`, `remaining_tu`, `kneeled`, `movement_
 |---------|--------|
 | Verified success | Refresh binding; then publish the next command with a new `command_id`. |
 | `INTERRUPTED` / `FAILED` | Replan from **`final_position`**, not the original destination. New binding + new `command_id`. |
-| Short of destination near **ramp / stairs / Skyranger deck / grav lift** | Stage **short** MOVEs: foot tile → ramp/stair → correct **z** (often `z:0` ground ↔ `z:1` cabin). Confirm each step’s `final_position` before chaining. |
+| Short of destination near **ramp / stairs / Skyranger deck / grav lift** | Stage **short** MOVEs: foot tile → ramp/stair → correct **z** (ground ↔ deck varies by mission — confirm from `final_position`, not map lore). Confirm each step’s `final_position` before chaining. |
 | Wrong **z** on destination | Command a destination with the intended **z**; do not assume same `(x,y)` implies the right level. |
 
 Fair-play: use floor **`G`** / **`g`** and `terrainFullAsciiBattlefield.hints.gravLiftStructures` for **planning** only (`pathfindingGuaranteed: false` on vertical links). ASCII does not guarantee walkability — engine results and refreshed unit positions are authoritative.
@@ -322,12 +322,24 @@ Read **`o |o`**: open cell `(0,0)`, wall between, open `(1,0)`. **`@`** at `(1,1
 
 **Vertical links:** `terrainFullAsciiBattlefield.hints.gravLiftStructures` (when present) + **C floor** `G`/`g` on each level — do not read grav from tactical **`:`** alone or from interleaved floor rows.
 
+### `tacticalMapWindowV2` — multi-Z coverage (P1D)
+
+Relay field `tacticalMapWindowV2` ships **24×24** layer rows (max **32 KiB** JSON). `levelSelection.includedLevels` is **observational geometry only** — not a path guarantee. `verticalTransitions` and floor **`G`/`g`** use `pathfindingGuaranteed: false`; **engine MOVE / `Pathfinding::calculate`** decides legal movement.
+
+**Grav column (three levels):** When the focus window contains a **discovered** same-`(x,y)` grav-lift **floor** on focus **Z** and both adjacent **Z** (`structureMeta.floorGravLift`), relay default publish (`maxExtraLevels: 1`) may include **all three** levels (`gravColumnInWindow: true`). An explicit **`maxExtraLevels: 0`** keeps **focus Z only** even when a triple column exists. Undiscovered cells (`?`) never create links. Open-air **`A`** neighbors do not imply vertical connectivity.
+
+**Omitted levels:** See `levelSelection.omittedLevels` and `onDemandLevels`. Pull them with **`m0/terrain-query.json`**: set `zMin` / `zMax` to the missing **Z** band, use `profile: compact`, and match relay `snapshot_id` / sidecar YAML binding (P0A).
+
+**Compact elevation (`b.e`):** In terrain-query schema v2 **compact** cells, stair/ramp slope uses exported terrain level in **`b.e`** (verbose uses `body.elev`). v2 layer rows **do not** include numeric `elev`; use query or packed YAML for slope planning — still not a movement guarantee.
+
+**Craft / Skyranger:** Interior deck **Z** is mission-dependent (`_craftZ` at generation). **Never assume cabin `z=1`**; read unit `position[2]`, v2 focus `z`, and confirm with staged MOVE `final_position`.
+
 ### Fair-play (movement vs map)
 
 - `?` ≠ empty. `o` ≠ guaranteed MOVE path. Visibility ≠ walkability. `w` in composite ≠ full edge diagnostics — use **C** when ambiguious.
 - Off-LOS `U` doors: state unknown. No smoke/fire/damage in ASCII export.
 
-Optional: `m0/terrain-query.json` with `snapshot_id`, `center`, `radius` or `rectangle`.
+Optional: `m0/terrain-query.json` with `snapshot_id`, `center`, `radius` or `rectangle`, and `zMin`/`zMax` when v2 omitted a level.
 
 ---
 
