@@ -7,11 +7,24 @@ const {
   VIS_CURRENT,
   VIS_DISCOVERED_OFF_LOS,
 } = require('./terrain-brief.cjs');
-const { computeSnapshotId } = require('./tactical-publish.cjs');
+const {
+  verifyTerrainQuerySnapshotBinding,
+  resolveTerrainQueryTactical,
+} = require('./terrain-query-snapshot-identity.cjs');
+const {
+  DEFAULT_MAX_RESPONSE_BYTES,
+  LEGACY_MAX_RESPONSE_BYTES,
+  HARD_MAX_RESPONSE_BYTES,
+  fitTerrainQueryResponse,
+  resolveMaxResponseBytes,
+  resolveQueryProfile,
+  responseByteLength,
+} = require('./terrain-query-budget.cjs');
 
 const MAX_QUERY_RADIUS = 12;
 const MAX_RECT_SIDE = 25;
-const MAX_RESPONSE_BYTES = 8 * 1024;
+/** @deprecated alias — use DEFAULT_MAX_RESPONSE_BYTES */
+const MAX_RESPONSE_BYTES = DEFAULT_MAX_RESPONSE_BYTES;
 const VIS_UNKNOWN = 'UNKNOWN';
 
 function assert(condition, message) {
@@ -55,6 +68,16 @@ function validateQueryRequest(request) {
   if (request.zMin !== undefined && request.zMax !== undefined) {
     assert(request.zMin <= request.zMax, 'zMin must be <= zMax');
   }
+  if (request.profile !== undefined) {
+    assert(request.profile === 'compact' || request.profile === 'verbose', 'profile must be compact or verbose');
+  }
+  if (request.responseProfile !== undefined) {
+    assert(request.responseProfile === 'compact' || request.responseProfile === 'verbose',
+      'responseProfile must be compact or verbose');
+  }
+  if (request.maxResponseBytes !== undefined) {
+    assertNumberInRange(request.maxResponseBytes, 'maxResponseBytes', 512, HARD_MAX_RESPONSE_BYTES);
+  }
 }
 
 function isPlainObject(value) {
@@ -96,18 +119,35 @@ function tileToQueryCell(tile) {
   };
 }
 
-function executeTerrainQuery(tactical, request) {
+/**
+ * @param {object} tactical — execution context (canonical YAML tactical, or trimmed relay copy when options supply canonicalTactical)
+ * @param {object} request
+ * @param {object} [options]
+ * @param {object} [options.canonicalTactical] — full tactical from validated YAML (required when tactical is relay-trimmed)
+ * @param {string} [options.yamlSha256] — digest of on-disk YAML bytes
+ * @param {object} [options.commandBinding] — relay commandBinding cross-check
+ * @param {object} [options.relayEnvelope] — published relay envelope cross-check
+ */
+function executeTerrainQuery(tactical, request, options = {}) {
   validateQueryRequest(request);
-  const expectedId = computeSnapshotId(tactical);
-  assert(request.snapshot_id === expectedId, 'snapshot_id does not match tactical snapshot');
+  const canonicalTactical = options.canonicalTactical ?? tactical;
+  verifyTerrainQuerySnapshotBinding({
+    request,
+    canonicalTactical,
+    yamlSha256: options.yamlSha256,
+    commandBinding: options.commandBinding,
+    relayEnvelope: options.relayEnvelope,
+    executionTactical: tactical,
+  });
+  const tacticalForQuery = resolveTerrainQueryTactical(canonicalTactical, tactical);
 
-  const { map } = tactical;
+  const { map } = tacticalForQuery;
   assert(request.center.x < map.width && request.center.y < map.height && request.center.z < map.depth,
     'center out of map bounds');
 
   const zMin = request.zMin ?? 0;
   const zMax = request.zMax ?? map.depth - 1;
-  const tiles = decodeTerrainTiles(tactical);
+  const tiles = decodeTerrainTiles(tacticalForQuery);
   const byPos = indexTiles(tiles);
 
   const discovered = [];
@@ -161,47 +201,34 @@ function executeTerrainQuery(tactical, request) {
   discovered.sort((a, b) => sortP(a, b));
   unknown.sort((a, b) => sortP(a, b));
 
-  const response = {
-    schemaVersion: 1,
-    snapshot_id: request.snapshot_id,
+  const maxBytes = resolveMaxResponseBytes(request, options);
+  const profile = resolveQueryProfile(request);
+
+  const response = fitTerrainQueryResponse({
+    snapshotId: request.snapshot_id,
     query: {
       center: request.center,
       ...(request.radius !== undefined ? { radius: request.radius } : {}),
       ...(request.rectangle ? { rectangle: request.rectangle } : {}),
       zMin,
       zMax,
+      ...(profile !== 'verbose' ? { profile } : {}),
     },
     visibilityLabels: {
       currentlyVisible: VIS_CURRENT,
       discoveredOffLos: VIS_DISCOVERED_OFF_LOS,
       unknown: VIS_UNKNOWN,
     },
-    discovered,
-    unknown,
-    warnings: [
-      'Query uses authorized snapshot terrain only.',
-      'UNKNOWN cells were not discovered in the snapshot.',
-      'Off-LOS discovered cells reflect export-time engine state, not historical memory.',
-      'Walk costs and blockSight do not guarantee movement or clear shots.',
-    ],
-    omittedDueToBudget: {},
-  };
+    discoveredFull: discovered,
+    unknownFull: unknown,
+    maxBytes,
+    profileRequested: profile,
+    center: request.center,
+  });
 
-  let serialized = JSON.stringify(response);
-  if (Buffer.byteLength(serialized, 'utf8') <= MAX_RESPONSE_BYTES) {
-    return response;
-  }
-
-  const cap = Math.max(1, Math.floor(discovered.length / 2));
-  response.discovered = discovered.slice(0, cap);
-  response.unknown = unknown.slice(0, Math.max(1, Math.floor(unknown.length / 2)));
-  response.truncated = true;
-  response.omittedDueToBudget = {
-    discovered: discovered.length - response.discovered.length,
-    unknown: unknown.length - response.unknown.length,
-  };
-  serialized = JSON.stringify(response);
-  assert(Buffer.byteLength(serialized, 'utf8') <= MAX_RESPONSE_BYTES, 'terrain query response exceeds max size');
+  const bytes = responseByteLength(response);
+  assert(bytes <= HARD_MAX_RESPONSE_BYTES, 'terrain query internal size guard');
+  assert(bytes <= maxBytes || response.sizeError, 'terrain query response exceeds negotiated budget');
   return response;
 }
 
@@ -209,6 +236,9 @@ module.exports = {
   MAX_QUERY_RADIUS,
   MAX_RECT_SIDE,
   MAX_RESPONSE_BYTES,
+  DEFAULT_MAX_RESPONSE_BYTES,
+  LEGACY_MAX_RESPONSE_BYTES,
+  HARD_MAX_RESPONSE_BYTES,
   VIS_UNKNOWN,
   executeTerrainQuery,
   validateQueryRequest,

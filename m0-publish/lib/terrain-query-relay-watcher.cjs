@@ -3,8 +3,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const YAML = require('yaml');
-const { ValidationError, loadAndValidateSnapshotFromText, computeSnapshotId } = require('./tactical-publish.cjs');
-const { readSnapshotByteBuffer } = require('./briefing-snapshot.cjs');
+const { ValidationError, loadAndValidateSnapshotFromText } = require('./tactical-publish.cjs');
+const { readSnapshotByteBuffer, sha256HexLower } = require('./briefing-snapshot.cjs');
+const { canonicalTerrainQuerySnapshotId } = require('./terrain-query-snapshot-identity.cjs');
 const { executeTerrainQuery } = require('./terrain-query.cjs');
 const {
   loadQueryJournal,
@@ -107,23 +108,40 @@ class TerrainQueryRelayWatcher {
       }
 
       let tactical;
+      let yamlSha256;
       try {
-        tactical = this.loadTactical();
+        const bytes = readSnapshotByteBuffer(this.readFileSync, this.snapshotPath);
+        yamlSha256 = sha256HexLower(bytes);
+        tactical = loadAndValidateSnapshotFromText(bytes.toString('utf8'), YAML);
       } catch (error) {
         const message = error instanceof ValidationError ? error.message : String(error);
         this.log(`Local snapshot invalid for terrain query: ${message}`);
         return;
       }
 
-      const expectedId = computeSnapshotId(tactical);
+      const expectedId = canonicalTerrainQuerySnapshotId(tactical);
       if (snapshotId !== expectedId) {
-        this.log('Terrain query snapshot_id does not match local snapshot; skipping publish.');
+        this.log('Terrain query snapshot_id does not match canonical local YAML snapshot; skipping publish.');
         return;
+      }
+
+      let commandBinding = null;
+      if (typeof this.readRelayCommandBinding === 'function') {
+        try {
+          commandBinding = this.readRelayCommandBinding();
+        } catch {
+          commandBinding = null;
+        }
       }
 
       let response;
       try {
-        response = executeTerrainQuery(tactical, request);
+        response = executeTerrainQuery(tactical, request, {
+          canonicalTactical: tactical,
+          yamlSha256,
+          maxResponseBytes: DEFAULT_TERRAIN_QUERY_RESULT_MAX_BYTES,
+          ...(commandBinding ? { commandBinding } : {}),
+        });
       } catch (error) {
         const message = error instanceof ValidationError ? error.message : String(error);
         this.log(`Terrain query rejected: ${message}`);

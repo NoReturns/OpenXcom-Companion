@@ -35,7 +35,7 @@ const DEFAULT_RULES_REFERENCE_MAX_BYTES = 256 * 1024;
 const DEFAULT_COMMAND_MAX_BYTES = 8 * 1024;
 const DEFAULT_RESULT_MAX_BYTES = 16 * 1024;
 const DEFAULT_TERRAIN_QUERY_MAX_BYTES = 4 * 1024;
-const DEFAULT_TERRAIN_QUERY_RESULT_MAX_BYTES = 12 * 1024;
+const DEFAULT_TERRAIN_QUERY_RESULT_MAX_BYTES = 32 * 1024;
 
 function createGhApiExec(options = {}) {
   let execFileSyncImpl = options.execFileSync ?? execFileSyncHidden;
