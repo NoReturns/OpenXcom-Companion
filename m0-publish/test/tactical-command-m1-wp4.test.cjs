@@ -71,6 +71,10 @@ describe('M1-WP4 PRIME and THROW schema', () => {
     assert.equal(parsePrimeCommand(prime).commandType, COMMAND_TYPE_PRIME);
     assert.equal(parseTacticalCommand(prime).fuseTimer, 3);
 
+    const fuseZero = primeBase({ fuse_timer: 0 });
+    assert.equal(parseTacticalCommand(fuseZero).fuseTimer, 0);
+    validatePrimeAgainstSnapshot(fuseZero, tacticalFixture, snapshotSha);
+
     const thr = {
       ...prime,
       command_id: 'throw-wp4-1',
@@ -143,5 +147,14 @@ describe('M1-WP4 PRIME and THROW schema', () => {
       fuseTimer: 3,
     }, 'hands.right');
     assert.equal(primedHand.fuseTimer, 3);
+
+    const fuseZeroHand = validateEquipmentItem({
+      itemType: 'STR_GRENADE',
+      battleType: 4,
+      primed: true,
+      fuseTimer: 0,
+    }, 'hands.right');
+    assert.equal(fuseZeroHand.fuseTimer, 0);
+    assert.equal(fuseZeroHand.primed, true);
   });
 });
