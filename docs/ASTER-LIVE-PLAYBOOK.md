@@ -191,6 +191,63 @@ If `COMPLETED` disagrees with `final_position` or `destination_reached`, treat t
 
 Optional MOVE fields: `starting_position`, `remaining_tu`, `kneeled`, `movement_stop_reason`, `public_reason`, `snapshot_sha256` (post-move export when available).
 
+**Relay presentation (derived):** Sidecar notifications and `lastMoveOutcomeBrief` may add `terminal_message`, `move_interruption_cause`, and position summaries. These are **presentation only** — `m0/tactical-result.json` stays authoritative.
+
+#### `movement_stop_reason` (engine-confirmed when present)
+
+| Value | Meaning |
+|--------|---------|
+| `hostile_spotted` | Walk halted because a new hostile contact was recorded during movement. |
+| `reaction_fire` | Walk halted because reaction-fire **sequence** started — **not** confirmed hit, damage, or kill. |
+| `path_blocked` | Next step blocked (unit/door/obstruction). |
+| `proximity_grenade` | Proximity grenade triggered during movement. |
+| `insufficient_time_units` / `insufficient_energy` | TU or stamina exhausted during the walk. |
+| `actor_incapacitated` | Actor down or removed from play. |
+| `authority_lost` | Soldier no longer AI-controlled. |
+| `movement_incomplete` | Partial progress without a more specific engine token. |
+| `no_progress` | Failed without advancing. |
+| *(absent on INTERRUPTED/FAILED)* | **Cause not confirmed** — do not invent hostile sighting or reaction damage from coordinates alone. |
+
+**Presentation:** `movement_incomplete` / `no_progress` may appear in operator messages with their engine labels, but `interruption_cause_confirmed` is **false** — generic outcomes, not confirmed tactical events (unlike `hostile_spotted`, `reaction_fire`, etc.).
+
+#### Requested vs actual position
+
+- **Requested** = published MOVE command `destination` (when the delivered command is known).
+- **Stopped / final** = `final_position` on the terminal result — sole replan anchor after `INTERRUPTED` or `FAILED`.
+- Never treat “short of destination” as proof of *why* the walk stopped unless `movement_stop_reason` (or matching `public_reason`) says so.
+
+#### After an interrupted MOVE
+
+1. Run `runMandatoryPostCommandPrelude({ result, command })`.
+2. When `requires_fresh_binding` / `requires_fresh_binding_before_next_publish` is true: refresh binding (**SEND** or post-command `m0/state.json` when published) before the next remote command.
+3. Replan from **`final_position`**, new `command_id`, updated binding — do **not** auto-continue the prior destination.
+4. `reaction_fire` means exposure interrupted the walk; read refreshed unit rows and `perceptionLog` for **observed** damage — the result alone does not prove injury.
+
+#### When fresh tactical state is required
+
+| Situation | Fresh binding / state |
+|-----------|------------------------|
+| Verified `COMPLETED` on commanded tile | Refresh binding before chaining; post-command state may suffice. |
+| `INTERRUPTED` / `FAILED` / unverified `COMPLETED` | **Required** before treating positions or threats as current. |
+| `REJECTED` (never executed) | Fix validation/binding; fresh snapshot only if binding stale — not every reject implies F6. |
+| `EXECUTING` / `ACCEPTED` | Wait — not terminal. |
+
+Programmatic messages: `buildMoveTerminalMessage`, `enrichMoveResultNotification` in `move-result-consumer.cjs`.
+
+### Pre-MOVE exposure and reaction fire (advisory)
+
+Before publishing MOVE (after status, equipment, and hostile-intelligence review):
+
+- **KNOWN THREAT** — current LOS hostiles in `tactical.units[]` (`confirmed_current_los` per fair-play consumer).
+- **POSSIBLE THREAT** — plausible exposure without live LOS proof (open ground, off-LOS approaches).
+- **UNKNOWN EXPOSURE** — unseen tiles/enemies; not automatically safe.
+
+Rules: do not use `last_seen` as live positions; neutrals are not hostile targets; reaction fire may occur **during** the walk (no new command until terminal); prefer staged MOVEs when exposure matters; weigh **campaign/mission context** (not only min casualties or mission score) before accepting exposure — high-risk MOVEs remain valid when strategically justified (AI-owned soldiers only). See `move-exposure-policy.cjs` for the full checklist.
+
+After interrupt: `runMandatoryPostCommandPrelude`, fresh binding when required, replan from `final_position`, re-read contacts — do not blindly repeat the same destination.
+
+Full checklist: `getMoveExposurePolicyMarkdown()` in `companion/m0-publish/lib/move-exposure-policy.cjs` (embedded in `getAiBriefingInstructionsMarkdown()`).
+
 ### MOVE replan (especially ramps, doors, grav lifts)
 
 | Outcome | Action |
@@ -205,6 +262,34 @@ Fair-play: use floor **`G`** / **`g`** and `terrainFullAsciiBattlefield.hints.gr
 **Mandatory workflow (not optional):** After terminal MOVE, run `runMandatoryPostCommandPrelude({ result, command })`. **`readyForNextCommand` / `mayContinuePriorMovePlan`** = safe to **chain the same movement plan** (verified COMPLETED on x/y/z). When **false**, do **not** auto-continue the prior destination — but **`mayPublishAfterFreshBinding`** is still **true** after any terminal MOVE: refresh binding (SEND or post-command `m0/state.json`), then publish a **new** `command_id` from replanned `final_position` (especially actual **z** after interrupted ramp/stair moves). Derived `lastMoveOutcomeBrief` on state is guidance only; `m0/tactical-result.json` stays authoritative.
 
 Programmatic mirror: `companion/m0-publish/lib/move-result-consumer.cjs` (`classifyMoveTerminalOutcome`, `buildMoveOutcomeBrief`).
+
+### Directed fire — result verification
+
+Applies to `SNAP_SHOT`, `AUTO_SHOT`, and `AIMED_SHOT`. Engine `m0/tactical-result.json` remains authoritative; relay notifications may add a derived `message` (presentation only).
+
+Before replanning or publishing the next order:
+
+1. Confirm a **terminal** result for your `command_id` and `session_id`.
+2. Read `status` and `public_reason`; use refreshed `m0/state.json` (or operator **SEND**) for observed combat consequences — not result status alone.
+
+| Status | Meaning |
+|--------|---------|
+| `REJECTED` | Command **did not execute** (validation, preflight, or start failed). |
+| `EXECUTING` / `ACCEPTED` | Not terminal — wait for RETRIEVE. |
+| `COMPLETED` | At least one **projectile launched** — **not** a confirmed hit, damage, or kill. For `AUTO_SHOT`, completion may follow the first projectile while burst animation continues. |
+| `FAILED` | Execution began but did **not** reach successful fire completion (e.g. no projectile when idle). Does **not** imply zero TU expenditure. |
+| `INTERRUPTED` | Fire stopped short (e.g. authority loss). |
+
+**Line of fire (two paths):**
+
+- **Preflight** engine reject: `REJECTED` with `public_reason` *No line of fire to visible target.* — rejected **before** execution.
+- **Post-accept** engine abort: `FAILED` with `public_reason` `STR_NO_LINE_OF_FIRE`.
+
+Do not infer ammunition consumption or TU deltas from `status` alone; use `remaining_tu` on the result and refreshed unit rows when planning the next order.
+
+Ignore `destination_reached` on fire results (shared JSON shape with MOVE).
+
+Programmatic mirror: `companion/m0-publish/lib/fire-result-consumer.cjs` (`buildFireTerminalMessage`, `buildFireOutcomeBrief`).
 
 ---
 
@@ -470,6 +555,8 @@ Replace placeholders with the **current** export; the example digest is for pars
   "state_version": 7
 }
 ```
+
+**Directed-fire commands** (`SNAP_SHOT`, `AUTO_SHOT`, `AIMED_SHOT`, and grenade `THROW`) require **`active_hand`**: `STR_LEFT_HAND` or `STR_RIGHT_HAND` only. Prefer `composeSnapShotCommand`, `composeAutoShotCommand`, `composeAimedShotCommand`, and `composeThrowCommand` in `command-binding.cjs` so the field is never omitted.
 
 ### 5. AUTO_SHOT
 

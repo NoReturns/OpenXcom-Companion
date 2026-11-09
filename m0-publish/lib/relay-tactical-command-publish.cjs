@@ -14,7 +14,8 @@ const {
   putRemoteContentFileCreate,
   isNotFoundError,
 } = require('./github-relay.cjs');
-const { parseTacticalCommand, ValidationError } = require('./tactical-command.cjs');
+const { ValidationError } = require('./tactical-publish.cjs');
+const { parseTacticalCommand } = require('./tactical-command.cjs');
 const { buildRelayOptionsFromConfig } = require('./relay-isolation-config.cjs');
 
 class TacticalCommandPublishError extends Error {

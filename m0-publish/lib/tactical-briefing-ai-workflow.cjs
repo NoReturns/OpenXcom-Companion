@@ -28,8 +28,11 @@ const {
   getMoveResultContractMarkdown,
   runMandatoryMoveResultReview,
 } = require('./move-result-consumer.cjs');
+const {
+  getMoveExposurePolicyMarkdown,
+} = require('./move-exposure-policy.cjs');
 
-const WORKFLOW_VERSION = 2;
+const WORKFLOW_VERSION = 3;
 
 const MANDATORY_TERMINAL_MOVE_REVIEW = {
   step: 'post_retrieve_move',
@@ -81,6 +84,12 @@ const MANDATORY_F6_REVIEW_SEQUENCE = [
     detail:
       'Before terrain or MOVE planning, inspect hands, belt/backpack inventory, actor groundInventory, and map groundItems from tactical.units. Include human-owned soldiers for awareness only; Companion orders stay on AI-owned binding actors. Classify grenades, explosives, medikits, firearms, and ammunition; dedupe battleItemId across hands and inventory; do not assume usability from presence alone.',
   },
+  {
+    step: 8,
+    title: 'Pre-MOVE exposure and reaction-risk review',
+    detail:
+      'Advisory only — after hostile intelligence, before publishing MOVE: classify KNOWN vs POSSIBLE vs UNKNOWN exposure; weigh campaign/mission context (not only min casualties or score); prefer staged moves when tactically important; high-risk MOVEs remain valid when strategically justified (AI-owned actors only). See getMoveExposurePolicyMarkdown() in move-exposure-policy.cjs.',
+  },
 ];
 
 const CONFIRMED_READINESS = new Set(['panicking', 'berserk']);
@@ -100,6 +109,8 @@ function getAiBriefingInstructionsMarkdown() {
     'Use existing `unitStateBrief.exceptions` and `commandBinding` only. Do not invent a parallel summary field on the relay.',
     '',
     getHostileIntelligenceContractMarkdown(),
+    '',
+    getMoveExposurePolicyMarkdown(),
     '',
     getPsychologicalPerceptionContractMarkdown(),
     '',
@@ -297,6 +308,7 @@ module.exports = {
   runMandatoryPostCommandPrelude,
   runMandatoryMoveResultReview,
   getEquipmentReviewContractMarkdown,
+  getMoveExposurePolicyMarkdown,
   assertSamePerceptionSession,
   mergePerceptionEventsSameSessionOnly,
   classifyCurrentHostileObservation,

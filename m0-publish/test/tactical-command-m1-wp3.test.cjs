@@ -12,6 +12,7 @@ const {
   validateAimedShotAgainstSnapshot,
   buildFirePlanningHint,
 } = require('../lib/tactical-command.cjs');
+const { ValidationError } = require('../lib/tactical-publish.cjs');
 const { composeAutoShotCommand, composeAimedShotCommand } = require('../lib/command-binding.cjs');
 const { buildCommandBinding } = require('../lib/command-binding.cjs');
 
@@ -95,5 +96,48 @@ describe('M1-WP3 AUTO_SHOT and AIMED_SHOT schema', () => {
     const actor = minimalTactical().units[0];
     const hint = buildFirePlanningHint(actor, 'STR_RIGHT_HAND', COMMAND_TYPE_AUTO_SHOT);
     assert.match(hint.note, /authoritative/);
+  });
+
+  it('rejects AUTO_SHOT with missing or invalid active_hand', () => {
+    const tac = minimalTactical();
+    const digest = 'd'.repeat(64);
+    const base = {
+      schema_version: 1,
+      command_id: 'auto-hand-gate',
+      command_type: COMMAND_TYPE_AUTO_SHOT,
+      actor_unit_id: 1,
+      target: { x: 5, y: 5, z: 0 },
+      snapshot_sha256: digest,
+      session_id: tac.eventLog.sessionId,
+      turn: tac.turn,
+      state_version: tac.eventLog.latestSeq,
+    };
+    assert.throws(() => parseAutoShotCommand(base), (err) => {
+      assert.ok(err instanceof ValidationError);
+      assert.equal(err.message, 'invalid active_hand');
+      return true;
+    });
+    assert.throws(
+      () => parseAutoShotCommand({ ...base, active_hand: 'right' }),
+      (err) => err instanceof ValidationError && err.message === 'invalid active_hand',
+    );
+  });
+
+  it('accepts AUTO_SHOT with STR_RIGHT_HAND and STR_LEFT_HAND', () => {
+    const tac = minimalTactical();
+    const digest = 'e'.repeat(64);
+    const base = {
+      schema_version: 1,
+      command_id: 'auto-hand-ok',
+      command_type: COMMAND_TYPE_AUTO_SHOT,
+      actor_unit_id: 1,
+      target: { x: 5, y: 5, z: 0 },
+      snapshot_sha256: digest,
+      session_id: tac.eventLog.sessionId,
+      turn: tac.turn,
+      state_version: tac.eventLog.latestSeq,
+    };
+    assert.equal(parseAutoShotCommand({ ...base, active_hand: 'STR_RIGHT_HAND' }).activeHand, 'STR_RIGHT_HAND');
+    assert.equal(parseAutoShotCommand({ ...base, active_hand: 'STR_LEFT_HAND' }).activeHand, 'STR_LEFT_HAND');
   });
 });

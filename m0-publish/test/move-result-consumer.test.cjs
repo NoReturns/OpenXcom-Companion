@@ -9,6 +9,10 @@ const {
   positionsEqual3d,
   getMoveResultContractMarkdown,
   runMandatoryMoveResultReview,
+  resolveMoveInterruptionCause,
+  buildMoveTerminalMessage,
+  enrichMoveResultNotification,
+  buildMoveOutcomeBrief,
 } = require('../lib/move-result-consumer.cjs');
 const {
   runMandatoryPostCommandPrelude: workflowPostCommand,
@@ -227,5 +231,225 @@ describe('move-result-consumer', () => {
     const out = classifyMoveTerminalOutcome(result, cmd);
     assert.equal(out.outcomeClass, MOVE_OUTCOME_CLASS.INTERRUPTED_KNOWN_FINAL_POSITION);
     assert.match(out.replan.guidance, /stairs|ramp|grav/i);
+  });
+});
+
+describe('move terminal presentation (P1-MOVE-INTERRUPT-02B)', () => {
+  it('completed MOVE with exact destination', () => {
+    const msg = buildMoveTerminalMessage(moveResult({}), BASE_CMD);
+    assert.match(msg, /completed/i);
+    assert.match(msg, /\(34,23,1\)/);
+  });
+
+  it('hostile sighting interruption', () => {
+    const result = moveResult({
+      status: 'INTERRUPTED',
+      final_position: { x: 34, y: 20, z: 0 },
+      movement_stop_reason: 'hostile_spotted',
+      remaining_tu: 28,
+    });
+    const msg = buildMoveTerminalMessage(result, BASE_CMD);
+    assert.match(msg, /Hostile spotted/i);
+    assert.match(msg, /Requested: \(34,23,1\)/);
+    assert.match(msg, /Stopped: \(34,20,0\)/);
+    assert.match(msg, /Remaining TU: 28/);
+  });
+
+  it('reaction-fire interruption does not claim damage', () => {
+    const result = moveResult({
+      status: 'INTERRUPTED',
+      final_position: { x: 34, y: 20, z: 0 },
+      movement_stop_reason: 'reaction_fire',
+    });
+    const msg = buildMoveTerminalMessage(result, BASE_CMD);
+    assert.match(msg, /Reaction fire/i);
+    assert.match(msg, /does not confirm hit/i);
+  });
+
+  it('path_blocked interruption', () => {
+    const msg = buildMoveTerminalMessage(moveResult({
+      status: 'INTERRUPTED',
+      final_position: { x: 33, y: 23, z: 1 },
+      movement_stop_reason: 'path_blocked',
+    }), BASE_CMD);
+    assert.match(msg, /Path blocked/i);
+  });
+
+  it('insufficient_time_units interruption', () => {
+    const msg = buildMoveTerminalMessage(moveResult({
+      status: 'INTERRUPTED',
+      final_position: { x: 34, y: 22, z: 1 },
+      movement_stop_reason: 'insufficient_time_units',
+    }), BASE_CMD);
+    assert.match(msg, /Insufficient time units/i);
+  });
+
+  it('insufficient_energy interruption', () => {
+    const msg = buildMoveTerminalMessage(moveResult({
+      status: 'INTERRUPTED',
+      final_position: { x: 34, y: 22, z: 1 },
+      movement_stop_reason: 'insufficient_energy',
+    }), BASE_CMD);
+    assert.match(msg, /Insufficient stamina/i);
+  });
+
+  it('proximity_grenade interruption', () => {
+    const msg = buildMoveTerminalMessage(moveResult({
+      status: 'INTERRUPTED',
+      final_position: { x: 34, y: 22, z: 1 },
+      movement_stop_reason: 'proximity_grenade',
+    }), BASE_CMD);
+    assert.match(msg, /Proximity grenade/i);
+  });
+
+  it('actor_incapacitated on FAILED', () => {
+    const msg = buildMoveTerminalMessage(moveResult({
+      status: 'FAILED',
+      final_position: { x: 34, y: 18, z: 0 },
+      movement_stop_reason: 'actor_incapacitated',
+    }), BASE_CMD);
+    assert.match(msg, /Actor incapacitated/i);
+  });
+
+  it('zero-tile hostile spot stays interrupted without completed message', () => {
+    const result = moveResult({
+      status: 'INTERRUPTED',
+      starting_position: { x: 34, y: 18, z: 0 },
+      final_position: { x: 34, y: 18, z: 0 },
+      movement_stop_reason: 'hostile_spotted',
+    });
+    const out = classifyMoveTerminalOutcome(result, BASE_CMD);
+    assert.equal(out.tacticalSuccess, false);
+    assert.match(buildMoveTerminalMessage(result, BASE_CMD), /Hostile spotted/i);
+  });
+
+  it('unknown cause when movement_stop_reason absent', () => {
+    const result = moveResult({
+      status: 'INTERRUPTED',
+      final_position: { x: 34, y: 20, z: 0 },
+    });
+    const cause = resolveMoveInterruptionCause(result);
+    assert.equal(cause.move_interruption_cause, 'unknown');
+    assert.equal(cause.cause_confirmed, false);
+    const msg = buildMoveTerminalMessage(result, BASE_CMD);
+    assert.match(msg, /cause not confirmed/i);
+    assert.doesNotMatch(msg, /Hostile spotted/i);
+  });
+
+  it('does not infer hostile_spotted from position delta alone', () => {
+    const result = moveResult({
+      status: 'INTERRUPTED',
+      final_position: { x: 10, y: 10, z: 0 },
+    });
+    assert.equal(resolveMoveInterruptionCause(result).move_interruption_cause, 'unknown');
+  });
+
+  it('missing delivered command still builds stop cause from result', () => {
+    const result = moveResult({
+      status: 'INTERRUPTED',
+      final_position: { x: 1, y: 2, z: 0 },
+      movement_stop_reason: 'reaction_fire',
+    });
+    const enrich = enrichMoveResultNotification(result, null);
+    assert.equal(enrich.move_interruption_cause, 'reaction_fire');
+    assert.equal(enrich.commanded_destination, undefined);
+    assert.match(enrich.message, /Reaction fire/i);
+  });
+
+  it('missing optional positions omitted from message', () => {
+    const result = moveResult({
+      status: 'INTERRUPTED',
+      movement_stop_reason: 'movement_incomplete',
+    });
+    delete result.final_position;
+    delete result.remaining_tu;
+    const msg = buildMoveTerminalMessage(result, null);
+    assert.doesNotMatch(msg, /Requested:/);
+    assert.doesNotMatch(msg, /Stopped:/);
+  });
+
+  it('movement_incomplete: token preserved, operator label shown, cause not confirmed', () => {
+    const result = moveResult({
+      status: 'INTERRUPTED',
+      final_position: { x: 34, y: 19, z: 0 },
+      movement_stop_reason: 'movement_incomplete',
+    });
+    const cause = resolveMoveInterruptionCause(result);
+    assert.equal(cause.movement_stop_reason, 'movement_incomplete');
+    assert.equal(cause.move_interruption_cause, 'movement_incomplete');
+    assert.equal(cause.cause_confirmed, false);
+    assert.equal(cause.cause_label, 'Movement incomplete');
+    assert.match(buildMoveTerminalMessage(result, BASE_CMD), /Stop detail: Movement incomplete/);
+    assert.doesNotMatch(buildMoveTerminalMessage(result, BASE_CMD), /Cause: Movement incomplete/);
+    const brief = buildMoveOutcomeBrief(result, BASE_CMD);
+    const enrich = enrichMoveResultNotification(result, BASE_CMD);
+    assert.equal(brief.interruption_cause_confirmed, false);
+    assert.equal(brief.movement_stop_reason, 'movement_incomplete');
+    assert.equal(enrich.move_interruption_cause, 'movement_incomplete');
+    assert.match(enrich.message, /Movement incomplete/);
+  });
+
+  it('no_progress: generic stop is not tactically confirmed', () => {
+    const result = moveResult({
+      status: 'FAILED',
+      final_position: { x: 1, y: 1, z: 0 },
+      movement_stop_reason: 'no_progress',
+    });
+    const cause = resolveMoveInterruptionCause(result);
+    assert.equal(cause.cause_confirmed, false);
+    assert.match(buildMoveTerminalMessage(result, BASE_CMD), /Stop detail: No progress toward destination/);
+    assert.equal(buildMoveOutcomeBrief(result, BASE_CMD).interruption_cause_confirmed, false);
+  });
+
+  it('reaction_fire remains tactically confirmed', () => {
+    const cause = resolveMoveInterruptionCause(moveResult({
+      status: 'INTERRUPTED',
+      movement_stop_reason: 'reaction_fire',
+    }));
+    assert.equal(cause.cause_confirmed, true);
+    assert.equal(
+      buildMoveOutcomeBrief(
+        moveResult({
+          status: 'INTERRUPTED',
+          final_position: { x: 1, y: 2, z: 0 },
+          movement_stop_reason: 'reaction_fire',
+        }),
+        BASE_CMD,
+      ).interruption_cause_confirmed,
+      true,
+    );
+  });
+
+  it('future movement_stop_reason token stays unconfirmed', () => {
+    const result = moveResult({
+      status: 'INTERRUPTED',
+      final_position: { x: 0, y: 0, z: 0 },
+      movement_stop_reason: 'companion_future_stop_token',
+    });
+    const cause = resolveMoveInterruptionCause(result);
+    assert.equal(cause.movement_stop_reason, 'companion_future_stop_token');
+    assert.equal(cause.cause_confirmed, false);
+    const msg = buildMoveTerminalMessage(result, BASE_CMD);
+    assert.match(msg, /cause not confirmed/i);
+    assert.doesNotMatch(msg, /Cause: companion future stop token/i);
+  });
+
+  it('brief includes additive interruption fields', () => {
+    const brief = buildMoveOutcomeBrief(moveResult({
+      status: 'INTERRUPTED',
+      final_position: { x: 34, y: 20, z: 0 },
+      movement_stop_reason: 'hostile_spotted',
+      remaining_tu: 12,
+    }), BASE_CMD);
+    assert.equal(brief.movement_stop_reason, 'hostile_spotted');
+    assert.equal(brief.move_interruption_cause, 'hostile_spotted');
+    assert.equal(brief.interruption_cause_confirmed, true);
+    assert.equal(brief.remaining_tu, 12);
+    assert.match(brief.terminal_message, /Hostile spotted/i);
+  });
+
+  it('EXECUTING is non-terminal for presentation', () => {
+    assert.equal(buildMoveTerminalMessage(moveResult({ status: 'EXECUTING' }), BASE_CMD), null);
+    assert.equal(enrichMoveResultNotification(moveResult({ status: 'EXECUTING' }), BASE_CMD), null);
   });
 });

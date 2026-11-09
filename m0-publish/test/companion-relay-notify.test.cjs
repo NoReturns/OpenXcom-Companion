@@ -108,6 +108,137 @@ describe('companion-relay-notify classification', () => {
       turn: 1,
     }).code, NOTIFICATION_CODES.COMMAND_EXECUTING);
   });
+
+  it('enriches terminal SNAP_SHOT with fire message and preserves reason_code', () => {
+    const result = {
+      schema_version: 1,
+      command_id: 'snap-notify-1',
+      command_type: 'SNAP_SHOT',
+      status: 'COMPLETED',
+      session_id: 'a'.repeat(32),
+      turn: 2,
+    };
+    const event = notificationFromLocalResult(result);
+    assert.equal(event.code, NOTIFICATION_CODES.COMMAND_COMPLETED);
+    assert.equal(event.command_type, 'SNAP_SHOT');
+    assert.equal(event.message, 'Shot fired. Hit not confirmed.');
+    assert.equal(event.reason_code, 'COMPLETED');
+    assert.equal(event.fire_outcome_class, 'projectile_launched');
+    const line = formatSupervisorConsoleLine(event);
+    assert.match(line, /type=SNAP_SHOT/);
+    assert.match(line, /Shot fired\. Hit not confirmed\./);
+    assert.match(line, /reason=COMPLETED/);
+  });
+
+  it('AIMED_SHOT FAILED STR_NO_LINE_OF_FIRE uses post-accept message', () => {
+    const event = notificationFromLocalResult({
+      command_type: 'AIMED_SHOT',
+      command_id: 'aim-fail',
+      status: 'FAILED',
+      session_id: 'a'.repeat(32),
+      turn: 1,
+      public_reason: 'STR_NO_LINE_OF_FIRE',
+    });
+    assert.equal(event.code, NOTIFICATION_CODES.COMMAND_FAILED);
+    assert.equal(event.reason_code, 'STR_NO_LINE_OF_FIRE');
+    assert.equal(event.message, 'Shot failed after acceptance: no line of fire.');
+  });
+
+  it('AUTO_SHOT preflight REJECTED keeps raw public_reason in reason_code', () => {
+    const publicReason = 'No line of fire to visible target.';
+    const event = notificationFromLocalResult({
+      command_type: 'AUTO_SHOT',
+      command_id: 'auto-rej',
+      status: 'REJECTED',
+      session_id: 'a'.repeat(32),
+      turn: 1,
+      public_reason: publicReason,
+    });
+    assert.equal(event.code, NOTIFICATION_CODES.COMMAND_REJECTED);
+    assert.equal(event.reason_code, publicReason);
+    assert.equal(event.message, 'Shot rejected before execution: no line of fire.');
+  });
+
+  it('MOVE terminal notify unchanged when fire enrichment absent', () => {
+    const command = {
+      command_type: 'MOVE',
+      command_id: 'move-notify-verify',
+      destination: { x: 2, y: 2, z: 0 },
+    };
+    const event = notificationFromLocalResult({
+      command_type: 'MOVE',
+      command_id: 'move-notify-verify',
+      status: 'COMPLETED',
+      session_id: 'a'.repeat(32),
+      turn: 1,
+      final_position: { x: 2, y: 2, z: 0 },
+      destination_reached: true,
+    }, null, { command });
+    assert.equal(event.move_outcome_class, 'completed_verified_destination');
+    assert.equal(event.fire_outcome_class, undefined);
+    assert.match(event.message, /completed/i);
+    assert.equal(event.move_interruption_cause, undefined);
+  });
+
+  it('enriches INTERRUPTED MOVE with cause and positions', () => {
+    const command = {
+      command_type: 'MOVE',
+      command_id: 'move-int-hostile',
+      destination: { x: 45, y: 37, z: 0 },
+    };
+    const event = notificationFromLocalResult({
+      command_type: 'MOVE',
+      command_id: 'move-int-hostile',
+      status: 'INTERRUPTED',
+      session_id: 'a'.repeat(32),
+      turn: 3,
+      final_position: { x: 43, y: 37, z: 0 },
+      movement_stop_reason: 'hostile_spotted',
+      remaining_tu: 28,
+    }, null, { command });
+    assert.equal(event.code, NOTIFICATION_CODES.COMMAND_INTERRUPTED);
+    assert.equal(event.command_type, 'MOVE');
+    assert.equal(event.movement_stop_reason, 'hostile_spotted');
+    assert.equal(event.move_interruption_cause, 'hostile_spotted');
+    assert.equal(event.requires_fresh_binding, true);
+    assert.equal(event.remaining_tu, 28);
+    assert.deepEqual(event.commanded_destination, { x: 45, y: 37, z: 0 });
+    assert.match(event.message, /Hostile spotted/);
+    const line = formatSupervisorConsoleLine(event);
+    assert.match(line, /type=MOVE/);
+    assert.match(line, /Hostile spotted/);
+  });
+
+  it('reaction_fire MOVE notify does not claim damage', () => {
+    const event = notificationFromLocalResult({
+      command_type: 'MOVE',
+      command_id: 'move-rxn',
+      status: 'INTERRUPTED',
+      session_id: 'a'.repeat(32),
+      turn: 2,
+      final_position: { x: 1, y: 1, z: 0 },
+      movement_stop_reason: 'reaction_fire',
+    }, null, {
+      command: {
+        command_type: 'MOVE',
+        destination: { x: 5, y: 5, z: 0 },
+      },
+    });
+    assert.match(event.message, /does not confirm hit/i);
+  });
+
+  it('identity mismatch REJECTED still maps to COMMAND_CONFLICT without fire message', () => {
+    const event = notificationFromLocalResult({
+      command_type: 'SNAP_SHOT',
+      command_id: 'incoming-1',
+      status: 'REJECTED',
+      session_id: 'a'.repeat(32),
+      turn: 1,
+      public_reason: 'result_command_id_mismatch',
+    });
+    assert.equal(event.code, NOTIFICATION_CODES.COMMAND_CONFLICT);
+    assert.equal(event.message, undefined);
+  });
 });
 
 describe('companion-relay-notify dedupe', () => {

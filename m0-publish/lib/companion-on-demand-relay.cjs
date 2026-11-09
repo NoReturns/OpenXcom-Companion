@@ -52,6 +52,13 @@ const {
   createRelayTransactionTrace,
   bindTransactionScopeToContext,
 } = require('./relay-transaction-trace.cjs');
+const {
+  BASE_INTELLIGENCE_FILENAME,
+  BASE_INTELLIGENCE_SEND_FILENAME,
+  STRATEGIC_SEND_MARKER_FILENAME,
+  assessStrategicSendReadiness,
+  publishStrategicBaseState,
+} = require('./strategic-publish.cjs');
 
 const M0_PUBLISH_ROOT = path.resolve(__dirname, '..');
 const REQUEST_FILENAME = 'companion-on-demand-request.json';
@@ -87,6 +94,9 @@ function resolveOnDemandPaths(snapshotPath) {
     requestPath: path.join(dir, REQUEST_FILENAME),
     statusPath: path.join(dir, STATUS_FILENAME),
     tacticalSendMarkerPath: path.join(dir, TACTICAL_SEND_MARKER_FILENAME),
+    baseIntelligencePath: path.join(dir, BASE_INTELLIGENCE_FILENAME),
+    baseIntelligenceSendPath: path.join(dir, BASE_INTELLIGENCE_SEND_FILENAME),
+    strategicSendMarkerPath: path.join(dir, STRATEGIC_SEND_MARKER_FILENAME),
     snapshotDir: dir,
     localRelay: localRelayPaths(snapshotPath),
   };
@@ -98,29 +108,6 @@ function loadTacticalSendMarker(markerPath, io = {}) {
     return null;
   }
   return parsed.value;
-}
-
-function assessStrategicSendReadiness(paths, io = {}) {
-  const existsSync = io.existsSync ?? fs.existsSync;
-  const readFileSync = io.readFileSync ?? fs.readFileSync;
-  if (!existsSync(paths.snapshotPath)) {
-    return { ok: false, message: 'No tactical snapshot on disk.' };
-  }
-  const marker = loadTacticalSendMarker(paths.tacticalSendMarkerPath, io);
-  if (!marker || !marker.snapshot_sha256) {
-    return { ok: false, message: 'No fresh battlescape export (send from tactical first).' };
-  }
-  let snapshotBytes;
-  try {
-    snapshotBytes = readFileSync(paths.snapshotPath);
-  } catch {
-    return { ok: false, message: 'Tactical snapshot unreadable.' };
-  }
-  const digest = sha256HexLower(Buffer.isBuffer(snapshotBytes) ? snapshotBytes : Buffer.from(snapshotBytes, 'utf8'));
-  if (digest !== marker.snapshot_sha256) {
-    return { ok: false, message: 'Tactical snapshot stale vs last export marker.' };
-  }
-  return { ok: true, marker, digest };
 }
 
 function briefingAckIndicatesSent(ack) {
@@ -498,17 +485,18 @@ async function runSendOnce(ctx, pending = null) {
   const expectedBriefingId = pending && pending.briefing_request_id ? pending.briefing_request_id : null;
 
   if (sendScope === 'strategic') {
-    const readiness = assessStrategicSendReadiness(paths);
+    const requestId = pending?.request_id ?? null;
+    const readiness = assessStrategicSendReadiness(paths, requestId);
     if (!readiness.ok) {
       return {
         phase: SEND_PHASE.NOT_READY,
         message: sanitize(readiness.message),
         outcome: RELAY_OUTCOME.FAILED,
-        error_code: 'NOT_READY',
+        error_code: readiness.error_code ?? 'NOT_READY',
         terminal: true,
       };
     }
-    const direct = await publishSnapshotDirect(ctx, pending);
+    const direct = await publishStrategicBaseState(ctx, pending);
     if (ctx.quotaConsoleMonitor && typeof ctx.quotaConsoleMonitor.tick === 'function') {
       ctx.quotaConsoleMonitor.tick();
     }
@@ -518,9 +506,9 @@ async function runSendOnce(ctx, pending = null) {
     }
     return {
       phase: SEND_PHASE.FAILED,
-      message: sanitize('Publish failed.'),
+      message: sanitize(direct.reason || 'Publish failed.'),
       outcome: RELAY_OUTCOME.FAILED,
-      error_code: 'PUBLISH_FAILED',
+      error_code: direct.code || 'PUBLISH_FAILED',
       terminal: true,
     };
   }
@@ -1171,9 +1159,11 @@ module.exports = {
   SEND_PHASE,
   RETRIEVE_PHASE,
   TACTICAL_SEND_MARKER_FILENAME,
+  STRATEGIC_SEND_MARKER_FILENAME,
   resolveOnDemandPaths,
   loadTacticalSendMarker,
   assessStrategicSendReadiness,
+  publishStrategicBaseState,
   briefingAckIndicatesSent,
   createOnDemandRelayContext,
   runSendOnce,

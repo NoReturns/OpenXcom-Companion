@@ -95,8 +95,12 @@ describe('M1 tactical briefing AI workflow (consumer E2E)', () => {
     assert.match(md, /Mandatory MOVE result verification/);
     assert.match(md, /runMandatoryPostCommandPrelude/);
 
+    assert.match(md, /Pre-MOVE exposure and reaction fire/);
+    assert.match(md, /KNOWN THREAT/);
+    assert.match(md, /between movement steps/i);
+
     const prelude = runMandatoryBriefingPrelude(relay);
-    assert.equal(prelude.workflowVersion, 2);
+    assert.equal(prelude.workflowVersion, 3);
     assert.ok(prelude.equipment.soldiers.length > 0);
   });
 

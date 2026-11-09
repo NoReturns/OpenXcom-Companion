@@ -5,9 +5,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { spawnSync } = require('node:child_process');
 const {
   publishTacticalCommandOnce,
   TacticalCommandPublishError,
+  loadLocalTacticalCommandFromFile,
 } = require('../lib/relay-tactical-command-publish.cjs');
 const { createGhApiCallLog } = require('../lib/github-api-instrumentation.cjs');
 const { buildRelayOptionsFromConfig } = require('../lib/relay-isolation-config.cjs');
@@ -33,6 +35,23 @@ function sampleMoveCommand(overrides = {}) {
     ...overrides,
   };
 }
+
+function sampleAutoShotCommand(overrides = {}) {
+  return {
+    schema_version: 1,
+    command_id: 'auto-shot-p1-active-hand',
+    command_type: 'AUTO_SHOT',
+    actor_unit_id: 4,
+    target: { x: 10, y: 10, z: 0 },
+    snapshot_sha256: snapshotSha,
+    session_id: sessionId,
+    turn: 6,
+    state_version: 56,
+    ...overrides,
+  };
+}
+
+const PUBLISH_CLI = path.join(__dirname, '..', 'publish-tactical-command-once.cjs');
 
 function isolatedRelayConfig() {
   return {
@@ -501,5 +520,94 @@ describe('relay-tactical-command-publish (M1 Step 1)', () => {
 
     assert.equal(outcome.dryRun, true);
     assert.equal(apiCallLog.countApiCalls(), 0);
+  });
+});
+
+describe('AUTO_SHOT active_hand publish validation (P1-AUTO-01)', () => {
+  it('loadLocalTacticalCommandFromFile surfaces invalid active_hand for malformed AUTO_SHOT', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'auto-hand-malformed-'));
+    const missingPath = writeLocalCommand(root, sampleAutoShotCommand());
+    assert.throws(
+      () => loadLocalTacticalCommandFromFile(missingPath),
+      (err) => {
+        assert.ok(err instanceof TacticalCommandPublishError);
+        assert.equal(err.code, 'invalid_command');
+        assert.equal(err.message, 'invalid active_hand');
+        return true;
+      },
+    );
+
+    const wrongTokenPath = writeLocalCommand(
+      fs.mkdtempSync(path.join(os.tmpdir(), 'auto-hand-wrong-')),
+      sampleAutoShotCommand({ active_hand: 'right' }),
+    );
+    assert.throws(
+      () => loadLocalTacticalCommandFromFile(wrongTokenPath),
+      (err) => err instanceof TacticalCommandPublishError
+        && err.code === 'invalid_command'
+        && err.message === 'invalid active_hand',
+    );
+  });
+
+  it('loadLocalTacticalCommandFromFile accepts STR_RIGHT_HAND and STR_LEFT_HAND', () => {
+    for (const activeHand of ['STR_RIGHT_HAND', 'STR_LEFT_HAND']) {
+      const root = fs.mkdtempSync(path.join(os.tmpdir(), `auto-hand-ok-${activeHand}-`));
+      const localPath = writeLocalCommand(root, sampleAutoShotCommand({ active_hand: activeHand }));
+      const loaded = loadLocalTacticalCommandFromFile(localPath);
+      assert.equal(loaded.command.active_hand, activeHand);
+      assert.equal(loaded.command.command_type, 'AUTO_SHOT');
+    }
+  });
+
+  it('dry-run accepts valid AUTO_SHOT and makes no GitHub calls', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'auto-hand-dry-'));
+    const localPath = writeLocalCommand(
+      root,
+      sampleAutoShotCommand({ active_hand: 'STR_RIGHT_HAND' }),
+    );
+    const { ghApi, apiCallLog } = createMockGhApi();
+    const outcome = await publishTacticalCommandOnce({
+      localPath,
+      dryRun: true,
+      relayOptions: { ...buildRelayOptionsFromConfig(isolatedRelayConfig()), ghApi },
+      apiCallLog,
+    });
+    assert.equal(outcome.dryRun, true);
+    assert.equal(outcome.command_type, 'AUTO_SHOT');
+    assert.equal(apiCallLog.countApiCalls(), 0);
+  });
+
+  it('dry-run rejects malformed AUTO_SHOT without GitHub calls', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'auto-hand-dry-bad-'));
+    const localPath = writeLocalCommand(root, sampleAutoShotCommand());
+    const { ghApi, apiCallLog } = createMockGhApi();
+    await assert.rejects(
+      () => publishTacticalCommandOnce({
+        localPath,
+        dryRun: true,
+        relayOptions: { ...buildRelayOptionsFromConfig(isolatedRelayConfig()), ghApi },
+        apiCallLog,
+      }),
+      (err) => err instanceof TacticalCommandPublishError
+        && err.code === 'invalid_command'
+        && err.message === 'invalid active_hand',
+    );
+    assert.equal(apiCallLog.countApiCalls(), 0);
+  });
+
+  it('CLI dry-run reports invalid_command and invalid active_hand for missing active_hand', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'auto-hand-cli-'));
+    const localPath = writeLocalCommand(root, sampleAutoShotCommand());
+    const result = spawnSync(process.execPath, [PUBLISH_CLI, '--dry-run', '--path', localPath], {
+      encoding: 'utf8',
+      env: { ...process.env, NODE_TEST_CONTEXT: undefined },
+    });
+    assert.notEqual(result.status, 0);
+    const stderr = result.stderr.trim();
+    assert.match(stderr, /"code":\s*"invalid_command"/);
+    assert.match(stderr, /invalid active_hand/);
+    assert.doesNotMatch(stderr, /publish_failed/);
+    assert.doesNotMatch(stderr, /instanceof/i);
+    assert.doesNotMatch(stderr, /TypeError/);
   });
 });

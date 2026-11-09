@@ -1,0 +1,15 @@
+{
+  "schema_version": 2,
+  "identity": {
+    "campaign_id": "test-campaign",
+    "save_display_name": "Fixture Save",
+    "save_file_path": null,
+    "difficulty": "NORMAL",
+    "ironman": false,
+    "months_passed": 1,
+    "exported_at_ms": 1,
+    "game_date": { "year": 1999, "month": 3, "day": 5, "hour": 12, "minute": 0 }
+  },
+  "finances": { "funds": 1000000 },
+  "bases": []
+}

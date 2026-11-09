@@ -308,7 +308,7 @@ describe('M1 mandatory tactical equipment brief', () => {
     );
     const relay = relayFromUnits([unit]);
     const prelude = runMandatoryBriefingPrelude(relay, { aiCommandActorIds: [1] });
-    assert.equal(prelude.workflowVersion, 2);
+    assert.equal(prelude.workflowVersion, 3);
     assert.equal(prelude.status.sequenceCompleted, true);
     assert.equal(prelude.equipment.sequenceCompleted, true);
     assert.equal(prelude.equipment.soldiers[0].items[0].category, TACTICAL_CATEGORY.SMOKE_GRENADE);

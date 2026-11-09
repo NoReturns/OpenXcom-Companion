@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { tryResolveRelayDefaults, RELAY_CONTENT_PATHS, resolveRelayDefaults } = require('./github-relay.cjs');
+const { DEFAULT_BASE_STATE_PATH } = require('./relay-config.cjs');
 
 const CONFIG_SCHEMA_VERSION = 1;
 
@@ -105,6 +106,10 @@ function assertIsolatedFromProductionCooperative(config, label = 'relay isolatio
     if (statePath === production.statePath) {
       throw new Error(`${label}: on production repo ${repo}, state_path must not equal ${production.statePath}`);
     }
+    const baseStatePath = String(config.base_state_path ?? config.baseStatePath ?? DEFAULT_BASE_STATE_PATH).trim();
+    if (baseStatePath === production.statePath) {
+      throw new Error(`${label}: on production repo ${repo}, base_state_path must not equal tactical state path ${production.statePath}`);
+    }
   }
 }
 
@@ -122,14 +127,19 @@ function normalizeRelayIsolationConfig(raw, sourceLabel) {
   }
   const contentPaths = mergeContentPaths(raw.content_paths ?? raw.contentPaths);
   const statePath = String(raw.state_path ?? raw.statePath ?? 'm0/state.json').trim();
+  const baseStatePath = String(raw.base_state_path ?? raw.baseStatePath ?? DEFAULT_BASE_STATE_PATH).trim();
   if (!statePath) {
     throw new Error(`${sourceLabel}: state_path must be non-empty`);
+  }
+  if (!baseStatePath) {
+    throw new Error(`${sourceLabel}: base_state_path must be non-empty`);
   }
   const normalized = {
     schema_version: CONFIG_SCHEMA_VERSION,
     repo,
     branch,
     state_path: statePath,
+    base_state_path: baseStatePath,
     content_paths: contentPaths,
   };
   assertIsolatedFromProductionCooperative(normalized, sourceLabel);
@@ -168,6 +178,7 @@ function fingerprintRelayIsolationConfig(config) {
     repo: normalized.repo,
     branch: normalized.branch,
     state_path: normalized.state_path,
+    base_state_path: normalized.base_state_path,
     content_paths: normalized.content_paths,
   };
   return crypto.createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
@@ -179,6 +190,7 @@ function buildRelayIsolationContract(config) {
     repo: normalized.repo,
     branch: normalized.branch,
     statePath: normalized.state_path,
+    baseStatePath: normalized.base_state_path,
     contentPaths: { ...normalized.content_paths },
     fingerprint: fingerprintRelayIsolationConfig(normalized),
   });

@@ -46,6 +46,91 @@ const MOVE_RESULT_CONSUMER_RULES = [
 
 const TERMINAL_MOVE_STATUSES = new Set(['COMPLETED', 'INTERRUPTED', 'FAILED', 'REJECTED']);
 
+/** Engine movement_stop_reason values observed in CompanionCommandCore (authoritative only). */
+const KNOWN_MOVEMENT_STOP_REASONS = new Set([
+  'hostile_spotted',
+  'reaction_fire',
+  'path_blocked',
+  'proximity_grenade',
+  'insufficient_time_units',
+  'insufficient_energy',
+  'actor_incapacitated',
+  'authority_lost',
+  'movement_incomplete',
+  'no_progress',
+]);
+
+const MOVEMENT_STOP_REASON_LABELS = Object.freeze({
+  hostile_spotted: 'Hostile spotted',
+  reaction_fire: 'Reaction fire interrupted movement',
+  path_blocked: 'Path blocked',
+  proximity_grenade: 'Proximity grenade',
+  insufficient_time_units: 'Insufficient time units',
+  insufficient_energy: 'Insufficient stamina',
+  actor_incapacitated: 'Actor incapacitated',
+  authority_lost: 'Authority lost (no longer AI-controlled)',
+  movement_incomplete: 'Movement incomplete',
+  no_progress: 'No progress toward destination',
+});
+
+/** Engine bucket stops — not confirmed tactical battlefield events (P1-REACTION-RISK-02D). */
+const GENERIC_MOVEMENT_STOP_REASONS = new Set(['movement_incomplete', 'no_progress']);
+
+function shouldPresentStopCauseInMessage(stopCause) {
+  if (!stopCause?.cause_label) {
+    return false;
+  }
+  if (stopCause.cause_confirmed) {
+    return true;
+  }
+  const raw = stopCause.movement_stop_reason;
+  return typeof raw === 'string' && GENERIC_MOVEMENT_STOP_REASONS.has(raw);
+}
+
+/** Operator label: confirmed tactical stops use Cause; generic engine buckets use Stop detail (02E). */
+function formatStopCausePresentationLine(stopCause) {
+  if (!shouldPresentStopCauseInMessage(stopCause)) {
+    return null;
+  }
+  const prefix = stopCause.cause_confirmed ? 'Cause' : 'Stop detail';
+  return `${prefix}: ${stopCause.cause_label}`;
+}
+
+function formatPositionTriplet(pos) {
+  const n = normalizePosition(pos);
+  if (!n) {
+    return null;
+  }
+  return `(${n.x},${n.y},${n.z})`;
+}
+
+/**
+ * Derives interruption cause from engine movement_stop_reason only — never from position delta.
+ * @param {object|null|undefined} result
+ */
+function resolveMoveInterruptionCause(result) {
+  const raw = typeof result?.movement_stop_reason === 'string'
+    ? result.movement_stop_reason.trim()
+    : '';
+  if (!raw) {
+    const terminal = result?.status === 'INTERRUPTED' || result?.status === 'FAILED';
+    return {
+      movement_stop_reason: null,
+      move_interruption_cause: terminal ? 'unknown' : null,
+      cause_confirmed: false,
+      cause_label: null,
+    };
+  }
+  const known = KNOWN_MOVEMENT_STOP_REASONS.has(raw);
+  const generic = GENERIC_MOVEMENT_STOP_REASONS.has(raw);
+  return {
+    movement_stop_reason: raw,
+    move_interruption_cause: raw,
+    cause_confirmed: known && !generic,
+    cause_label: MOVEMENT_STOP_REASON_LABELS[raw] ?? raw.replace(/_/g, ' '),
+  };
+}
+
 const MOVE_OUTCOME_CLASS = Object.freeze({
   COMPLETED_VERIFIED_DESTINATION: 'completed_verified_destination',
   INTERRUPTED_KNOWN_FINAL_POSITION: 'interrupted_known_final_position',
@@ -230,12 +315,151 @@ function classifyMoveTerminalOutcome(result, command = null) {
  * @param {object} result
  * @param {object|null} command — delivered MOVE command when available
  */
+/**
+ * Operator-facing terminal summary (derived; does not alter engine JSON).
+ * @param {object|null|undefined} result
+ * @param {object|null} [command]
+ * @returns {string|null}
+ */
+function buildMoveTerminalMessage(result, command = null) {
+  if (!result || result.command_type !== 'MOVE') {
+    return null;
+  }
+  const status = result.status;
+  if (status === 'ACCEPTED' || status === 'EXECUTING') {
+    return null;
+  }
+
+  const classified = classifyMoveTerminalOutcome(result, command);
+  const dest = commandedDestinationFromMoveCommand(command) ?? classified.commandedDestination;
+  const finalPos = classified.finalPosition ?? normalizePosition(result.final_position);
+  const destLabel = formatPositionTriplet(dest);
+  const finalLabel = formatPositionTriplet(finalPos);
+  const stopCause = resolveMoveInterruptionCause(result);
+  const tuLine = typeof result.remaining_tu === 'number'
+    ? `Remaining TU: ${result.remaining_tu}`
+    : null;
+
+  if (status === 'COMPLETED') {
+    if (classified.tacticalSuccess) {
+      const lines = ['MOVE completed'];
+      if (destLabel) {
+        lines.push(`Destination: ${destLabel}`);
+      } else if (finalLabel) {
+        lines.push(`Final position: ${finalLabel}`);
+      }
+      if (tuLine) {
+        lines.push(tuLine);
+      }
+      return lines.join('\n');
+    }
+    return 'MOVE COMPLETED but destination not verified — refresh tactical state before replanning.';
+  }
+
+  if (status === 'REJECTED') {
+    const pr = typeof result.public_reason === 'string' && result.public_reason.trim()
+      ? result.public_reason.trim()
+      : 'Command rejected before execution.';
+    return `MOVE rejected before execution: ${pr}`;
+  }
+
+  if (status === 'FAILED') {
+    const lines = ['MOVE failed'];
+    const stopLine = formatStopCausePresentationLine(stopCause);
+    if (stopLine) {
+      lines.push(stopLine);
+    } else if (typeof result.public_reason === 'string' && result.public_reason.trim()) {
+      lines.push(result.public_reason.trim());
+    }
+    if (finalLabel) {
+      lines.push(`Stopped: ${finalLabel}`);
+    }
+    if (tuLine) {
+      lines.push(tuLine);
+    }
+    lines.push('Refresh tactical state before replanning.');
+    return lines.join('\n');
+  }
+
+  if (status === 'INTERRUPTED') {
+    const lines = ['MOVE interrupted'];
+    const stopLine = formatStopCausePresentationLine(stopCause);
+    if (stopLine) {
+      lines.push(stopLine);
+      if (stopCause.cause_confirmed && stopCause.move_interruption_cause === 'reaction_fire') {
+        lines.push('Reaction fire does not confirm hit or damage.');
+      }
+    } else {
+      lines.push('Movement stopped before the requested destination; cause not confirmed.');
+    }
+    if (destLabel) {
+      lines.push(`Requested: ${destLabel}`);
+    }
+    if (finalLabel) {
+      lines.push(`Stopped: ${finalLabel}`);
+    }
+    if (tuLine) {
+      lines.push(tuLine);
+    }
+    lines.push('Refresh tactical state before replanning.');
+    return lines.join('\n');
+  }
+
+  return null;
+}
+
+/**
+ * Notification / relay enrichment fields for terminal MOVE results.
+ * @param {object} result
+ * @param {object|null} command
+ */
+function enrichMoveResultNotification(result, command = null) {
+  if (!result || result.command_type !== 'MOVE') {
+    return null;
+  }
+  const status = result.status;
+  if (status === 'ACCEPTED' || status === 'EXECUTING') {
+    return null;
+  }
+  const brief = buildMoveOutcomeBrief(result, command);
+  const stopCause = resolveMoveInterruptionCause(result);
+  const message = buildMoveTerminalMessage(result, command);
+  const out = {
+    command_type: 'MOVE',
+    message,
+  };
+  if (brief) {
+    out.move_outcome_class = brief.outcome_class;
+    out.move_tactical_success = brief.tactical_success;
+    out.may_chain_next_command = brief.may_chain_next_command;
+    out.requires_fresh_binding = brief.requires_fresh_binding_before_next_publish;
+    if (brief.commanded_destination) {
+      out.commanded_destination = brief.commanded_destination;
+    }
+    if (brief.final_position) {
+      out.final_position = brief.final_position;
+    }
+  }
+  if (stopCause.movement_stop_reason) {
+    out.movement_stop_reason = stopCause.movement_stop_reason;
+  }
+  if (stopCause.move_interruption_cause) {
+    out.move_interruption_cause = stopCause.move_interruption_cause;
+  }
+  if (typeof result.remaining_tu === 'number') {
+    out.remaining_tu = result.remaining_tu;
+  }
+  return out;
+}
+
 function buildMoveOutcomeBrief(result, command = null) {
   if (!result || result.command_type !== 'MOVE') {
     return null;
   }
   const classified = classifyMoveTerminalOutcome(result, command);
   const recovery = resolveMoveRecoveryPolicy(classified);
+  const stopCause = resolveMoveInterruptionCause(result);
+  const terminalMessage = buildMoveTerminalMessage(result, command);
   const lines = [];
   if (classified.outcomeClass === MOVE_OUTCOME_CLASS.COMPLETED_VERIFIED_DESTINATION) {
     const p = classified.finalPosition;
@@ -244,9 +468,16 @@ function buildMoveOutcomeBrief(result, command = null) {
     );
   } else if (classified.outcomeClass === MOVE_OUTCOME_CLASS.INTERRUPTED_KNOWN_FINAL_POSITION) {
     const p = classified.finalPosition;
-    lines.push(
-      `MOVE interrupted; replan from final_position (x:${p.x}, y:${p.y}, z:${p.z}). Do not assume the original destination.`,
-    );
+    if (stopCause.cause_confirmed && stopCause.cause_label) {
+      lines.push(`MOVE interrupted (${stopCause.cause_label}); replan from final_position (x:${p.x}, y:${p.y}, z:${p.z}).`);
+      if (stopCause.move_interruption_cause === 'reaction_fire') {
+        lines.push('Reaction fire on the result does not confirm hit or damage — read refreshed state for injuries.');
+      }
+    } else {
+      lines.push(
+        `MOVE interrupted; replan from final_position (x:${p.x}, y:${p.y}, z:${p.z}). Do not assume the original destination.`,
+      );
+    }
     if (classified.crossLevelStop || classified.crossLevelCommand) {
       lines.push('Cross-level move (ramp/stairs/grav lift): stage short MOVEs and confirm each z before chaining.');
     }
@@ -282,6 +513,12 @@ function buildMoveOutcomeBrief(result, command = null) {
     contract_warnings: classified.contractWarnings,
     assessment_lines: lines,
     replan_required: classified.replan.required === true,
+    movement_stop_reason: stopCause.movement_stop_reason,
+    move_interruption_cause: stopCause.move_interruption_cause,
+    interruption_cause_confirmed: stopCause.cause_confirmed,
+    cause_label: stopCause.cause_label,
+    remaining_tu: typeof result.remaining_tu === 'number' ? result.remaining_tu : null,
+    terminal_message: terminalMessage,
   };
 }
 
@@ -433,12 +670,17 @@ module.exports = {
   MOVE_RESULT_CONSUMER_RULES,
   MOVE_OUTCOME_CLASS,
   TERMINAL_MOVE_STATUSES,
+  KNOWN_MOVEMENT_STOP_REASONS,
+  MOVEMENT_STOP_REASON_LABELS,
   normalizePosition,
   positionsEqual3d,
   commandedDestinationFromMoveCommand,
   classifyMoveTerminalOutcome,
   isMoveTacticallySuccessful,
   buildMoveReplanGuidance,
+  resolveMoveInterruptionCause,
+  buildMoveTerminalMessage,
+  enrichMoveResultNotification,
   buildMoveOutcomeBrief,
   resolveMoveRecoveryPolicy,
   runMandatoryMoveResultReview,

@@ -3,6 +3,7 @@
   "repo": "YOUR_GITHUB_OWNER/OpenXcom-Aster-Relay-M134E-Isolated",
   "branch": "main",
   "state_path": "m0-e2e/state.json",
+  "base_state_path": "m0-e2e/base-state.json",
   "content_paths": {
     "tacticalCommand": "m0-e2e/tactical-command.json",
     "tacticalResult": "m0-e2e/tactical-result.json",

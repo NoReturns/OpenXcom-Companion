@@ -9,6 +9,7 @@ const RELAY_LOCAL_CONFIG_ENV = 'OPENXCOM_COMPANION_RELAY_CONFIG';
 
 const DEFAULT_RELAY_BRANCH = 'main';
 const DEFAULT_STATE_PATH = 'm0/state.json';
+const DEFAULT_BASE_STATE_PATH = 'm0/base-state.json';
 const DEFAULT_MAX_REMOTE_BYTES = 256 * 1024;
 
 const RELAY_LOCAL_CONFIG_FILENAME = 'relay.local.json';
@@ -103,6 +104,7 @@ function resolveRelayDefaults(env = process.env) {
     repo: target.repo,
     branch: target.branch,
     statePath: DEFAULT_STATE_PATH,
+    baseStatePath: DEFAULT_BASE_STATE_PATH,
     maxRemoteBytes: DEFAULT_MAX_REMOTE_BYTES,
     configSource: target.source,
   };
@@ -117,6 +119,7 @@ function tryResolveRelayDefaults(env = process.env) {
     repo: target.repo,
     branch: target.branch,
     statePath: DEFAULT_STATE_PATH,
+    baseStatePath: DEFAULT_BASE_STATE_PATH,
     maxRemoteBytes: DEFAULT_MAX_REMOTE_BYTES,
     configSource: target.source,
   };
@@ -144,6 +147,7 @@ module.exports = {
   RELAY_LOCAL_CONFIG_ENV,
   DEFAULT_RELAY_BRANCH,
   DEFAULT_STATE_PATH,
+  DEFAULT_BASE_STATE_PATH,
   DEFAULT_MAX_REMOTE_BYTES,
   RELAY_LOCAL_CONFIG_FILENAME,
   RelayConfigurationError,

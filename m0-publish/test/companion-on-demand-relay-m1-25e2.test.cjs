@@ -9,12 +9,12 @@ const crypto = require('node:crypto');
 const {
   runSendOnce,
   createOnDemandRelayContext,
-  assessStrategicSendReadiness,
   SEND_PHASE,
   resolveOnDemandPaths,
 } = require('../lib/companion-on-demand-relay.cjs');
 const { writeJsonAtomic } = require('../lib/local-atomic.cjs');
 const { isolatedCommandRelayStateDir } = require('../lib/relay-test-isolation.cjs');
+const { assessStrategicSendReadiness } = require('../lib/strategic-publish.cjs');
 
 function makeRoot() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'm1-25e2-'));
@@ -33,9 +33,9 @@ describe('companion on-demand relay M1-25E2', () => {
     relayStateDir = isolatedCommandRelayStateDir(root, 'relay-state');
   });
 
-  it('strategic send without marker is not_ready', async () => {
+  it('strategic send without BI marker is not_ready', async () => {
     const paths = resolveOnDemandPaths(snapshotPath);
-    const readiness = assessStrategicSendReadiness(paths);
+    const readiness = assessStrategicSendReadiness(paths, 'a'.repeat(32));
     assert.equal(readiness.ok, false);
     const ctx = createOnDemandRelayContext({ snapshotPath, commandRelayStateDir: relayStateDir, dryRun: true });
     const outcome = await runSendOnce(ctx, {

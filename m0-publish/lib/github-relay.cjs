@@ -501,9 +501,68 @@ function createRelayPublisher(options = {}) {
     return { skipped: false };
   }
 
+  async function publishRelayDocument(documentJson, options = {}) {
+    const statePath = options.statePath ?? deps.statePath;
+    const maxBytes = options.maxBytes ?? deps.maxRemoteBytes;
+    const prefix = options.commitMessagePrefix ?? 'M1 relay document';
+    assertRelayMutationAllowed(deps, statePath);
+    const serialized = `${JSON.stringify(documentJson, null, 2)}\n`;
+    const byteLength = Buffer.byteLength(serialized, 'utf8');
+    if (byteLength > maxBytes) {
+      const sizeError = new Error(`Relay document exceeds ${maxBytes} byte cap.`);
+      sizeError.code = 'RELAY_DOCUMENT_TOO_LARGE';
+      throw sizeError;
+    }
+    const readDeps = { ...deps, statePath };
+    const remote = readRemoteStateMeta(readDeps);
+    const snapshotId = documentJson.snapshot_id ?? null;
+    const requestId = documentJson.request_id ?? null;
+    if (remote) {
+      const { value } = decodeRemoteState(remote, maxBytes);
+      if (value && snapshotId && value.snapshot_id === snapshotId) {
+        if (!requestId) {
+          return { skipped: true, reason: 'remote_unchanged' };
+        }
+        if (value.request_id === requestId) {
+          return { skipped: true, reason: 'remote_unchanged' };
+        }
+      }
+    }
+    const messageSuffix = requestId ? ` req ${requestId.slice(0, 8)}` : '';
+    const body = {
+      message: `${prefix} ${String(snapshotId ?? 'doc').slice(0, 12)}${messageSuffix}`,
+      content: Buffer.from(serialized, 'utf8').toString('base64'),
+      branch: deps.branch,
+    };
+    if (remote && remote.sha) {
+      body.sha = remote.sha;
+    }
+    try {
+      deps.ghApi('PUT', `repos/${deps.repo}/contents/${statePath}`, body);
+    } catch (error) {
+      const stderr = error.stderr ? String(error.stderr) : '';
+      if (/409|Conflict/i.test(stderr)) {
+        const conflict = new Error('SHA conflict while publishing; stop and retry manually.');
+        conflict.code = 'SHA_CONFLICT';
+        throw conflict;
+      }
+      if (isRateLimitBlob(`${stderr}\n${error.message}`)) {
+        throw error.code === 'RATE_LIMIT' ? error : normalizeGhApiExecError(error);
+      }
+      if (/401|authentication|Bad credentials/i.test(stderr + String(error.message))) {
+        const auth = new Error('GitHub authentication failed.');
+        auth.code = 'AUTH_FAILED';
+        throw auth;
+      }
+      throw error;
+    }
+    return { skipped: false };
+  }
+
   return {
     deps,
     publishRelayState,
+    publishRelayDocument,
     readRemoteStateMeta: () => readRemoteStateMeta(deps),
   };
 }

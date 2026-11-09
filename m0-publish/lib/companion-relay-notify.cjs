@@ -22,15 +22,21 @@ const STRUCTURED_PREFIX = '@COMPANION_NOTIFY\t';
 const STALE_REASON_PATTERN = /STALE_|state_version|snapshot_sha256|session_id|turn mismatch|binding/i;
 
 const {
-  buildMoveOutcomeBrief,
-  MOVE_OUTCOME_CLASS,
+  enrichMoveResultNotification,
 } = require('./move-result-consumer.cjs');
+const {
+  buildFireOutcomeBrief,
+  isDirectedFireCommandType,
+} = require('./fire-result-consumer.cjs');
 
 function pickCorrelation(fields = {}) {
   const out = {};
-  for (const key of ['command_id', 'session_id', 'request_id', 'turn', 'state_version', 'reason_code',
+  for (const key of ['command_id', 'command_type', 'session_id', 'request_id', 'turn', 'state_version', 'reason_code',
     'remote_sha256', 'inbox_sha256', 'result_sha256', 'channel', 'message',
-    'move_outcome_class', 'move_tactical_success', 'may_chain_next_command']) {
+    'move_outcome_class', 'move_tactical_success', 'may_chain_next_command',
+    'movement_stop_reason', 'move_interruption_cause', 'requires_fresh_binding',
+    'remaining_tu', 'commanded_destination', 'final_position',
+    'fire_outcome_class']) {
     if (fields[key] !== undefined && fields[key] !== null && fields[key] !== '') {
       out[key] = fields[key];
     }
@@ -126,16 +132,18 @@ function notificationFromLocalResult(result, inboxSha256, context = {}) {
     inbox_sha256: result.inbox_sha256 || inboxSha256,
     reason_code: typeof reasonCode === 'string' ? reasonCode : result.status,
   };
-  if (result.command_type === 'MOVE' && context.command) {
-    const brief = buildMoveOutcomeBrief(result, context.command);
-    if (brief) {
-      fields.move_outcome_class = brief.outcome_class;
-      fields.move_tactical_success = brief.tactical_success;
-      fields.may_chain_next_command = brief.may_chain_next_command;
-      if (brief.outcome_class === MOVE_OUTCOME_CLASS.CONTRACT_INCOMPLETE_OR_UNVERIFIED) {
-        fields.message = 'MOVE COMPLETED status but destination not verified — do not chain.';
-      } else if (brief.outcome_class === MOVE_OUTCOME_CLASS.INTERRUPTED_KNOWN_FINAL_POSITION) {
-        fields.message = 'MOVE interrupted — replan from final_position.';
+  if (result.command_type === 'MOVE') {
+    const moveEnrichment = enrichMoveResultNotification(result, context.command ?? null);
+    if (moveEnrichment) {
+      Object.assign(fields, moveEnrichment);
+    }
+  } else if (isDirectedFireCommandType(result.command_type)) {
+    const fireBrief = buildFireOutcomeBrief(result);
+    if (fireBrief) {
+      fields.command_type = result.command_type;
+      fields.fire_outcome_class = fireBrief.outcome_class;
+      if (fireBrief.message) {
+        fields.message = fireBrief.message;
       }
     }
   }
@@ -159,6 +167,9 @@ function formatSupervisorConsoleLine(event) {
   const parts = [`[notify] ${event.code}`];
   if (event.command_id) {
     parts.push(`command=${String(event.command_id).slice(0, 8)}…`);
+  }
+  if (event.command_type) {
+    parts.push(`type=${event.command_type}`);
   }
   if (event.request_id) {
     parts.push(`request=${String(event.request_id).slice(0, 8)}…`);
