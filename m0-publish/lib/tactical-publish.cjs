@@ -6,6 +6,7 @@ const { decodeSparseV1Base64 } = require('./terrain-semantics-sparse-v1.cjs');
 const { decodeSparseSemanticsBase64 } = require('./terrain-semantics-sparse-v2.cjs');
 const { buildTerrainBrief } = require('./terrain-brief.cjs');
 const { buildTerrainMapBrief } = require('./terrain-map-brief.cjs');
+const { buildTacticalMapWindowV2 } = require('./terrain-tactical-map-window-v2.cjs');
 const { buildUnitStateBrief } = require('./unit-state-brief.cjs');
 const { buildCommandBinding } = require('./command-binding.cjs');
 const {
@@ -2104,6 +2105,17 @@ function buildRelayPayload(tactical, publishedAt, briefingMeta = null, options =
     const terrainMapBrief = buildTerrainMapBrief(tactical, options.terrainMapBriefOptions);
     if (terrainMapBrief && !terrainMapBrief.omitted) {
       payload.terrainMapBrief = terrainMapBrief;
+    }
+  }
+  if (options.tacticalMapWindowV2 !== undefined && options.tacticalMapWindowV2 !== null) {
+    payload.tacticalMapWindowV2 = options.tacticalMapWindowV2;
+  } else if (tactical.schemaVersion >= 5 && tactical.terrain) {
+    const tacticalMapWindowV2 = buildTacticalMapWindowV2(tactical, {
+      maxExtraLevels: 1,
+      ...(options.tacticalMapWindowV2Options ?? {}),
+    });
+    if (tacticalMapWindowV2 && !tacticalMapWindowV2.omitted) {
+      payload.tacticalMapWindowV2 = tacticalMapWindowV2;
     }
   }
   if (options.unitStateBrief !== undefined && options.unitStateBrief !== null) {

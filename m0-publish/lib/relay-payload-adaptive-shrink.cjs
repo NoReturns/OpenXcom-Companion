@@ -65,7 +65,7 @@ function trimLogEventsToRecentTail(log, maxKeep) {
 
 function omitPackedTerrainWhenBriefPresent(relay) {
   const tactical = relay.tactical;
-  const hasBrief = relay.terrainBrief || relay.terrainMapBrief;
+  const hasBrief = relay.terrainBrief || relay.terrainMapBrief || relay.tacticalMapWindowV2;
   if (!tactical?.terrain || !hasBrief) {
     return null;
   }
@@ -77,7 +77,7 @@ function omitPackedTerrainWhenBriefPresent(relay) {
     reason: relay.terrainMapBrief ? 'terrain_map_brief_authoritative' : 'terrain_brief_authoritative',
     encoding,
     recordCount,
-    note: 'Packed terrain blob omitted from relay JSON; use terrainMapBrief, terrainBrief, or terrain-query. snapshot_id still hashes the full engine export.',
+    note: 'Packed terrain blob omitted from relay JSON; use tacticalMapWindowV2, terrainMapBrief, terrainBrief, or terrain-query. snapshot_id still hashes the full engine export.',
   };
   return { encoding, recordCount };
 }
@@ -129,6 +129,7 @@ function measureRelayPayloadContributions(relay) {
       tactical: pretty(relay.tactical),
       terrainBrief: pretty(relay.terrainBrief),
       terrainMapBrief: pretty(relay.terrainMapBrief),
+      tacticalMapWindowV2: pretty(relay.tacticalMapWindowV2),
       unitStateBrief: pretty(relay.unitStateBrief),
       commandBinding: pretty(relay.commandBinding),
       envelope: pretty({

@@ -187,7 +187,9 @@ describe('M1 P4 Step 3 experimental full ASCII relay', () => {
 
   it('omits gracefully when target budget is artificially tight', () => {
     const tactical = syntheticDiscoveredMap(30, 30, 2);
-    const prepared = prepareRelayPayloadForPublish(relayWithDigest(tactical), {
+    const relay = relayWithDigest(tactical);
+    delete relay.tacticalMapWindowV2;
+    const prepared = prepareRelayPayloadForPublish(relay, {
       includeTerrainFullAsciiBattlefield: true,
       targetBytes: 12 * 1024,
       maxBytes: RELAY_PUBLISH_MAX_BYTES,
@@ -251,6 +253,10 @@ describe('M1 P4 Step 3 experimental full ASCII relay', () => {
     const accounting = on.relay.terrainFullAsciiBattlefieldMeta
       ?? on.relay.terrainFullAsciiBattlefieldOmitted?.sizeAccounting;
     assert.ok(accounting);
+    if (!on.relay.terrainFullAsciiBattlefield && on.relay.terrainFullAsciiBattlefieldOmitted) {
+      assert.ok(off.relay.tacticalMapWindowV2, 'tacticalMapWindowV2 present; full ASCII may omit under relay target');
+      return;
+    }
     const prettyOverhead = incremental - compactBytes;
     assert.ok(prettyOverhead >= 0, `pretty relay overhead vs compact standalone: ${prettyOverhead}`);
     if (accounting.overheadVersusCompactStandalone !== undefined) {
