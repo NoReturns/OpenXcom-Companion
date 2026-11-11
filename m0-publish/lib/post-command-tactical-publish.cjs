@@ -11,6 +11,7 @@ const { markCommandRecord } = require('./command-journal.cjs');
 const path = require('node:path');
 const { writeTacticalPublicationConfirmAtomic } = require('./tactical-publication-confirm.cjs');
 const { buildMoveOutcomeBrief } = require('./move-result-consumer.cjs');
+const { buildDropOutcomeBrief } = require('./drop-result-ground-placement.cjs');
 
 const SNAPSHOT_SHA_PATTERN = /^[a-f0-9]{64}$/;
 const POST_COMMAND_PUBLISH_STATUSES = new Set(['COMPLETED', 'INTERRUPTED', 'FAILED']);
@@ -98,7 +99,7 @@ async function tryPublishPostCommandTacticalState(input) {
     return { action: 'fail_closed', reason: 'snapshot_stale_unchanged' };
   }
 
-  if (result.status === 'COMPLETED') {
+  if (result.status === 'COMPLETED' && result.command_type !== 'DROP') {
     if (!Number.isInteger(result.actor_unit_id)) {
       return { action: 'fail_closed', reason: 'missing_actor_unit_id' };
     }
@@ -130,6 +131,17 @@ async function tryPublishPostCommandTacticalState(input) {
     const brief = buildMoveOutcomeBrief(result, deliveredCommand);
     if (brief) {
       relayOptions.lastMoveOutcomeBrief = brief;
+    }
+  }
+  if (result.command_type === 'DROP') {
+    const dropBrief = buildDropOutcomeBrief(result, deliveredCommand, {
+      tactical,
+      snapshotSha256Lower: digest,
+      preCommandSnapshotSha256: record?.delivered_command_snapshot_sha256,
+      deliveredCommandSnapshotSha256: deliveredCommand?.snapshot_sha256,
+    });
+    if (dropBrief) {
+      relayOptions.lastDropOutcomeBrief = dropBrief;
     }
   }
   const relay = buildRelayPayload(tactical, publishedAt, null, relayOptions);

@@ -6,6 +6,7 @@ const YAML = require('yaml');
 const { parseBriefingRequestJson, BriefingRequestError } = require('./briefing-request.cjs');
 const { verifyBriefingSnapshot, BriefingSnapshotError } = require('./briefing-snapshot.cjs');
 const { buildRelayPayload } = require('./tactical-publish.cjs');
+const { tryAttachDropOutcomeBriefToRelayOptions } = require('./drop-result-ground-placement.cjs');
 const {
   loadJournal,
   persistJournal,
@@ -213,11 +214,19 @@ class BriefingWatcher {
     }
 
     const publishedAt = new Date(this.now()).toISOString();
+    const relayOptions = { snapshotSha256: verified.digest, snapshotPath: this.snapshotPath };
+    tryAttachDropOutcomeBriefToRelayOptions(relayOptions, {
+      snapshotPath: this.snapshotPath,
+      tactical: verified.tactical,
+      digest: verified.digest,
+      existsSync: this.existsSync,
+      readFileSync: this.readFileSync,
+    });
     const relay = buildRelayPayload(verified.tactical, publishedAt, {
       request_id: request.request_id,
       session_id: request.session_id,
       turn: request.turn,
-    }, { snapshotSha256: verified.digest, snapshotPath: this.snapshotPath });
+    }, relayOptions);
 
     if (this.dryRun) {
       this.log(`Dry-run publish ${relay.snapshot_id.slice(0, 12)} for request ${request.request_id.slice(0, 8)}.`);

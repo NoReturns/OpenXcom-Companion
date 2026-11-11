@@ -16,7 +16,7 @@ const SCHEMA_VERSION = 1;
  * Verified Win32 Release build (ASTER-INTEGRATION-48H: strategic SEND, relay diagnostics,
  * MOVE hostile-spot, directed-fire presentation, inventory/grenade, civilian/hostile export).
  */
-const VERIFIED_BUILD_SHA256 = '68d5bf4231ee6db06836305a682ef617da5e2dc543f9bcc5c0c3aea5c44cc4da';
+const VERIFIED_BUILD_SHA256 = 'ba79c707f87daf47704bf726adaf6221e326b397ba1abc7ca624efd36f57bad8';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 

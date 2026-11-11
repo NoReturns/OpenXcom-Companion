@@ -146,6 +146,19 @@ function notificationFromLocalResult(result, inboxSha256, context = {}) {
         fields.message = fireBrief.message;
       }
     }
+  } else if (result.command_type === 'DROP') {
+    const { buildDropOutcomeBrief } = require('./drop-result-ground-placement.cjs');
+    const dropBrief = buildDropOutcomeBrief(result, context.command ?? null);
+    if (dropBrief) {
+      fields.command_type = 'DROP';
+      fields.drop_verification_class = dropBrief.verification_class;
+      if (dropBrief.ground_tile) {
+        fields.drop_ground_tile = dropBrief.ground_tile;
+      }
+      if (dropBrief.message) {
+        fields.message = dropBrief.message;
+      }
+    }
   }
   return buildNotification(code, fields);
 }

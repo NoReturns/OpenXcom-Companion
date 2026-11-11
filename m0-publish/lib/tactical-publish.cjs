@@ -2290,6 +2290,9 @@ function buildRelayPayload(tactical, publishedAt, briefingMeta = null, options =
   if (options.lastMoveOutcomeBrief !== undefined && options.lastMoveOutcomeBrief !== null) {
     payload.lastMoveOutcomeBrief = options.lastMoveOutcomeBrief;
   }
+  if (options.lastDropOutcomeBrief !== undefined && options.lastDropOutcomeBrief !== null) {
+    payload.lastDropOutcomeBrief = options.lastDropOutcomeBrief;
+  }
   return payload;
 }
 
