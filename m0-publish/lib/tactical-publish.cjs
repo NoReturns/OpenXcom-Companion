@@ -36,6 +36,7 @@ const BT_MELEE = 3;
 const BT_GRENADE = 4;
 const BT_PROXIMITYGRENADE = 5;
 const BT_MEDIKIT = 6;
+const BT_CORPSE = 11;
 const MAX_BATTLE_ITEM_ID = 2147483647;
 const MAX_INVENTORY_GRID = 32;
 
@@ -74,7 +75,18 @@ const DISC_WEST = 1;
 const DISC_NORTH = 2;
 const DISC_BODY = 4;
 const MAP_KEYS = new Set(['width', 'height', 'depth']);
-const UNIT_BASE_KEYS = new Set(['id', 'faction', 'originalFaction', 'position']);
+const UNIT_BASE_KEYS = new Set([
+  'id',
+  'faction',
+  'originalFaction',
+  'position',
+  'battlefieldPlacement',
+  'positionKnown',
+  'carriedByUnitId',
+  'carriedBodyBattleItemId',
+]);
+const BATTLEFIELD_PLACEMENT_CARRIED = 'carried_in_inventory';
+const ALLOWED_BATTLEFIELD_PLACEMENT = new Set(['on_map', BATTLEFIELD_PLACEMENT_CARRIED]);
 const UNIT_FRIENDLY_V2_KEYS = new Set(['name', 'health', 'timeUnits']);
 const UNIT_FRIENDLY_V3_KEYS = new Set([
   'kneeled',
@@ -187,6 +199,7 @@ const INVENTORY_ENTRY_KEYS = new Set([
   'inventoryY',
   'itemType',
   'battleType',
+  'carriedRosterUnitId',
   'loaded',
   'empty',
   'noMagazineInserted',
@@ -391,6 +404,84 @@ function normalizePosition(value, label) {
 
 function isFriendlyPlayerControlled(unit) {
   return unit.originalFaction === FACTION_PLAYER && unit.faction === FACTION_PLAYER;
+}
+
+function isCarriedInInventoryPlacement(unit) {
+  return unit?.battlefieldPlacement === BATTLEFIELD_PLACEMENT_CARRIED;
+}
+
+function isOnMapCommandPosition(unit) {
+  return !isCarriedInInventoryPlacement(unit) && Array.isArray(unit?.position) && unit.position.length === 3;
+}
+
+function validateCarriedSoldierLinkages(units) {
+  const unitById = new Map(units.map((unit) => [unit.id, unit]));
+  for (const unit of units) {
+    if (!isCarriedInInventoryPlacement(unit)) {
+      continue;
+    }
+    assert(
+      unit.positionKnown === false,
+      `units[] id ${unit.id} carried_in_inventory requires positionKnown false`,
+    );
+    assert(
+      unit.position === undefined,
+      `units[] id ${unit.id} carried_in_inventory must not include position`,
+    );
+    assert(
+      isFriendlyRosterSoldier(unit),
+      `units[] id ${unit.id} carried_in_inventory requires roster soldier`,
+    );
+    assert(
+      unit.condition && unit.condition.conscious === false,
+      `units[] id ${unit.id} carried_in_inventory requires living unconscious (conscious false)`,
+    );
+    assert(
+      unit.condition && unit.condition.alive === true,
+      `units[] id ${unit.id} carried_in_inventory requires alive soldier`,
+    );
+    const carrier = unitById.get(unit.carriedByUnitId);
+    assert(carrier !== undefined, `units[] id ${unit.id} carriedByUnitId must reference another unit`);
+    assert(
+      !isCarriedInInventoryPlacement(carrier),
+      `units[] id ${unit.id} carrier cannot itself be carried_in_inventory`,
+    );
+    assert(
+      Array.isArray(carrier.position) && carrier.position.length === 3,
+      `units[] id ${unit.id} carrier must have on-map position`,
+    );
+    const inventory = carrier.inventory ?? [];
+    const bodyRow = inventory.find((row) => row.battleItemId === unit.carriedBodyBattleItemId);
+    assert(bodyRow !== undefined, `units[] id ${unit.id} carriedBodyBattleItemId must match carrier inventory row`);
+    assert(
+      bodyRow.carriedRosterUnitId === unit.id,
+      `units[] id ${unit.id} carrier inventory carriedRosterUnitId mismatch`,
+    );
+    assert(bodyRow.battleType === BT_CORPSE, `units[] id ${unit.id} carried body must be corpse battleType`);
+    assert(
+      bodyRow.inventoryX !== undefined && bodyRow.inventoryY !== undefined,
+      `units[] id ${unit.id} carrier inventory must include inventoryX/inventoryY for carried body`,
+    );
+  }
+  for (const carrier of units) {
+    if (!Array.isArray(carrier.inventory)) {
+      continue;
+    }
+    for (const row of carrier.inventory) {
+      if (!Object.prototype.hasOwnProperty.call(row, 'carriedRosterUnitId')) {
+        continue;
+      }
+      const carried = unitById.get(row.carriedRosterUnitId);
+      assert(
+        carried !== undefined && isCarriedInInventoryPlacement(carried),
+        `carriedRosterUnitId ${row.carriedRosterUnitId} must reference carried_in_inventory unit`,
+      );
+      assert(
+        carried.carriedByUnitId === carrier.id && carried.carriedBodyBattleItemId === row.battleItemId,
+        `inventory carriedRosterUnitId ${row.carriedRosterUnitId} linkage inconsistent with unit row`,
+      );
+    }
+  }
 }
 
 /**
@@ -979,6 +1070,16 @@ function validateInventory(raw, label) {
         allowNegative: false,
       });
     }
+    if (Object.prototype.hasOwnProperty.call(entry, 'carriedRosterUnitId')) {
+      row.carriedRosterUnitId = requireInt(entry.carriedRosterUnitId, `${entryLabel}.carriedRosterUnitId`, {
+        min: 1,
+        allowNegative: false,
+      });
+      assert(
+        isRosterSoldierUnitId(row.carriedRosterUnitId),
+        `${entryLabel}.carriedRosterUnitId must be a roster soldier id`,
+      );
+    }
     if (Object.prototype.hasOwnProperty.call(entry, 'inventorySlotType')) {
       const st = requireString(entry.inventorySlotType, `${entryLabel}.inventorySlotType`, { maxLength: 16 });
       assert(INVENTORY_SLOT_TYPES.has(st), `${entryLabel}.inventorySlotType invalid`);
@@ -1039,12 +1140,61 @@ function validateUnit(raw, index, schemaVersion = 2) {
     }
   }
 
+  const carriedPlacement = Object.prototype.hasOwnProperty.call(raw, 'battlefieldPlacement')
+    && requireString(raw.battlefieldPlacement, `units[${index}].battlefieldPlacement`, { maxLength: 32 })
+      === BATTLEFIELD_PLACEMENT_CARRIED;
+
   const unit = {
     id: requireInt(raw.id, `units[${index}].id`),
     faction: requireFaction(raw.faction, `units[${index}].faction`),
     originalFaction: requireFaction(raw.originalFaction, `units[${index}].originalFaction`),
-    position: normalizePosition(raw.position, `units[${index}].position`),
   };
+
+  if (carriedPlacement) {
+    assert(
+      !Object.prototype.hasOwnProperty.call(raw, 'position'),
+      `units[${index}] carried_in_inventory must not include position`,
+    );
+    unit.battlefieldPlacement = BATTLEFIELD_PLACEMENT_CARRIED;
+    unit.positionKnown = requireBool(raw.positionKnown, `units[${index}].positionKnown`);
+    assert(unit.positionKnown === false, `units[${index}].positionKnown must be false when carried_in_inventory`);
+    unit.carriedByUnitId = requireInt(raw.carriedByUnitId, `units[${index}].carriedByUnitId`, {
+      min: 1,
+      allowNegative: false,
+    });
+    unit.carriedBodyBattleItemId = requireInt(
+      raw.carriedBodyBattleItemId,
+      `units[${index}].carriedBodyBattleItemId`,
+      { min: 0, max: MAX_BATTLE_ITEM_ID, allowNegative: false },
+    );
+    assert(
+      unit.carriedByUnitId !== unit.id,
+      `units[${index}].carriedByUnitId must not equal unit id`,
+    );
+  } else {
+    if (Object.prototype.hasOwnProperty.call(raw, 'battlefieldPlacement')) {
+      const placement = requireString(raw.battlefieldPlacement, `units[${index}].battlefieldPlacement`, {
+        maxLength: 32,
+      });
+      assert(ALLOWED_BATTLEFIELD_PLACEMENT.has(placement), `units[${index}].battlefieldPlacement invalid`);
+      if (placement === 'on_map') {
+        unit.battlefieldPlacement = placement;
+      }
+    }
+    assert(
+      Object.prototype.hasOwnProperty.call(raw, 'position'),
+      `units[${index}].position required unless battlefieldPlacement is carried_in_inventory`,
+    );
+    unit.position = normalizePosition(raw.position, `units[${index}].position`);
+    if (Object.prototype.hasOwnProperty.call(raw, 'positionKnown')) {
+      unit.positionKnown = requireBool(raw.positionKnown, `units[${index}].positionKnown`);
+      assert(unit.positionKnown === true, `units[${index}].positionKnown must be true when position present`);
+    }
+    if (Object.prototype.hasOwnProperty.call(raw, 'carriedByUnitId')
+      || Object.prototype.hasOwnProperty.call(raw, 'carriedBodyBattleItemId')) {
+      throw new ValidationError(`units[${index}] carried linkage fields require carried_in_inventory placement`);
+    }
+  }
 
   const friendly = isFriendlyPlayerControlled(unit);
   const friendlyRosterSoldier = isFriendlyRosterSoldier(unit);
@@ -2028,6 +2178,9 @@ function parseAndValidate(raw) {
 
   assert(Array.isArray(raw.units), 'units must be an array');
   const units = raw.units.map((u, i) => validateUnit(u, i, schemaVersion));
+  if (schemaVersion >= 3) {
+    validateCarriedSoldierLinkages(units);
+  }
   const eventLog = validateEventLog(raw, units, schemaVersion);
   const perceptionLog = validatePerceptionLog(raw, units, schemaVersion);
   const terrain = validateTerrain(raw, map, schemaVersion);

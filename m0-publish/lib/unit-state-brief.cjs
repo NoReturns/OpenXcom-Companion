@@ -12,6 +12,18 @@ function isFriendlyPlayerControlled(unit) {
 }
 
 /** X-COM roster soldier under player control (excludes friendly HWP / id >= MAX_SOLDIER_ID). */
+function unitStateBriefPlacementFields(unit) {
+  if (unit.battlefieldPlacement === 'carried_in_inventory') {
+    return {
+      positionKnown: false,
+      battlefieldPlacement: unit.battlefieldPlacement,
+      carriedByUnitId: unit.carriedByUnitId,
+      carriedBodyBattleItemId: unit.carriedBodyBattleItemId,
+    };
+  }
+  return { position: unit.position };
+}
+
 function isFriendlyRosterSoldier(unit) {
   return isFriendlyPlayerControlled(unit) && isRosterSoldierUnitId(unit.id);
 }
@@ -64,7 +76,7 @@ function buildUnitStateBrief(tactical, options = {}) {
   const facingNotes = [];
 
   for (const unit of friendly) {
-    const base = { id: unit.id, name: unit.name, position: unit.position };
+    const base = { id: unit.id, name: unit.name, ...unitStateBriefPlacementFields(unit) };
     const readiness = unit.readiness?.summary;
     if (readiness && readiness !== 'ready_to_act') {
       exceptions.push({

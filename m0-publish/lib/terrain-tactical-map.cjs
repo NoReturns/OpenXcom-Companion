@@ -236,6 +236,9 @@ function buildLevelLayers({ width, height, z, byPos, units }) {
   const tacticalWithUnits = tactical.map((row) => row);
 
   for (const unit of units) {
+    if (!Array.isArray(unit.position) || unit.position.length !== 3) {
+      continue;
+    }
     const [ux, uy, uz] = unit.position;
     if (uz !== z || ux < 0 || uy < 0 || ux >= width || uy >= height) continue;
     const ch = unitMarker(unit);

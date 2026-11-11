@@ -3,6 +3,13 @@
 const { SNAPSHOT_SHA256_RE } = require('./briefing-request.cjs');
 const { isFriendlyRosterSoldier } = require('./unit-state-brief.cjs');
 
+function isOnMapPlayerSoldierForBinding(unit) {
+  return isFriendlyRosterSoldier(unit)
+    && unit.battlefieldPlacement !== 'carried_in_inventory'
+    && Array.isArray(unit.position)
+    && unit.position.length === 3;
+}
+
 const BINDING_SCHEMA_VERSION = 1;
 
 class CommandBindingError extends Error {
@@ -34,7 +41,7 @@ function buildCommandBinding(tactical, snapshotSha256Lower) {
     'eventLog.latestSeq required for state_version semantics');
   assert(tactical.map && Number.isInteger(tactical.map.width), 'map dimensions required');
 
-  const playerSoldiers = tactical.units.filter(isPlayerSoldier).map((u) => ({
+  const playerSoldiers = tactical.units.filter(isOnMapPlayerSoldierForBinding).map((u) => ({
     id: u.id,
     position: u.position,
     timeUnits: u.timeUnits,

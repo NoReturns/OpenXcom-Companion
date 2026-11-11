@@ -354,8 +354,12 @@ function buildTerrainBrief(tactical, options = {}) {
   const { map, units, selectedUnitId } = tactical;
   const mapVolume = map.width * map.height * map.depth;
 
-  const friendly = units.filter((unit) => isFriendlyPlayerControlled(unit));
-  const selected = friendly.find((unit) => unit.id === selectedUnitId) ?? friendly[0] ?? null;
+  const friendlyOnMap = units.filter(
+    (unit) => isFriendlyPlayerControlled(unit)
+      && Array.isArray(unit.position)
+      && unit.position.length === 3,
+  );
+  const selected = friendlyOnMap.find((unit) => unit.id === selectedUnitId) ?? friendlyOnMap[0] ?? null;
   const focus = selected ? selected.position : null;
   const nearRadius = options.nearFocusRadius ?? 10;
   const clusterRadius = options.friendlyClusterRadius ?? 14;
@@ -381,7 +385,7 @@ function buildTerrainBrief(tactical, options = {}) {
   const aggregated = aggregateClassifications(tiles);
   const nearFocusAll = buildNearFocusEntries(tiles, focus, nearRadius);
 
-  const nearbyFriendlies = friendly
+  const nearbyFriendlies = friendlyOnMap
     .filter((u) => u.id !== (selected?.id))
     .map((u) => ({
       id: u.id,

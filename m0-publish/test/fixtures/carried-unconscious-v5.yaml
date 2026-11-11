@@ -1,0 +1,115 @@
+schemaVersion: 5
+turn: 3
+side: 0
+selectedUnitId: 1
+missionContext:
+  schemaVersion: 1
+  missionType: STR_UFO_CRASH_RECOVERY
+  missionClass: ufo_crash
+  siteKind: ufo_site
+map:
+  width: 10
+  height: 10
+  depth: 2
+terrain:
+  memoryNote: Fixture for carried unconscious roster placement (P1-A).
+  tiles:
+    - p: [1, 2, 0]
+      disc: 4
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+units:
+  - id: 1
+    faction: 0
+    originalFaction: 0
+    position: [1, 2, 0]
+    name: Carrier Soldier
+    health: 40
+    timeUnits: 50
+    kneeled: false
+    activeHand: STR_RIGHT_HAND
+    hands:
+      right: null
+      left: null
+    inventory:
+      - battleItemId: 9001
+        slot: STR_BACK_PACK
+        inventorySlotType: slot
+        inventoryX: 0
+        inventoryY: 0
+        itemType: STR_XCOM_CORPSE
+        battleType: 11
+        carriedRosterUnitId: 3
+  - id: 3
+    faction: 0
+    originalFaction: 0
+    battlefieldPlacement: carried_in_inventory
+    positionKnown: false
+    carriedByUnitId: 1
+    carriedBodyBattleItemId: 9001
+    name: Injured Soldier
+    health: 12
+    timeUnits: 0
+    kneeled: false
+    activeHand: STR_RIGHT_HAND
+    hands:
+      right: null
+      left: null
+    inventory: []
+    condition:
+      energy: 0
+      maxEnergy: 50
+      morale: 40
+      stunLevel: 120
+      alive: true
+      conscious: false
+      engineStatus: unconscious
+      engineStatusId: 7
+      floating: false
+      movementTypeId: 0
+      movementType: walk
+    readiness:
+      summary: unconscious
+      engineStatus: unconscious
+      liveRosterSoldier: true
+      engineActingUnitAvailable: false
+      observationNote: Observational only.
+  - id: 2
+    faction: 0
+    originalFaction: 0
+    position: [4, 4, 0]
+    name: On Map Unconscious
+    health: 8
+    timeUnits: 0
+    kneeled: false
+    activeHand: STR_RIGHT_HAND
+    hands:
+      right: null
+      left: null
+    inventory: []
+    condition:
+      energy: 5
+      morale: 30
+      stunLevel: 90
+      alive: true
+      conscious: false
+      engineStatus: unconscious
+      engineStatusId: 7
+      floating: false
+      movementTypeId: 0
+      movementType: walk
+    readiness:
+      summary: unconscious
+      engineStatus: unconscious
+      liveRosterSoldier: true
+      engineActingUnitAvailable: false
+      observationNote: Observational only.
+eventLog:
+  sessionId: b1c2d3e4f5a6789012345678abcdef02
+  oldestSeq: 0
+  latestSeq: 0
+  droppedCount: 0
+  events: []
