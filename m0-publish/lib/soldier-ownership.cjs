@@ -1,30 +1,34 @@
 'use strict';
 
+const {
+  parseSoldierControlDocument,
+  relayControlBindingMatches,
+  SoldierControlParseError,
+} = require('./soldier-control-relay.cjs');
+
 /**
  * Mirrors engine CompanionSoldierOwnershipCore defaults (local file only).
  */
-function isAiControlledUnit(controlFileJson, battleSessionId, unitId) {
+function isAiControlledUnit(controlFileJson, battleSessionId, unitId, bindingContext = null) {
   if (!controlFileJson || !battleSessionId) {
     return false;
   }
-  let value;
+  let doc;
   try {
-    value = JSON.parse(controlFileJson);
-  } catch {
+    doc = parseSoldierControlDocument(controlFileJson);
+  } catch (error) {
+    if (error instanceof SoldierControlParseError) {
+      return false;
+    }
     return false;
   }
-  if (!value || value.schema_version !== 1) {
+  const ctx = bindingContext
+    ? { session_id: battleSessionId, ...bindingContext }
+  : { session_id: battleSessionId };
+  if (!relayControlBindingMatches(doc, ctx)) {
     return false;
   }
-  if (value.session_id !== battleSessionId) {
-    return false;
-  }
-  const assignments = value.assignments;
-  if (!assignments || typeof assignments !== 'object') {
-    return false;
-  }
-  const mode = assignments[String(unitId)] ?? assignments[unitId];
-  return mode === 'ai';
+  return doc.assignments[unitId] === 'ai';
 }
 
 module.exports = {

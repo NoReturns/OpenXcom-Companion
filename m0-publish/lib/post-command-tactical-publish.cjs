@@ -121,7 +121,7 @@ async function tryPublishPostCommandTacticalState(input) {
   }
 
   const publishedAt = new Date(now()).toISOString();
-  const relayOptions = { snapshotSha256: digest };
+  const relayOptions = { snapshotSha256: digest, snapshotPath: snapshotPath };
   if (
     result.command_type === 'MOVE'
     && deliveredCommand

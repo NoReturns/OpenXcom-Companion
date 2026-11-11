@@ -394,7 +394,10 @@ async function publishSnapshotDirect(ctx, pending = null) {
       turn: marker?.turn ?? tactical.turn,
     }
     : null;
-  const relay = buildRelayPayload(tactical, publishedAt, briefingMeta, { snapshotSha256: digest });
+  const relay = buildRelayPayload(tactical, publishedAt, briefingMeta, {
+    snapshotSha256: digest,
+    snapshotPath: inputPath,
+  });
   if (dryRun) {
     log(`Dry-run snapshot publish ${relay.snapshot_id.slice(0, 12)}.`);
     return { ok: true, dryRun: true };

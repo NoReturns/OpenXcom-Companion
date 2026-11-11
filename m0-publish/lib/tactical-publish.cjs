@@ -9,6 +9,7 @@ const { buildTerrainMapBrief } = require('./terrain-map-brief.cjs');
 const { buildTacticalMapWindowV2 } = require('./terrain-tactical-map-window-v2.cjs');
 const { buildUnitStateBrief } = require('./unit-state-brief.cjs');
 const { buildCommandBinding } = require('./command-binding.cjs');
+const { buildSoldierControlMirror } = require('./soldier-control-relay.cjs');
 const {
   isRosterSoldierUnitId,
   isFriendlyRosterSoldier,
@@ -2278,6 +2279,13 @@ function buildRelayPayload(tactical, publishedAt, briefingMeta = null, options =
   }
   if (options.snapshotSha256 && tactical.eventLog && typeof tactical.eventLog.sessionId === 'string') {
     payload.commandBinding = buildCommandBinding(tactical, options.snapshotSha256);
+    payload.soldierControl = buildSoldierControlMirror(tactical, {
+      capturedAt: publishedAt,
+      soldierControlFileJson: options.soldierControlFileJson,
+      soldierControlFilePath: options.soldierControlFilePath,
+      snapshotPath: options.snapshotPath,
+      ownershipBindingContext: options.ownershipBindingContext,
+    });
   }
   if (options.lastMoveOutcomeBrief !== undefined && options.lastMoveOutcomeBrief !== null) {
     payload.lastMoveOutcomeBrief = options.lastMoveOutcomeBrief;

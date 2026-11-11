@@ -125,6 +125,7 @@ class TacticalWatcher {
     const digest = sha256HexLower(Buffer.from(text, 'utf8'));
     this.pendingRelay = buildRelayPayload(tactical, new Date(this.now()).toISOString(), null, {
       snapshotSha256: digest,
+      snapshotPath: this.inputPath,
     });
     await this._maybeFlushPending(true);
   }

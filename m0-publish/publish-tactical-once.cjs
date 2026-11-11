@@ -273,7 +273,10 @@ function runOnce({ publish, dryRun, inputPath }) {
   const publishedAt = new Date().toISOString();
   const snapshotBytes = readSnapshotByteBuffer(fs.readFileSync, inputPath);
   const digest = sha256HexLower(snapshotBytes);
-  const relay = buildRelayPayload(tactical, publishedAt, null, { snapshotSha256: digest });
+  const relay = buildRelayPayload(tactical, publishedAt, null, {
+    snapshotSha256: digest,
+    snapshotPath: inputPath,
+  });
   const ghReady = checkGhAuthReadiness();
 
   if (dryRun) {

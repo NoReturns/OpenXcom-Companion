@@ -217,7 +217,7 @@ class BriefingWatcher {
       request_id: request.request_id,
       session_id: request.session_id,
       turn: request.turn,
-    }, { snapshotSha256: verified.digest });
+    }, { snapshotSha256: verified.digest, snapshotPath: this.snapshotPath });
 
     if (this.dryRun) {
       this.log(`Dry-run publish ${relay.snapshot_id.slice(0, 12)} for request ${request.request_id.slice(0, 8)}.`);
