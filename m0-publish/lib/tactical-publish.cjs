@@ -309,6 +309,12 @@ const PSYCHOLOGICAL_PERCEPTION_EVENT_TYPES = new Set([
 ]);
 const ALIEN_PANIC_PSYCH_EVENT_TYPES = new Set(['alien_panicked_observed', 'alien_berserk_observed']);
 const SOLDIER_CASUALTY_PERCEPTION_EVENT_TYPES = new Set(['soldier_down', 'soldier_recovered']);
+const THROW_LAUNCH_PERCEPTION_EVENT_TYPES = new Set([
+  'grenade_throw_observed',
+  'explosive_launch_observed',
+  'object_throw_observed',
+  'throw_observed',
+]);
 const ALLOWED_PERCEPTION_EVENT_TYPES = new Set([
   'gunfire_observed',
   'impact_observed',
@@ -317,6 +323,7 @@ const ALLOWED_PERCEPTION_EVENT_TYPES = new Set([
   'hostile_casualty_tile_observed',
   'explosion_observed_or_heard',
   'projectile_direction_observed',
+  ...THROW_LAUNCH_PERCEPTION_EVENT_TYPES,
   ...SOLDIER_CASUALTY_PERCEPTION_EVENT_TYPES,
   ...PSYCHOLOGICAL_PERCEPTION_EVENT_TYPES,
 ]);
@@ -1793,6 +1800,27 @@ function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
       `perceptionLog.events[${index}] hostile casualty confidence invalid`,
     );
     assert(!Object.prototype.hasOwnProperty.call(raw, 'subjectUnitId'), `perceptionLog.events[${index}] must not include subjectUnitId`);
+  } else if (type === 'throw_observed') {
+    assert(
+      confidence === 'audio_only' || confidence === 'source_visible',
+      `perceptionLog.events[${index}] throw_observed confidence invalid`,
+    );
+    if (confidence === 'audio_only') {
+      assert(!positionKnown, `perceptionLog.events[${index}] throw_observed must not expose position`);
+    } else {
+      assert(positionKnown, `perceptionLog.events[${index}] visible unclassified throw requires positionKnown`);
+      assert(position, `perceptionLog.events[${index}] visible unclassified throw requires position`);
+    }
+    assert(!Object.prototype.hasOwnProperty.call(raw, 'subjectUnitId'), `perceptionLog.events[${index}] throw_observed must not identify thrower`);
+  } else if (THROW_LAUNCH_PERCEPTION_EVENT_TYPES.has(type) && type !== 'throw_observed') {
+    assert(confidence === 'source_visible', `perceptionLog.events[${index}] classified throw/launch requires source_visible confidence`);
+    assert(positionKnown, `perceptionLog.events[${index}] visible throw requires positionKnown`);
+    assert(position, `perceptionLog.events[${index}] visible throw requires position`);
+    if (subjectUnitId !== undefined) {
+      assert(subjectUnitId >= 1_000_000, `perceptionLog.events[${index}] throw subjectUnitId must be a hostile battle unit`);
+    }
+    assert(!travelDirection, `perceptionLog.events[${index}] travelDirection invalid for throw/launch`);
+    assert(!incomingBearing, `perceptionLog.events[${index}] incomingBearing invalid for throw/launch`);
   } else if (!isPsychEvent) {
     assert(!travelDirection, `perceptionLog.events[${index}] travelDirection invalid for type`);
     assert(!incomingBearing, `perceptionLog.events[${index}] incomingBearing invalid for type`);
@@ -2320,6 +2348,7 @@ module.exports = {
   FACTION_HOSTILE,
   FACTION_NEUTRAL,
   PSYCHOLOGICAL_PERCEPTION_EVENT_TYPES,
+  THROW_LAUNCH_PERCEPTION_EVENT_TYPES,
   MAX_INPUT_BYTES,
   MAX_INVENTORY_ENTRIES,
   MAX_GROUND_ITEM_OBSERVATIONS,
