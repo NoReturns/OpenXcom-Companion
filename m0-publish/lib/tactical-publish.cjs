@@ -299,7 +299,10 @@ const PERCEPTION_EVENT_KEYS = new Set([
   'incomingBearing',
   'explosionOriginClass',
   'explosionOriginClassSource',
+  'attributedActorUnitId',
+  'attributionScope',
 ]);
+const ATTRIBUTION_SCOPES_V1 = new Set(['fatal']);
 const EXPLOSION_ORIGIN_CLASSES_V1 = new Set(['unit_death_detonation']);
 const EXPLOSION_ORIGIN_CLASS_SOURCES = new Set(['engine_state']);
 const PSYCHOLOGICAL_PERCEPTION_EVENT_TYPES = new Set([
@@ -325,6 +328,7 @@ const ALLOWED_PERCEPTION_EVENT_TYPES = new Set([
   'door_sound_heard',
   'unit_last_seen',
   'hostile_casualty_tile_observed',
+  'combat_casualty_attributed',
   'explosion_observed_or_heard',
   'projectile_direction_observed',
   ...THROW_LAUNCH_PERCEPTION_EVENT_TYPES,
@@ -352,6 +356,7 @@ const ALLOWED_PERCEPTION_CONFIDENCE = new Set([
   'unconscious',
   'dead',
   'standing',
+  'fatal',
 ]);
 
 class ValidationError extends Error {
@@ -1648,6 +1653,7 @@ function validateWeaponFireEvent(raw, index, friendlyUnitIds) {
 
 function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
   assert(isPlainObject(raw), `perceptionLog.events[${index}] must be an object`);
+  const unitById = new Map(units.map((unit) => [unit.id, unit]));
   for (const key of Object.keys(raw)) {
     if (!PERCEPTION_EVENT_KEYS.has(key)) {
       throw new ValidationError(`perceptionLog.events[${index}] unknown field: ${key}`);
@@ -1795,6 +1801,77 @@ function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
       assert(confidence === 'trajectory_observed', `perceptionLog.events[${index}] direction fields require trajectory_observed`);
       assert(travelDirection && incomingBearing, `perceptionLog.events[${index}] travel and incoming bearings must appear together`);
     }
+  } else if (type === 'combat_casualty_attributed') {
+    assert(confidence === 'fatal', `perceptionLog.events[${index}] combat_casualty_attributed confidence must be fatal`);
+    assert(
+      perceptionChannel === 'seen' || perceptionChannel === 'notification',
+      `perceptionLog.events[${index}] combat attribution channel invalid`,
+    );
+    assert(!Object.prototype.hasOwnProperty.call(raw, 'observerUnitId'), `perceptionLog.events[${index}] combat attribution must not include observerUnitId`);
+    assert(Object.prototype.hasOwnProperty.call(raw, 'subjectUnitId'), `perceptionLog.events[${index}].subjectUnitId required for combat attribution`);
+    assert(subjectUnitId !== undefined && subjectUnitId > 0, `perceptionLog.events[${index}].subjectUnitId required`);
+    assert(
+      Object.prototype.hasOwnProperty.call(raw, 'attributedActorUnitId'),
+      `perceptionLog.events[${index}].attributedActorUnitId required`,
+    );
+    const attributedActorUnitId = requireInt(
+      raw.attributedActorUnitId,
+      `perceptionLog.events[${index}].attributedActorUnitId`,
+    );
+    assert(attributedActorUnitId > 0, `perceptionLog.events[${index}].attributedActorUnitId required`);
+    assert(
+      Object.prototype.hasOwnProperty.call(raw, 'attributionScope'),
+      `perceptionLog.events[${index}].attributionScope required`,
+    );
+    const attributionScope = requireString(raw.attributionScope, `perceptionLog.events[${index}].attributionScope`, {
+      maxLength: 16,
+    });
+    assert(ATTRIBUTION_SCOPES_V1.has(attributionScope), `perceptionLog.events[${index}].attributionScope invalid`);
+    const victimIsRoster = isRosterSoldierUnitId(subjectUnitId);
+    const victimIsHostile = subjectUnitId >= 1_000_000;
+    assert(victimIsRoster || victimIsHostile, `perceptionLog.events[${index}].subjectUnitId must be roster or hostile`);
+    assert(!travelDirection, `perceptionLog.events[${index}] travelDirection invalid for combat attribution`);
+    assert(!incomingBearing, `perceptionLog.events[${index}] incomingBearing invalid for combat attribution`);
+    assert(
+      !Object.prototype.hasOwnProperty.call(raw, 'explosionOriginClass'),
+      `perceptionLog.events[${index}] combat attribution must not include explosionOriginClass`,
+    );
+    if (subjectName !== undefined) {
+      assert(victimIsRoster, `perceptionLog.events[${index}].subjectName only allowed for roster victims`);
+      assert(
+        isRosterSoldierCasualtySubjectNameAllowed(subjectUnitId, units),
+        `perceptionLog.events[${index}].subjectName only allowed for roster soldiers`,
+      );
+    }
+    if (victimIsHostile) {
+      const victimRow = unitById.get(subjectUnitId);
+      assert(victimRow, `perceptionLog.events[${index}] hostile victim must be present in units[] at export`);
+      assert(victimRow.originalFaction === FACTION_HOSTILE, `perceptionLog.events[${index}] subject must be hostile origin`);
+    }
+    const actorIsRoster = isRosterSoldierUnitId(attributedActorUnitId);
+    const actorIsHostile = attributedActorUnitId >= 1_000_000;
+    assert(actorIsRoster || actorIsHostile, `perceptionLog.events[${index}].attributedActorUnitId must be roster or hostile`);
+    const actorRow = unitById.get(attributedActorUnitId);
+    assert(actorRow, `perceptionLog.events[${index}] attributed actor must be present in units[] at export`);
+    if (actorIsHostile) {
+      assert(actorRow.originalFaction === FACTION_HOSTILE, `perceptionLog.events[${index}] attributed actor hostile origin invalid`);
+    }
+    if (positionKnown) {
+      assert(position, `perceptionLog.events[${index}] combat attribution requires position when positionKnown`);
+    }
+    return {
+      seq,
+      type,
+      turn: raw.turn,
+      perceptionChannel,
+      confidence,
+      positionKnown,
+      ...(position ? { position } : {}),
+      subjectUnitId,
+      attributedActorUnitId,
+      attributionScope,
+      ...(subjectName ? { subjectName } : {}),
+    };
   } else if (type === 'hostile_casualty_tile_observed') {
     assert(perceptionChannel === 'seen', `perceptionLog.events[${index}] hostile casualty must be seen channel`);
     assert(positionKnown, `perceptionLog.events[${index}] hostile casualty requires positionKnown`);
