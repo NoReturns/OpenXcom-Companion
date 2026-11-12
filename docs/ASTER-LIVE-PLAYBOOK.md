@@ -94,7 +94,7 @@ These clarify operator UI and relay JSON; they do **not** change engine rules.
 | **Retrieve status labels** | **`Order completed`** means the last retrieve cycle finished relay work for a terminal engine command status — not that every GitHub step succeeded on the first try. **`Order done; relay incomplete`** means the engine command may have finished while GitHub publish/retire is still pending; read `m0/tactical-result.json` and status JSON together. |
 | **Kill / casualty attribution** | `perceptionLog`, `soldier_down`, `hostile_casualty_tile_observed`, `gunfire_observed`, and `explosion_observed_or_heard` do **not** form a complete authoritative killer→victim graph. Do not infer kills from proximity, explosions alone, or missing units. |
 | **TU reservation vs reaction fire** | In-game TU reserve (snap / aimed / auto) affects **movement affordability** and warnings. OpenXcom reaction shots during enemy movement use the engine’s existing **snap or melee** reaction rules; reserve mode does **not** select aimed or auto reaction fire type. |
-| **MOVE `reaction_fire` stop** | `movement_stop_reason: reaction_fire` means the walk was interrupted because a **reaction-fire sequence started** — not confirmed hit, damage, or kill. Use refreshed `tactical.units` and `perceptionLog` for observed injuries. |
+| **MOVE `reaction_fire` stop** | `movement_stop_reason: reaction_fire` means the walk was interrupted because a **reaction-fire sequence started** (`tryReaction` committed) — not guaranteed execution, hit, damage, or kill. After the next export, look for `perceptionLog` `reaction_attack_executed` (performed attack) alongside existing `gunfire_observed` / impacts / casualty events. |
 | **`commandBinding.player_soldiers` TU** | `timeUnits: null` with `timeUnitsApplicability: not_command_applicable` lists the soldier for identity/position but marks residual TU as **non-actionable** (e.g. unconscious). Use `engineReportedTimeUnits` for engine-reported residual TU; authoritative detail remains in `tactical.units`. |
 
 ## Division of labour
@@ -211,7 +211,7 @@ Optional MOVE fields: `starting_position`, `remaining_tu`, `kneeled`, `movement_
 | Value | Meaning |
 |--------|---------|
 | `hostile_spotted` | Walk halted because a new hostile contact was recorded during movement. |
-| `reaction_fire` | Walk halted because reaction-fire **sequence** started — **not** confirmed hit, damage, or kill. |
+| `reaction_fire` | Walk halted because reaction-fire was **committed** (`tryReaction` + TU spend) — **not** guaranteed projectile/melee completion, hit, damage, or kill. `reaction_attack_executed` in `perceptionLog` means the attack passed init vetoes and actually fired/struck. |
 | `path_blocked` | Next step blocked (unit/door/obstruction). |
 | `proximity_grenade` | Proximity grenade triggered during movement. |
 | `insufficient_time_units` / `insufficient_energy` | TU or stamina exhausted during the walk. |

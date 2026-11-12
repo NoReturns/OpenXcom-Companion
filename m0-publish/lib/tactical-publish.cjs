@@ -301,6 +301,7 @@ const PERCEPTION_EVENT_KEYS = new Set([
   'explosionOriginClassSource',
   'attributedActorUnitId',
   'attributionScope',
+  'actionType',
 ]);
 const ATTRIBUTION_SCOPES_V1 = new Set(['fatal']);
 const EXPLOSION_ORIGIN_CLASSES_V1 = new Set(['unit_death_detonation']);
@@ -324,6 +325,7 @@ const THROW_LAUNCH_PERCEPTION_EVENT_TYPES = new Set([
 ]);
 const ALLOWED_PERCEPTION_EVENT_TYPES = new Set([
   'gunfire_observed',
+  'reaction_attack_executed',
   'impact_observed',
   'door_sound_heard',
   'unit_last_seen',
@@ -1718,6 +1720,7 @@ function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
   if (Object.prototype.hasOwnProperty.call(raw, 'subjectName')) {
     subjectName = requireString(raw.subjectName, `perceptionLog.events[${index}].subjectName`, { maxLength: 80 });
   }
+  let reactionAttackActionType;
   const isPsychEvent = PSYCHOLOGICAL_PERCEPTION_EVENT_TYPES.has(type);
   const isSoldierCasualtyEvent = SOLDIER_CASUALTY_PERCEPTION_EVENT_TYPES.has(type);
   if (isPsychEvent) {
@@ -1872,6 +1875,46 @@ function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
       attributionScope,
       ...(subjectName ? { subjectName } : {}),
     };
+  } else if (type === 'reaction_attack_executed') {
+    assert(
+      confidence === 'source_visible' || confidence === 'audio_only',
+      `perceptionLog.events[${index}] reaction_attack_executed confidence invalid`,
+    );
+    assert(Object.prototype.hasOwnProperty.call(raw, 'actionType'), `perceptionLog.events[${index}].actionType required`);
+    reactionAttackActionType = requireString(raw.actionType, `perceptionLog.events[${index}].actionType`, { maxLength: 8 });
+    assert(
+      reactionAttackActionType === 'snap' || reactionAttackActionType === 'melee',
+      `perceptionLog.events[${index}].actionType must be snap or melee`,
+    );
+    assert(
+      !Object.prototype.hasOwnProperty.call(raw, 'attributedActorUnitId'),
+      `perceptionLog.events[${index}] reaction_attack_executed must not include attributedActorUnitId`,
+    );
+    assert(!travelDirection, `perceptionLog.events[${index}] travelDirection invalid for reaction_attack_executed`);
+    assert(!incomingBearing, `perceptionLog.events[${index}] incomingBearing invalid for reaction_attack_executed`);
+    if (confidence === 'audio_only') {
+      assert(!positionKnown, `perceptionLog.events[${index}] audio_only reaction must not expose coordinates`);
+      assert(
+        !Object.prototype.hasOwnProperty.call(raw, 'subjectUnitId'),
+        `perceptionLog.events[${index}] audio_only reaction must not expose subjectUnitId`,
+      );
+    }
+    if (subjectUnitId !== undefined) {
+      const shooterIsRoster = isRosterSoldierUnitId(subjectUnitId);
+      const shooterIsHostile = subjectUnitId >= 1_000_000;
+      assert(
+        shooterIsRoster || shooterIsHostile,
+        `perceptionLog.events[${index}].subjectUnitId must be roster soldier or hostile reactor`,
+      );
+      const shooterRow = unitById.get(subjectUnitId);
+      assert(shooterRow, `perceptionLog.events[${index}] reaction shooter must be present in units[] at export`);
+      if (shooterIsHostile) {
+        assert(
+          confidence === 'source_visible',
+          `perceptionLog.events[${index}] identified hostile reaction shooter requires source_visible confidence`,
+        );
+      }
+    }
   } else if (type === 'hostile_casualty_tile_observed') {
     assert(perceptionChannel === 'seen', `perceptionLog.events[${index}] hostile casualty must be seen channel`);
     assert(positionKnown, `perceptionLog.events[${index}] hostile casualty requires positionKnown`);
@@ -1967,6 +2010,7 @@ function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
         ),
       }
       : {}),
+    ...(reactionAttackActionType ? { actionType: reactionAttackActionType } : {}),
   };
 }
 
