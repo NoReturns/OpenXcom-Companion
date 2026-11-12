@@ -64,6 +64,25 @@ function incomingRetrievePollWouldEraseTerminalOutcome(existing, incoming) {
 }
 
 /**
+ * Bare retrieval failures (network/offline) must not drop sticky command completion from status JSON.
+ */
+function incomingRetrieveFailureWouldEraseStickyCommand(existing, incoming) {
+  if (!existing || !incoming || incoming.action !== 'retrieve') {
+    return false;
+  }
+  if (!isStickyTerminalRetrieveOutcome(existing)) {
+    return false;
+  }
+  if (incoming.phase !== 'failed' || !incoming.terminal) {
+    return false;
+  }
+  if (incoming.last_command_id && incoming.last_command_status) {
+    return false;
+  }
+  return true;
+}
+
+/**
  * Prevent an older on-demand request or stale poll from overwriting a newer terminal status.
  */
 function shouldWriteOnDemandStatus(existing, incoming) {
@@ -74,6 +93,9 @@ function shouldWriteOnDemandStatus(existing, incoming) {
     return true;
   }
   if (incomingRetrievePollWouldEraseTerminalOutcome(existing, incoming)) {
+    return false;
+  }
+  if (incomingRetrieveFailureWouldEraseStickyCommand(existing, incoming)) {
     return false;
   }
   if (incoming.request_id && existing.request_id && incoming.request_id === existing.request_id) {
@@ -97,6 +119,42 @@ function shouldWriteOnDemandStatus(existing, incoming) {
     return true;
   }
   return true;
+}
+
+function buildRetrieveAttemptFields(fields) {
+  if (!fields || fields.action !== 'retrieve' || !fields.terminal) {
+    return null;
+  }
+  return {
+    last_retrieve_request_id: fields.request_id,
+    last_retrieve_phase: fields.phase,
+    last_retrieve_updated_at_ms: fields.updated_at_ms,
+    ...(fields.error_code ? { last_retrieve_error_code: fields.error_code } : {}),
+  };
+}
+
+function mergeStickyStatusWithRetrieveAttempt(existing, incoming) {
+  if (!existing || !incoming || incoming.action !== 'retrieve' || !incoming.terminal) {
+    return null;
+  }
+  const attempt = buildRetrieveAttemptFields(incoming);
+  if (!attempt) {
+    return null;
+  }
+  const merged = { ...existing, ...attempt };
+  if (!incoming.error_code && merged.last_retrieve_error_code) {
+    delete merged.last_retrieve_error_code;
+  }
+  return merged;
+}
+
+function shouldAcceptIncomingRetrieveAttempt(existing, incoming) {
+  if (!existing || !incoming) {
+    return false;
+  }
+  const existingAttemptMs = Number(existing.last_retrieve_updated_at_ms) || 0;
+  const incomingAttemptMs = Number(incoming.last_retrieve_updated_at_ms) || 0;
+  return incomingAttemptMs > existingAttemptMs;
 }
 
 function buildOnDemandStatusPayload(fields) {
@@ -126,12 +184,28 @@ function buildOnDemandStatusPayload(fields) {
   if (fields.retrieve_outcome) {
     payload.retrieve_outcome = fields.retrieve_outcome;
   }
+  const attempt = buildRetrieveAttemptFields(fields);
+  if (attempt) {
+    Object.assign(payload, attempt);
+  }
   return payload;
 }
 
 function writeOnDemandStatus(statusPath, payload, io = {}) {
   const existing = readOnDemandStatus(statusPath, io);
   if (!shouldWriteOnDemandStatus(existing, payload)) {
+    if (incomingRetrieveFailureWouldEraseStickyCommand(existing, payload)) {
+      const merged = mergeStickyStatusWithRetrieveAttempt(existing, payload);
+      if (merged && shouldAcceptIncomingRetrieveAttempt(existing, merged)) {
+        writeJsonAtomic(
+          statusPath,
+          merged,
+          io.writeFileSync ?? fs.writeFileSync,
+          io.renameSync ?? fs.renameSync,
+        );
+        return { written: true, payload: merged, preserved_sticky: true };
+      }
+    }
     return { written: false, payload: existing };
   }
   writeJsonAtomic(
@@ -249,6 +323,10 @@ module.exports = {
   isTerminalRetrievePhase,
   isStickyTerminalRetrieveOutcome,
   incomingRetrievePollWouldEraseTerminalOutcome,
+  incomingRetrieveFailureWouldEraseStickyCommand,
+  buildRetrieveAttemptFields,
+  mergeStickyStatusWithRetrieveAttempt,
+  shouldAcceptIncomingRetrieveAttempt,
   readOnDemandStatus,
   shouldWriteOnDemandStatus,
   buildOnDemandStatusPayload,

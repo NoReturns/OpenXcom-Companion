@@ -19,6 +19,42 @@ function isAuthErrorCode(code) {
 }
 
 /**
+ * Latest retrieve attempt vs sticky command completion are independent; empty polls keep command label.
+ * @param {object} status
+ * @returns {object}
+ */
+function resolveEffectiveLabelStatus(status) {
+  if (!status || typeof status !== 'object') {
+    return status;
+  }
+  const attemptPhase = status.last_retrieve_phase;
+  const attemptMs = Number(status.last_retrieve_updated_at_ms) || 0;
+  if (!attemptPhase || attemptMs <= 0) {
+    return status;
+  }
+  if (
+    attemptPhase === 'no_new_orders'
+    && status.phase === 'completed'
+    && status.action === 'retrieve'
+    && status.last_command_status
+  ) {
+    return status;
+  }
+  const stickyMs = Number(status.updated_at_ms) || 0;
+  if (attemptMs < stickyMs && status.phase === 'completed' && status.last_command_status) {
+    return status;
+  }
+  return {
+    ...status,
+    phase: attemptPhase,
+    action: 'retrieve',
+    error_code: status.last_retrieve_error_code
+      ?? (attemptPhase === status.phase ? status.error_code : undefined),
+    request_id: status.last_retrieve_request_id || status.request_id,
+  };
+}
+
+/**
  * @param {object} status parsed on-demand status fields used by the overlay
  * @returns {string}
  */
@@ -26,42 +62,43 @@ function formatRelayStatusLabel(status) {
   if (!status || typeof status !== 'object') {
     return '';
   }
+  const effective = resolveEffectiveLabelStatus(status);
   if (
-    status.outcome === 'deferred'
-    || (status.phase === 'sending' && status.error_code === 'RATE_LIMIT' && !status.terminal)
+    effective.outcome === 'deferred'
+    || (effective.phase === 'sending' && effective.error_code === 'RATE_LIMIT' && !effective.terminal)
   ) {
     return 'Deferred: RATE LIMIT';
   }
-  if (status.phase === 'manual_upload_required' || status.outcome === 'manual_upload_required') {
+  if (effective.phase === 'manual_upload_required' || effective.outcome === 'manual_upload_required') {
     return 'Manual upload required';
   }
-  if (status.phase === 'not_ready') {
+  if (effective.phase === 'not_ready') {
     return 'Not ready';
   }
-  if (status.phase === 'sending') {
+  if (effective.phase === 'sending') {
     return 'Sending';
   }
-  if (status.phase === 'retrieving') {
+  if (effective.phase === 'retrieving') {
     return 'Retrieving';
   }
-  if (status.phase === 'no_new_orders') {
+  if (effective.phase === 'no_new_orders') {
     return 'No new orders';
   }
-  if (status.phase === 'sent') {
-    if (status.outcome === 'skipped_unchanged') {
+  if (effective.phase === 'sent') {
+    if (effective.outcome === 'skipped_unchanged') {
       return 'Unchanged';
     }
     return 'Published';
   }
-  if (status.phase === 'completed') {
-    if (status.action === 'retrieve') {
-      if (status.last_command_status === 'COMPLETED') {
+  if (effective.phase === 'completed') {
+    if (effective.action === 'retrieve') {
+      if (effective.last_command_status === 'COMPLETED') {
         return 'Order completed';
       }
       if (
-        status.last_command_status === 'FAILED'
-        || status.last_command_status === 'REJECTED'
-        || status.last_command_status === 'INTERRUPTED'
+        effective.last_command_status === 'FAILED'
+        || effective.last_command_status === 'REJECTED'
+        || effective.last_command_status === 'INTERRUPTED'
       ) {
         return 'Order failed';
       }
@@ -69,35 +106,35 @@ function formatRelayStatusLabel(status) {
     }
     return 'Published';
   }
-  if (status.phase === 'failed') {
-    if (status.action === 'retrieve') {
+  if (effective.phase === 'failed') {
+    if (effective.action === 'retrieve') {
       if (
-        status.error_code === 'RETRIEVAL_ERROR'
-        || status.error_code === 'NETWORK_FAILED'
-        || status.error_code === 'RATE_LIMIT'
-        || status.error_code === 'RELAY_OFFLINE'
+        effective.error_code === 'RETRIEVAL_ERROR'
+        || effective.error_code === 'NETWORK_FAILED'
+        || effective.error_code === 'RATE_LIMIT'
+        || effective.error_code === 'RELAY_OFFLINE'
       ) {
         return 'Retrieve error';
       }
       if (
-        status.last_command_status === 'FAILED'
-        || status.last_command_status === 'REJECTED'
-        || status.last_command_status === 'INTERRUPTED'
+        effective.last_command_status === 'FAILED'
+        || effective.last_command_status === 'REJECTED'
+        || effective.last_command_status === 'INTERRUPTED'
       ) {
         return 'Order failed';
       }
-      if (status.last_command_status === 'COMPLETED') {
+      if (effective.last_command_status === 'COMPLETED') {
         return 'Order done; relay incomplete';
       }
-      if (status.error_code === 'RETRIEVE_INCOMPLETE') {
+      if (effective.error_code === 'RETRIEVE_INCOMPLETE') {
         return 'Retrieve incomplete';
       }
       return 'Retrieve failed';
     }
-    if (isValidationErrorCode(status.error_code)) {
+    if (isValidationErrorCode(effective.error_code)) {
       return 'Failed: VALIDATION';
     }
-    if (isAuthErrorCode(status.error_code)) {
+    if (isAuthErrorCode(effective.error_code)) {
       return 'Failed: AUTH';
     }
     return 'Failed';
@@ -107,4 +144,5 @@ function formatRelayStatusLabel(status) {
 
 module.exports = {
   formatRelayStatusLabel,
+  resolveEffectiveLabelStatus,
 };
