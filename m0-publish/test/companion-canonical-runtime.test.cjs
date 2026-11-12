@@ -44,18 +44,62 @@ describe('companion canonical runtime (M1-25A)', () => {
     assert.equal(decision.action, 'block_launch');
   });
 
-  it('allows launch for matching orphan EXECUTING inbox (engine resume on first tick)', () => {
+  it('allows launch for matching same-session orphan EXECUTING inbox (engine resume on first tick)', () => {
+    const commandId = 'a7f0e2d51c9b4f8da65b30c192e74f06';
+    const sessionId = 'c2c699950ddc838bfe4b37babc03967f';
+    const decision = evaluateInboxQuarantine({
+      inboxExists: true,
+      resultExists: true,
+      resultStatus: 'EXECUTING',
+      resultParseError: false,
+      inboxValue: { command_id: commandId, session_id: sessionId },
+      resultCommandId: commandId,
+      snapshotBinding: {
+        sessionId,
+        snapshotSha256: '223b701f353ebcaa309ece7a0be8a23fac33148b5a095dcc2f23fa11ee6cf',
+        turn: 1,
+        stateVersion: 0,
+      },
+    });
+    assert.equal(decision.action, 'warn');
+    assert.equal(decision.reason, 'orphan_executing_resume');
+  });
+
+  it('quarantines cross-session EXECUTING pair when snapshot session differs', () => {
+    const commandId = 'aster-20261110-seppe-sectoid-auto-29';
+    const decision = evaluateInboxQuarantine({
+      inboxExists: true,
+      resultExists: true,
+      resultStatus: 'EXECUTING',
+      resultParseError: false,
+      inboxValue: {
+        command_id: commandId,
+        session_id: '112482ac508d5bc16dcde1470d197d09',
+      },
+      resultCommandId: commandId,
+      snapshotBinding: {
+        sessionId: 'c2c699950ddc838bfe4b37babc03967f',
+        snapshotSha256: '223b701f353ebcaa309ece7a0be8a23fac33148b5a095dcc2f23fa11ee6cf',
+        turn: 1,
+        stateVersion: 0,
+      },
+    });
+    assert.equal(decision.action, 'quarantine');
+    assert.equal(decision.reason, 'stale_session_executing_orphan');
+  });
+
+  it('blocks launch when session identity for EXECUTING pair is ambiguous', () => {
     const commandId = 'a7f0e2d51c9b4f8da65b30c192e74f06';
     const decision = evaluateInboxQuarantine({
       inboxExists: true,
       resultExists: true,
       resultStatus: 'EXECUTING',
       resultParseError: false,
-      inboxValue: { command_id: commandId },
+      inboxValue: { command_id: commandId, session_id: '112482ac508d5bc16dcde1470d197d09' },
       resultCommandId: commandId,
     });
-    assert.equal(decision.action, 'warn');
-    assert.equal(decision.reason, 'orphan_executing_resume');
+    assert.equal(decision.action, 'block_launch');
+    assert.equal(decision.reason, 'ambiguous_session_identity');
   });
 
   it('does not quarantine when inbox absent', () => {

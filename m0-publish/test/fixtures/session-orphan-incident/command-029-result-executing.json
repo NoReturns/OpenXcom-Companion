@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "command_id": "aster-20261110-seppe-sectoid-auto-29",
+  "command_type": "AUTO_SHOT",
+  "status": "EXECUTING",
+  "session_id": "112482ac508d5bc16dcde1470d197d09",
+  "turn": 4,
+  "actor_unit_id": 1,
+  "starting_position": { "x": 22, "y": 17, "z": 2 },
+  "snapshot_sha256": "15f9c26f5435a30438d68fb69fe5269f08bb209860416b1d261693f0ea592c12",
+  "inbox_sha256": "a5154a3afed19545d1e4feb326524187a7bcfa61f63fe815aec7ea56dc6a2ee5",
+  "completed_at": "engine-local"
+}

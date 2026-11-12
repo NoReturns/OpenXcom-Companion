@@ -153,11 +153,37 @@ function evaluateInboxQuarantine({
     const inboxCommandId = inboxValue && typeof inboxValue.command_id === 'string'
       ? inboxValue.command_id
       : '';
+    const inboxSessionId = inboxValue && typeof inboxValue.session_id === 'string'
+      ? inboxValue.session_id
+      : '';
+    if (
+      snapshotBinding
+      && snapshotBinding.sessionId
+      && inboxSessionId
+      && inboxSessionId !== snapshotBinding.sessionId
+      && inboxCommandId
+      && resultCommandId
+      && inboxCommandId === resultCommandId
+    ) {
+      return {
+        action: 'quarantine',
+        reason: 'stale_session_executing_orphan',
+        message:
+          'inbox quarantined: non-terminal result belongs to a prior battle session; engine will not resume cross-session execution',
+      };
+    }
     if (
       inboxCommandId
       && resultCommandId
       && inboxCommandId === resultCommandId
     ) {
+      if (!snapshotBinding || !snapshotBinding.sessionId) {
+        return {
+          action: 'block_launch',
+          reason: 'ambiguous_session_identity',
+          message: 'cannot verify battle session for non-terminal local command/result pair',
+        };
+      }
       return {
         action: 'warn',
         reason: 'orphan_executing_resume',
