@@ -27,6 +27,53 @@ function isPlayerSoldier(unit) {
   return isFriendlyRosterSoldier(unit);
 }
 
+/** Readiness summaries where binding must not present residual TU as command-spendable. */
+const NON_COMMAND_APPLICABLE_READINESS = new Set([
+  'unconscious',
+  'dead',
+  'panicking',
+  'berserk',
+  'incapacitated',
+  'collapsing',
+]);
+
+/**
+ * True when commandBinding may expose actionable `timeUnits` for this unit row.
+ * Engine tactical.units still carries authoritative numeric TU unchanged.
+ */
+function isCommandApplicableForBinding(unit) {
+  const summary = unit.readiness?.summary;
+  if (summary && NON_COMMAND_APPLICABLE_READINESS.has(summary)) {
+    return false;
+  }
+  if (unit.readiness && unit.readiness.engineActingUnitAvailable === false) {
+    return false;
+  }
+  if (unit.condition?.conscious === false && unit.condition?.alive === true) {
+    return false;
+  }
+  return true;
+}
+
+function mapPlayerSoldierBindingRow(unit) {
+  const row = {
+    id: unit.id,
+    position: unit.position,
+    kneeled: unit.kneeled === true,
+    name: typeof unit.name === 'string' ? unit.name : undefined,
+  };
+  if (isCommandApplicableForBinding(unit)) {
+    row.timeUnits = unit.timeUnits;
+    return row;
+  }
+  row.timeUnits = null;
+  row.timeUnitsApplicability = 'not_command_applicable';
+  if (typeof unit.timeUnits === 'number' && Number.isInteger(unit.timeUnits)) {
+    row.engineReportedTimeUnits = unit.timeUnits;
+  }
+  return row;
+}
+
 /**
  * Verified MOVE authoring metadata for remote commanders.
  * Lives on the relay envelope beside `tactical`; does not affect snapshot_id.
@@ -41,13 +88,9 @@ function buildCommandBinding(tactical, snapshotSha256Lower) {
     'eventLog.latestSeq required for state_version semantics');
   assert(tactical.map && Number.isInteger(tactical.map.width), 'map dimensions required');
 
-  const playerSoldiers = tactical.units.filter(isOnMapPlayerSoldierForBinding).map((u) => ({
-    id: u.id,
-    position: u.position,
-    timeUnits: u.timeUnits,
-    kneeled: u.kneeled === true,
-    name: typeof u.name === 'string' ? u.name : undefined,
-  }));
+  const playerSoldiers = tactical.units
+    .filter(isOnMapPlayerSoldierForBinding)
+    .map(mapPlayerSoldierBindingRow);
 
   return {
     schema_version: BINDING_SCHEMA_VERSION,
@@ -65,6 +108,10 @@ function buildCommandBinding(tactical, snapshotSha256Lower) {
     selected_unit_id: tactical.selectedUnitId ?? null,
     player_soldiers: playerSoldiers,
     ownership_note: 'All soldiers default to human control locally. Remote commands cannot assign AI; owner must set companion-soldier-control.json.',
+    player_soldiers_tu_note:
+      'timeUnits is command-spendable TU only when set to a non-negative integer. '
+      + 'null with timeUnitsApplicability not_command_applicable means the soldier is listed for identity/position '
+      + 'but not command-actionable; use tactical.units and engineReportedTimeUnits (when present) for casualty/residual TU.',
     destination_note: 'Choose destination from terrainMapBrief, terrainBrief, terrain-query relay, or visible snapshot geometry only.',
   };
 }
@@ -418,6 +465,8 @@ function bindingMatchesTactical(binding, tactical) {
 module.exports = {
   BINDING_SCHEMA_VERSION,
   CommandBindingError,
+  isCommandApplicableForBinding,
+  mapPlayerSoldierBindingRow,
   buildCommandBinding,
   parseCommandBinding,
   composeMoveCommand,

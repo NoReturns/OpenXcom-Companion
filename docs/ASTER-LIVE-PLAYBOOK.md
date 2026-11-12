@@ -38,7 +38,7 @@ After handoff, run the [mandatory status review](#mandatory-battlefield-status-r
 
 | Source | On GitHub? | Role |
 |--------|------------|------|
-| `commandBinding.player_soldiers` | **Yes** | Live player soldiers at export: id, position, TU, kneel — **not** AI/human mode |
+| `commandBinding.player_soldiers` | **Yes** | Live player soldiers at export: id, position, kneel, command TU (`timeUnits` or `null` + `timeUnitsApplicability`) — **not** AI/human mode |
 | `commandBinding.ownership_note` | **Yes** | States remote JSON cannot assign AI; owner sets control locally |
 | `companion-soldier-control.json` | **No** (local beside snapshot path) | Engine-published mirror of assignments; sidecar/engine use at retrieve time |
 | Tactical save `companion.assignments` | **No** (YAML on game PC) | Canonical in-battle ownership |
@@ -83,6 +83,19 @@ M1 uses **two independent mechanisms**. Do not treat AUTO RETRIEVE as a replacem
 Session command gates (`one active command`, stale binding archive on F6, quarantine on launch) are unchanged. P0 **test-supervisor** daemon lifecycle fixes apply to **Node test harnesses** only, not production AUTO RETRIEVE behavior.
 
 Detail: [f6-relay-lifecycle-m1-25c.md](../m0-publish/docs/f6-relay-lifecycle-m1-25c.md#issue-2-node-daemon-vs-auto-retrieve).
+
+## Relay HUD and combat reporting semantics
+
+These clarify operator UI and relay JSON; they do **not** change engine rules.
+
+| Topic | What to trust |
+|--------|----------------|
+| **SEND button highlight (gold)** | Local tactical state has **unpublished** changes since last confirmed GitHub publish (`mutationGeneration` vs confirmed SEND). It does **not** mean a remote command executed or succeeded. |
+| **Retrieve status labels** | **`Order completed`** means the last retrieve cycle finished relay work for a terminal engine command status — not that every GitHub step succeeded on the first try. **`Order done; relay incomplete`** means the engine command may have finished while GitHub publish/retire is still pending; read `m0/tactical-result.json` and status JSON together. |
+| **Kill / casualty attribution** | `perceptionLog`, `soldier_down`, `hostile_casualty_tile_observed`, `gunfire_observed`, and `explosion_observed_or_heard` do **not** form a complete authoritative killer→victim graph. Do not infer kills from proximity, explosions alone, or missing units. |
+| **TU reservation vs reaction fire** | In-game TU reserve (snap / aimed / auto) affects **movement affordability** and warnings. OpenXcom reaction shots during enemy movement use the engine’s existing **snap or melee** reaction rules; reserve mode does **not** select aimed or auto reaction fire type. |
+| **MOVE `reaction_fire` stop** | `movement_stop_reason: reaction_fire` means the walk was interrupted because a **reaction-fire sequence started** — not confirmed hit, damage, or kill. Use refreshed `tactical.units` and `perceptionLog` for observed injuries. |
+| **`commandBinding.player_soldiers` TU** | `timeUnits: null` with `timeUnitsApplicability: not_command_applicable` lists the soldier for identity/position but marks residual TU as **non-actionable** (e.g. unconscious). Use `engineReportedTimeUnits` for engine-reported residual TU; authoritative detail remains in `tactical.units`. |
 
 ## Division of labour
 
