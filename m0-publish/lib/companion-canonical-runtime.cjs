@@ -13,10 +13,10 @@ const SCHEMA_VERSION = 1;
  * `openxcom.exe` and commit together with any doc updates — do not deploy a build whose
  * hash is not reflected here.
  *
- * Verified Win32 Release build (ASTER-INTEGRATION-48H: strategic SEND, relay diagnostics,
- * MOVE hostile-spot, directed-fire presentation, inventory/grenade, civilian/hostile export).
+ * Verified Win32 Release build (ASTER-M1-STRATEGIC-INTEL-RC-01: combined strategic export
+ * corrections + purchasing catalog; built from 581b66428 + release checkpoint c059e23ab).
  */
-const VERIFIED_BUILD_SHA256 = '921101c7e2fd07d187bcc2664d0bf55321d55b1709572db61720519f6d461cd6';
+const VERIFIED_BUILD_SHA256 = '3a92d0b0db7668e578fc406f30efcdbda74cbefc278ef1a9bc9dfd641a716476';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 
