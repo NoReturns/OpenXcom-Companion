@@ -297,7 +297,11 @@ const PERCEPTION_EVENT_KEYS = new Set([
   'compassDirection',
   'travelDirection',
   'incomingBearing',
+  'explosionOriginClass',
+  'explosionOriginClassSource',
 ]);
+const EXPLOSION_ORIGIN_CLASSES_V1 = new Set(['unit_death_detonation']);
+const EXPLOSION_ORIGIN_CLASS_SOURCES = new Set(['engine_state']);
 const PSYCHOLOGICAL_PERCEPTION_EVENT_TYPES = new Set([
   'soldier_panicked_observed',
   'soldier_berserk_observed',
@@ -1821,6 +1825,38 @@ function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
     }
     assert(!travelDirection, `perceptionLog.events[${index}] travelDirection invalid for throw/launch`);
     assert(!incomingBearing, `perceptionLog.events[${index}] incomingBearing invalid for throw/launch`);
+  } else if (type === 'explosion_observed_or_heard') {
+    assert(
+      confidence === 'blast_visible' || confidence === 'audio_only',
+      `perceptionLog.events[${index}] explosion confidence invalid`,
+    );
+    assert(!Object.prototype.hasOwnProperty.call(raw, 'subjectUnitId'), `perceptionLog.events[${index}] explosion must not identify source unit`);
+    assert(
+      confidence !== 'audio_only' || !Object.prototype.hasOwnProperty.call(raw, 'explosionOriginClass'),
+      `perceptionLog.events[${index}] audio_only explosion must not include explosionOriginClass`,
+    );
+    assert(
+      confidence !== 'audio_only' || !Object.prototype.hasOwnProperty.call(raw, 'explosionOriginClassSource'),
+      `perceptionLog.events[${index}] audio_only explosion must not include explosionOriginClassSource`,
+    );
+    const hasOriginClass = Object.prototype.hasOwnProperty.call(raw, 'explosionOriginClass');
+    const hasOriginSource = Object.prototype.hasOwnProperty.call(raw, 'explosionOriginClassSource');
+    if (hasOriginClass || hasOriginSource) {
+      assert(hasOriginClass && hasOriginSource, `perceptionLog.events[${index}] explosion origin class and source must appear together`);
+      const originClass = requireString(raw.explosionOriginClass, `perceptionLog.events[${index}].explosionOriginClass`, {
+        maxLength: 48,
+      });
+      const originSource = requireString(
+        raw.explosionOriginClassSource,
+        `perceptionLog.events[${index}].explosionOriginClassSource`,
+        { maxLength: 32 },
+      );
+      assert(EXPLOSION_ORIGIN_CLASSES_V1.has(originClass), `perceptionLog.events[${index}].explosionOriginClass invalid`);
+      assert(EXPLOSION_ORIGIN_CLASS_SOURCES.has(originSource), `perceptionLog.events[${index}].explosionOriginClassSource invalid`);
+      assert(confidence === 'blast_visible', `perceptionLog.events[${index}] explosion origin class requires blast_visible confidence`);
+      assert(positionKnown, `perceptionLog.events[${index}] explosion origin class requires positionKnown`);
+      assert(position, `perceptionLog.events[${index}] explosion origin class requires position`);
+    }
   } else if (!isPsychEvent) {
     assert(!travelDirection, `perceptionLog.events[${index}] travelDirection invalid for type`);
     assert(!incomingBearing, `perceptionLog.events[${index}] incomingBearing invalid for type`);
@@ -1842,6 +1878,18 @@ function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
     ...(compassDirection ? { compassDirection } : {}),
     ...(travelDirection ? { travelDirection } : {}),
     ...(incomingBearing ? { incomingBearing } : {}),
+    ...(Object.prototype.hasOwnProperty.call(raw, 'explosionOriginClass')
+      ? { explosionOriginClass: requireString(raw.explosionOriginClass, `perceptionLog.events[${index}].explosionOriginClass`, { maxLength: 48 }) }
+      : {}),
+    ...(Object.prototype.hasOwnProperty.call(raw, 'explosionOriginClassSource')
+      ? {
+        explosionOriginClassSource: requireString(
+          raw.explosionOriginClassSource,
+          `perceptionLog.events[${index}].explosionOriginClassSource`,
+          { maxLength: 32 },
+        ),
+      }
+      : {}),
   };
 }
 
