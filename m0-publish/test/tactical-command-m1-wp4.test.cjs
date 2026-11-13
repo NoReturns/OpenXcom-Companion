@@ -29,6 +29,7 @@ const tacticalFixture = {
     id: 101,
     faction: 0,
     originalFaction: 0,
+    position: [10, 11, 0],
     timeUnits: 60,
     hands: {
       right: { itemType: 'STR_GRENADE', battleType: 4, primed: false },
