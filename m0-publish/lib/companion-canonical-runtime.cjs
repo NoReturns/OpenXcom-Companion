@@ -13,10 +13,10 @@ const SCHEMA_VERSION = 1;
  * `openxcom.exe` and commit together with any doc updates — do not deploy a build whose
  * hash is not reflected here.
  *
- * Verified Win32 Release build (ASTER-M1-INTEGRATED-RUNTIME-DEPLOY-01: engine db74cc829 —
- * strategic intelligence purchasing/export + session-orphan command recovery; companion 5a5f580).
+ * Verified Win32 Release build (ASTER-M1-HOVER-COORDS-DEPLOY-02: duplicate-label fix
+ * itZ == viewLevel; prior pin 848b41f0…; engine db74cc829 + hover; companion 592622f).
  */
-const VERIFIED_BUILD_SHA256 = 'ebdf28117b5efbbe5cc893b2f3fc0b43d1bc07178c4baccd98153985d61fd6a2';
+const VERIFIED_BUILD_SHA256 = 'cf82d0306828b962d8b59d2192ca283492817ea0a7084104d816d5b33439fc08';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 
