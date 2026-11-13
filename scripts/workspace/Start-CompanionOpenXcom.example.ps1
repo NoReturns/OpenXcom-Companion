@@ -5,6 +5,9 @@ param(
   [string] $WorkspaceRoot = $env:OPENXCOM_COMPANION_WORKSPACE_ROOT,
   [switch] $SkipInboxQuarantine,
   [switch] $SkipDeployVerify,
+  # Full ASCII terrain relay is on by default; opt out for troubleshooting.
+  [switch] $DisableTerrainFullAsciiRelay,
+  # Legacy no-op when default is on; retained so older launch invocations keep working.
   [switch] $EnableTerrainFullAsciiRelay
 )
 
@@ -83,10 +86,10 @@ if (-not $env:OPENXCOM_COMPANION_RELAY_REPO -and (Test-Path -LiteralPath $RelayL
 
 $env:OPENXCOM_COMPANION_SNAPSHOT_PATH = $layout.snapshotYaml
 $env:OPENXCOM_COMPANION_COMMAND_EXECUTOR = '1'
-if ($EnableTerrainFullAsciiRelay) {
-  $env:OPENXCOM_COMPANION_RELAY_TERRAIN_FULL_ASCII = '1'
-} else {
+if ($DisableTerrainFullAsciiRelay) {
   Remove-Item Env:OPENXCOM_COMPANION_RELAY_TERRAIN_FULL_ASCII -ErrorAction SilentlyContinue
+} else {
+  $env:OPENXCOM_COMPANION_RELAY_TERRAIN_FULL_ASCII = '1'
 }
 $EnsureDaemonScript = Join-Path $WorkspaceRoot 'companion\m0-publish\scripts\ensure-on-demand-daemon.cjs'
 $env:OPENXCOM_COMPANION_ENSURE_DAEMON_SCRIPT = $EnsureDaemonScript
