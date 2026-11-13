@@ -135,7 +135,7 @@ Classify grenades, explosives, medikits, firearms, ammo; dedupe `battleItemId` a
 
 **Friendly HWPs** (`id >= 1_000_000`): position + faction shell only — not in `player_soldiers`; skip equipment. See [M1-wp2-unit-state-schema.md](../m0-publish/docs/M1-wp2-unit-state-schema.md).
 
-`runMandatoryTacticalEquipmentReview()` / `runMandatoryBriefingPrelude()` in [tactical-equipment-brief.cjs](../m0-publish/lib/tactical-equipment-brief.cjs).
+`runMandatoryTacticalEquipmentReview()` in [tactical-equipment-brief.cjs](../m0-publish/lib/tactical-equipment-brief.cjs). `runMandatoryBriefingPrelude()` in [tactical-briefing-ai-workflow.cjs](../m0-publish/lib/tactical-briefing-ai-workflow.cjs).
 
 ---
 
