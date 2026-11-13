@@ -12,7 +12,7 @@
 2. **Get access:** Operator provides relay **repository** and **branch**; use your **existing GitHub connection** to read/write `m0/*` on that repo.
 3. **Read state:** `m0/state.json` on that branch. Copy **`commandBinding`** fields verbatim for every command.
 4. **Know the map:** Use `terrainMapBrief` / optional `terrainFullAsciiBattlefield` — not invented tiles. See [ASCII terrain](#ascii-terrain-and-maps).
-5. **Pick actors:** `commandBinding.player_soldiers` = player roster **eligible for binding** only. **AI vs human** is **not** on GitHub — operator must confirm which ids are AI-owned before you publish (see [§ Soldier ownership](#soldier-ownership-ai-vs-human)).
+5. **Pick actors:** `commandBinding.player_soldiers` = roster **eligible for binding** only. For **AI vs human**, use `soldierControl` on the same `m0/state.json` when `availability` is `available`; otherwise operator confirmation (see [§ Soldier ownership](#soldier-ownership-ai-vs-human)).
 6. **Commands:** **13** supported `command_type` values — full JSON in [§ Command examples](#command-examples-valid-json). `END_TURN` is **not** supported.
 7. **Publish only when [one active command](#one-active-command) rules pass** — inbox absent, prior order terminal, fresh binding ready.
 8. **Execute:** Operator **RETRIEVE** or **AUTO RETRIEVE**. Poll terminal result; read refreshed `m0/state.json` before the next publish.
@@ -26,7 +26,7 @@
 | Relay repo + branch | Operator message |
 | GitHub access to that repo | Your existing connector (operator confirms it is wired) |
 | Tactical state + `commandBinding` | `m0/state.json` |
-| Which soldier ids are **AI** | **Operator statement** and/or in-game assign UI — **not** in relay JSON today |
+| Which soldier ids are **AI** | `m0/state.json` → `soldierControl` when `availability: available`; else **operator** + in-game assign |
 | Map + units | Same `m0/state.json` (`terrainMapBrief`, `tactical.units`, etc.) |
 | Legal command shapes | This playbook § [Command examples](#command-examples-valid-json) |
 
@@ -39,13 +39,14 @@ After handoff, run the [mandatory status review](#mandatory-battlefield-status-r
 | Source | On GitHub? | Role |
 |--------|------------|------|
 | `commandBinding.player_soldiers` | **Yes** | Live player soldiers at export: id, position, kneel, command TU (`timeUnits` or `null` + `timeUnitsApplicability`) — **not** AI/human mode |
-| `commandBinding.ownership_note` | **Yes** | States remote JSON cannot assign AI; owner sets control locally |
-| `companion-soldier-control.json` | **No** (local beside snapshot path) | Engine-published mirror of assignments; sidecar/engine use at retrieve time |
-| Tactical save `companion.assignments` | **No** (YAML on game PC) | Canonical in-battle ownership |
+| `soldierControl` (on `m0/state.json`) | **Yes** | Read-only mirror at F6 publish: `availability`, `soldiers[]` with `controlMode` (`ai` \| `human`). Authoritative for **remote** agents when `availability === "available"` and `session_match` / binding checks passed |
+| `commandBinding.ownership_note` | **Yes** | States relay cannot **assign** control (still true); prefer `soldierControl` over this note for mode |
+| `companion-soldier-control.json` | **No** (local beside snapshot path) | Source file the sidecar mirrors into `soldierControl`; engine uses at retrieve |
+| Tactical save `companion.assignments` | **No** (YAML on game PC) | Canonical in-battle ownership in-engine |
 
-**For you:** Treat `player_soldiers` as “these ids exist and pass binding,” **not** “safe to command.” Publishing for a human-owned soldier yields engine **`NOT_AI_CONTROLLED`** or **`HUMAN_OVERRIDE`**.
+**For you:** Treat `player_soldiers` as “these ids exist and pass binding,” **not** “safe to command.” Only publish for soldiers with `controlMode: ai` in `soldierControl` (when available). Publishing for human mode yields **`NOT_AI_CONTROLLED`** or **`HUMAN_OVERRIDE`**.
 
-**Trustworthy AI list:** Operator explicitly lists AI soldier ids (and session/battle if ambiguous), re-confirms after reclaim or new mission, and you treat **`REJECTED`** with those codes as a roster/ownership mismatch until they confirm again.
+**When `soldierControl.availability` is not `available`** (missing file, stale session, identity mismatch): stop and get operator AI id list before publishing. Treat **`REJECTED`** with those ownership codes as mismatch until control is fixed or confirmed.
 
 ---
 
@@ -53,7 +54,7 @@ After handoff, run the [mandatory status review](#mandatory-battlefield-status-r
 
 | Path | Purpose |
 |------|---------|
-| `m0/state.json` | Snapshot + `commandBinding`, `unitStateBrief`, terrain fields |
+| `m0/state.json` | Snapshot + `commandBinding`, `soldierControl`, `unitStateBrief`, terrain fields |
 | `m0/tactical-command.json` | Single-command inbox (absent = empty) |
 | `m0/tactical-result.json` | Latest execution result |
 | `m0/terrain-query.json` / `m0/terrain-query-result.json` | Optional bounded geometry query |
@@ -136,7 +137,7 @@ READ m0/state.json → status review → equipment review → one-active-command
 1. `unitStateBrief.exceptions` first.
 2. `perceptionLog` psych `*_observed` = historical only.
 3. Confirmed vs heuristic morale/panic/MC per [AGENTS.md](../../AGENTS.md) / `tactical-briefing-ai-workflow.cjs`.
-4. Actors ⊆ `commandBinding.player_soldiers` **and** operator-confirmed AI set.
+4. Actors ⊆ `commandBinding.player_soldiers` **and** `controlMode: ai` in `soldierControl` (or operator AI list when mirror unavailable).
 5. Hostile fair-play: `units[]` + `facing`; `perceptionLog` / `last_seen` not live tracking.
 
 ## Mandatory tactical equipment review
@@ -305,6 +306,14 @@ Ignore `destination_reached` on fire results (shared JSON shape with MOVE).
 
 Programmatic mirror: `companion/m0-publish/lib/fire-result-consumer.cjs` (`buildFireTerminalMessage`, `buildFireOutcomeBrief`).
 
+### DROP — result verification
+
+`DROP` is **sync**; `m0/tactical-result.json` stays authoritative. On terminal `COMPLETED`, engine may include **`ground_placement`** (tile + ground `battleItemId`). **`COMPLETED`** confirms the drop ran — not independent scavenge proof until a fresh snapshot matches.
+
+After RETRIEVE: read `ground_placement` on the result; on refreshed `m0/state.json`, use derived **`lastDropOutcomeBrief.verification_class`** when present (`drop_independently_confirmed` only when post-command `groundInventory` matches engine placement). Replan pickup/scavenge from snapshot rows, not assumed tiles.
+
+Programmatic mirror: `companion/m0-publish/lib/drop-result-ground-placement.cjs`.
+
 ---
 
 ## ASCII terrain and maps
@@ -447,7 +456,7 @@ Optional: `m0/terrain-query.json` with `snapshot_id`, `center`, `radius` or `rec
 | Need | Relay field |
 |------|-------------|
 | Roster positions, TU | `commandBinding.player_soldiers`, `tactical.units` |
-| AI ownership | **Operator** + local control file — not relay |
+| AI ownership | `soldierControl` on `m0/state.json` when available; else operator |
 | Weapon / TU costs | `tactical.units[].actionCosts`, `hands`, `inventory` |
 | Item ids for reload/inventory | `battleItemId` on snapshot rows — replace example ids |
 
@@ -504,6 +513,8 @@ Examples below use **dummy** binding hashes and **parse-valid** shapes (`JSON.pa
 | `session_id` | 32 lowercase hex | `a1b2c3d4e5f6789012345678abcdef01` |
 | `turn` | integer ≥ 1 | `1` |
 | `state_version` | integer ≥ 0 (= `eventLog.latestSeq` at export) | `7` |
+
+`state_version` advances on **deliberate player weapon fire** only (`eventLog`); MOVE, inventory, and human UI actions can change the battlefield without bumping it. Always pair binding with **`snapshot_sha256`**; if positions look stale after a terminal result, refresh via post-command publish or operator **SEND (F6)** — do not reuse an old digest because `state_version` stayed flat.
 
 Replace placeholders with the **current** export; the example digest is for parser shape only.
 
@@ -747,7 +758,9 @@ Replace placeholders with the **current** export; the example digest is for pars
 | Prior result `ACCEPTED` / `EXECUTING` | Wait — not terminal |
 | Ambiguous / stale result | Hard stop; operator RETRIEVE or clarify |
 | No fresh `commandBinding` after terminal | Request **SEND (F6)** |
-| `NOT_AI_CONTROLLED` | Operator confirms AI ids / re-assigns |
+| `NOT_AI_CONTROLLED` | Check `soldierControl`; operator re-assigns AI mode in-game |
+| `soldierControl` unavailable | Operator confirms AI ids; investigate stale session / missing control file |
+| `relay_export_shrink` on state | GitHub payload was trimmed for size — omitted terrain/perception may be missing; do not invent map or events; operator **SEND (F6)** or bounded `terrain-query` on current `snapshot_id` |
 | `STALE_*` | Operator SEND; re-read binding |
 | `INTERRUPTED` / `FAILED` MOVE | Replan from `final_position`; verify `destination_reached` + tile match before treating `COMPLETED` as success |
 | `COMPLETED` MOVE but wrong tile / flag | Hard stop — refresh state (SEND or post-command binding); staged ramp/grav MOVE |
@@ -768,6 +781,8 @@ Concise intent in plain language. Human owns human soldiers and End Turn.
 |-------|------|
 | Commands | `m0-publish/lib/tactical-command.cjs` |
 | MOVE result verification | `m0-publish/lib/move-result-consumer.cjs` |
+| DROP ground placement | `m0-publish/lib/drop-result-ground-placement.cjs` |
+| Soldier control mirror | `m0-publish/lib/soldier-control-relay.cjs` |
 | ASCII | `m0-publish/lib/terrain-tactical-map.cjs` |
 | Operator relay setup (not agent onboarding) | `m0-publish/docs/relay-github-setup.md` |
 
