@@ -104,20 +104,32 @@ describe('M1 PERCEPTION-B2 combat casualty attribution', () => {
     assert.throws(() => parseAndValidate(raw), /must not include explosionOriginClass/);
   });
 
-  it('requires hostile victim present in units[]', () => {
+  it('accepts hostile victim absent from export-time units[] when historically attributed', () => {
     const raw = v4Root({
       units: v4Root().units.filter((u) => u.id !== 1_000_000),
       perceptionLog: emptyPerceptionMeta([attributionEvent()]),
     });
-    assert.throws(() => parseAndValidate(raw), /hostile victim must be present/);
+    const tactical = parseAndValidate(raw);
+    assert.equal(tactical.perceptionLog.events[0].subjectUnitId, 1_000_000);
   });
 
-  it('requires attributed actor present in units[]', () => {
+  it('accepts attributed roster actor absent from export-time units[] when historically attributed', () => {
     const raw = v4Root({
       units: v4Root().units.filter((u) => u.id !== 2),
       perceptionLog: emptyPerceptionMeta([attributionEvent()]),
     });
-    assert.throws(() => parseAndValidate(raw), /attributed actor must be present/);
+    const tactical = parseAndValidate(raw);
+    assert.equal(tactical.perceptionLog.events[0].attributedActorUnitId, 2);
+  });
+
+  it('rejects live hostile victim row with non-hostile originalFaction', () => {
+    const base = v4Root();
+    const units = base.units.map((u) => (u.id === 1_000_000 ? { ...u, originalFaction: 2 } : u));
+    const raw = v4Root({
+      units,
+      perceptionLog: emptyPerceptionMeta([attributionEvent()]),
+    });
+    assert.throws(() => parseAndValidate(raw), /hostile victim hostile origin invalid/);
   });
 
   it('preserves B1 explosion without attribution fields', () => {
@@ -137,6 +149,21 @@ describe('M1 PERCEPTION-B2 combat casualty attribution', () => {
       ]),
     });
     assert.doesNotThrow(() => parseAndValidate(raw));
+  });
+
+  it('accepts roster victim name on combat attribution when soldier absent from units[]', () => {
+    const raw = v4Root({
+      units: v4Root().units.filter((u) => u.id !== 3),
+      perceptionLog: emptyPerceptionMeta([
+        attributionEvent({
+          subjectUnitId: 3,
+          attributedActorUnitId: 1_000_000,
+          subjectName: 'Test Soldier',
+        }),
+      ]),
+    });
+    const tactical = parseAndValidate(raw);
+    assert.equal(tactical.perceptionLog.events[0].subjectName, 'Test Soldier');
   });
 
   it('preserves soldier_down without attribution fields', () => {

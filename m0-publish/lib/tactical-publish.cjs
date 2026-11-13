@@ -31,6 +31,7 @@ const MAX_INVENTORY_ENTRIES = 24;
 const MAX_GROUND_INVENTORY_ENTRIES_PER_UNIT = 16;
 const MIN_BATTLE_TYPE = 0;
 const MAX_BATTLE_TYPE = 11; // BT_CORPSE
+const BT_NONE = 0;
 const BT_FIREARM = 1;
 const BT_AMMO = 2;
 const BT_MELEE = 3;
@@ -433,6 +434,24 @@ function isOnMapCommandPosition(unit) {
   return !isCarriedInInventoryPlacement(unit) && Array.isArray(unit?.position) && unit.position.length === 3;
 }
 
+/** OpenXcom roster unconscious bodies use STR_CORPSE (default rules battleType BT_NONE) with unit linkage. */
+function isLivingUnconsciousCarriedBodyRow(bodyRow, carriedUnit) {
+  if (bodyRow.battleType !== BT_NONE) {
+    return false;
+  }
+  const itemType = typeof bodyRow.itemType === 'string' ? bodyRow.itemType : '';
+  return (
+    itemType.length > 0
+    && itemType.includes('CORPSE')
+    && carriedUnit.condition?.alive === true
+    && carriedUnit.condition?.conscious === false
+  );
+}
+
+function isCarriedBodyInventoryRow(bodyRow, carriedUnit) {
+  return bodyRow.battleType === BT_CORPSE || isLivingUnconsciousCarriedBodyRow(bodyRow, carriedUnit);
+}
+
 function validateCarriedSoldierLinkages(units) {
   const unitById = new Map(units.map((unit) => [unit.id, unit]));
   for (const unit of units) {
@@ -476,7 +495,10 @@ function validateCarriedSoldierLinkages(units) {
       bodyRow.carriedRosterUnitId === unit.id,
       `units[] id ${unit.id} carrier inventory carriedRosterUnitId mismatch`,
     );
-    assert(bodyRow.battleType === BT_CORPSE, `units[] id ${unit.id} carried body must be corpse battleType`);
+    assert(
+      isCarriedBodyInventoryRow(bodyRow, unit),
+      `units[] id ${unit.id} carried body must be corpse battleType or STR_CORPSE body with roster linkage`,
+    );
     assert(
       bodyRow.inventoryX !== undefined && bodyRow.inventoryY !== undefined,
       `units[] id ${unit.id} carrier inventory must include inventoryX/inventoryY for carried body`,
@@ -549,6 +571,28 @@ function isRosterSoldierPsychSubjectNameAllowed(subjectUnitId, units) {
 /** soldier_down / ledger: same rule as psych — KIA rows are absent from units[] after export. */
 function isRosterSoldierCasualtySubjectNameAllowed(subjectUnitId, units) {
   return isRosterSoldierPsychSubjectNameAllowed(subjectUnitId, units);
+}
+
+/**
+ * Historical perception events may carry identities observed when recorded even when the unit
+ * no longer appears in export-time units[] (KIA, removed). When still exported, enforce origin
+ * consistency only — never invent or require current positions, health, or visibility.
+ */
+function assertHistoricalPerceptionUnitRowWhenExported(unitId, unitById, index, roleLabel) {
+  const row = unitById.get(unitId);
+  if (!row) {
+    return;
+  }
+  if (unitId >= 1_000_000) {
+    assert(row.originalFaction === FACTION_HOSTILE, `perceptionLog.events[${index}] ${roleLabel} hostile origin invalid`);
+    return;
+  }
+  if (isRosterSoldierUnitId(unitId)) {
+    assert(
+      row.originalFaction === FACTION_PLAYER,
+      `perceptionLog.events[${index}] ${roleLabel} roster origin invalid`,
+    );
+  }
 }
 
 function allowedUnitKeys(schemaVersion) {
@@ -1770,7 +1814,7 @@ function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
         `perceptionLog.events[${index}].subjectName only allowed for roster soldiers`,
       );
     }
-  } else if (subjectName !== undefined) {
+  } else if (subjectName !== undefined && type !== 'combat_casualty_attributed') {
     throw new ValidationError(`perceptionLog.events[${index}] subjectName invalid for type`);
   }
   if (type === 'impact_observed') {
@@ -1847,18 +1891,17 @@ function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
       );
     }
     if (victimIsHostile) {
-      const victimRow = unitById.get(subjectUnitId);
-      assert(victimRow, `perceptionLog.events[${index}] hostile victim must be present in units[] at export`);
-      assert(victimRow.originalFaction === FACTION_HOSTILE, `perceptionLog.events[${index}] subject must be hostile origin`);
+      assertHistoricalPerceptionUnitRowWhenExported(subjectUnitId, unitById, index, 'hostile victim');
     }
     const actorIsRoster = isRosterSoldierUnitId(attributedActorUnitId);
     const actorIsHostile = attributedActorUnitId >= 1_000_000;
     assert(actorIsRoster || actorIsHostile, `perceptionLog.events[${index}].attributedActorUnitId must be roster or hostile`);
-    const actorRow = unitById.get(attributedActorUnitId);
-    assert(actorRow, `perceptionLog.events[${index}] attributed actor must be present in units[] at export`);
-    if (actorIsHostile) {
-      assert(actorRow.originalFaction === FACTION_HOSTILE, `perceptionLog.events[${index}] attributed actor hostile origin invalid`);
-    }
+    assertHistoricalPerceptionUnitRowWhenExported(
+      attributedActorUnitId,
+      unitById,
+      index,
+      'attributed actor',
+    );
     if (positionKnown) {
       assert(position, `perceptionLog.events[${index}] combat attribution requires position when positionKnown`);
     }
@@ -1906,8 +1949,7 @@ function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
         shooterIsRoster || shooterIsHostile,
         `perceptionLog.events[${index}].subjectUnitId must be roster soldier or hostile reactor`,
       );
-      const shooterRow = unitById.get(subjectUnitId);
-      assert(shooterRow, `perceptionLog.events[${index}] reaction shooter must be present in units[] at export`);
+      assertHistoricalPerceptionUnitRowWhenExported(subjectUnitId, unitById, index, 'reaction shooter');
       if (shooterIsHostile) {
         assert(
           confidence === 'source_visible',

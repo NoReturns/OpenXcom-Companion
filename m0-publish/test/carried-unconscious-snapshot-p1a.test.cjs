@@ -84,4 +84,35 @@ describe('P1-A carried unconscious snapshot (SEND validation path)', () => {
     carried.positionKnown = true;
     assert.throws(() => parseAndValidate(raw), /positionKnown must be false/);
   });
+
+  it('accepts live OpenXcom STR_CORPSE body rows with battleType BT_NONE (0)', () => {
+    const raw = YAML.parse(fs.readFileSync(FIXTURE, 'utf8'));
+    const carrier = raw.units.find((u) => u.id === 1);
+    const body = carrier.inventory.find((row) => row.battleItemId === 9001);
+    body.itemType = 'STR_CORPSE';
+    body.battleType = 0;
+    const tactical = parseAndValidate(raw);
+    assert.equal(tactical.units.find((u) => u.id === 3).battlefieldPlacement, 'carried_in_inventory');
+  });
+
+  it('rejects carried linkage when inventory row is not a corpse item type', () => {
+    const raw = YAML.parse(fs.readFileSync(FIXTURE, 'utf8'));
+    const carrier = raw.units.find((u) => u.id === 1);
+    const body = carrier.inventory.find((row) => row.battleItemId === 9001);
+    body.itemType = 'STR_RIFLE';
+    body.battleType = 0;
+    assert.throws(() => parseAndValidate(raw), /carried body must be corpse battleType or STR_CORPSE/);
+  });
+
+  it('accepts dead corpse inventory row with BT_CORPSE only (no carried unit row)', () => {
+    const raw = YAML.parse(fs.readFileSync(FIXTURE, 'utf8'));
+    raw.units = raw.units.filter((u) => u.id !== 3);
+    const carrier = raw.units.find((u) => u.id === 1);
+    carrier.inventory[0].carriedRosterUnitId = undefined;
+    delete carrier.inventory[0].carriedRosterUnitId;
+    carrier.inventory[0].battleType = 11;
+    carrier.inventory[0].itemType = 'STR_XCOM_CORPSE';
+    const tactical = parseAndValidate(raw);
+    assert.equal(tactical.units.length, 2);
+  });
 });
