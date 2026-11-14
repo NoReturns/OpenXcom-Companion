@@ -66,7 +66,10 @@ const ACTION_ENTRY_OPTIONAL_KEYS = new Set([
   'facingTuPerStep',
   'facingTuStepsUnknownWithoutTarget',
   'facingObservationNote',
+  'displayedFiringAccuracy',
+  'twoHandedPenaltyActive',
 ]);
+const DISPLAYED_FIRING_ACCURACY_MAX = 255;
 const MOVEMENT_TU_ADVISORY_KEYS = new Set([
   'schemaVersion',
   'pathTuEstimateIncluded',
@@ -781,6 +784,16 @@ function validateActionEntry(raw, label) {
     entry.facingObservationNote = requireString(raw.facingObservationNote, `${label}.facingObservationNote`, {
       maxLength: 512,
     });
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'displayedFiringAccuracy')) {
+    entry.displayedFiringAccuracy = requireInt(raw.displayedFiringAccuracy, `${label}.displayedFiringAccuracy`, {
+      min: 0,
+      max: DISPLAYED_FIRING_ACCURACY_MAX,
+      allowNegative: false,
+    });
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'twoHandedPenaltyActive')) {
+    entry.twoHandedPenaltyActive = requireBool(raw.twoHandedPenaltyActive, `${label}.twoHandedPenaltyActive`);
   }
   return entry;
 }
