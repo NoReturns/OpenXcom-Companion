@@ -53,6 +53,7 @@ const {
   bindTransactionScopeToContext,
   readTuResultEvidence,
 } = require('./relay-transaction-trace.cjs');
+const { allowedHudCommandRejectCode } = require('./relay-status-label.cjs');
 const {
   BASE_INTELLIGENCE_FILENAME,
   BASE_INTELLIGENCE_SEND_FILENAME,
@@ -180,6 +181,7 @@ function writeOnDemandStatusForCtx(ctx, fields, io = {}) {
     briefing_request_id: fields.briefing_request_id,
     last_command_id: fields.last_command_id,
     last_command_status: fields.last_command_status,
+    last_command_reject_code: fields.last_command_reject_code,
     retrieve_outcome: fields.retrieve_outcome,
   });
   return writeOnDemandStatus(ctx.paths.statusPath, payload, io);
@@ -618,6 +620,17 @@ function openNonTerminalResultForActive(commandWatcher, paths) {
   return openResult.value;
 }
 
+function withHudCommandRejectCode(fields, rawRejectCode) {
+  if (!fields) {
+    return fields;
+  }
+  const code = allowedHudCommandRejectCode(rawRejectCode);
+  if (!code) {
+    return fields;
+  }
+  return { ...fields, last_command_reject_code: code };
+}
+
 function resolveRetrieveCommandOutcome(commandWatcher, tx) {
   if (!tx || !commandWatcher) {
     return null;
@@ -627,19 +640,19 @@ function resolveRetrieveCommandOutcome(commandWatcher, tx) {
     return null;
   }
   if (tx.completionKind === 'sidecar_rejected') {
-    return {
+    return withHudCommandRejectCode({
       last_command_id: commandId,
       last_command_status: 'REJECTED',
       retrieve_outcome: 'command_rejected',
-    };
+    }, tx.sidecarRejectCode);
   }
   const local = commandWatcher.readLocalResult();
   if (local && !local.__parseError && local.command_id === commandId && local.status) {
-    return {
+    return withHudCommandRejectCode({
       last_command_id: commandId,
       last_command_status: local.status,
       retrieve_outcome: isTerminalStatus(local.status) ? 'command_terminal' : 'relay_complete',
-    };
+    }, local.reject_code);
   }
   const journal = commandWatcher.loadJournal();
   const record = journal.records && journal.records[commandId] ? journal.records[commandId] : null;
@@ -1012,6 +1025,7 @@ async function processPendingRequest(ctx, io = {}) {
     briefing_request_id: pending.value.briefing_request_id ?? outcome.briefing_request_id,
     last_command_id: outcome.last_command_id,
     last_command_status: outcome.last_command_status,
+    last_command_reject_code: outcome.last_command_reject_code,
     retrieve_outcome: outcome.retrieve_outcome,
   }, io);
   const uiStatusPreserved = statusWrite && statusWrite.written === false;

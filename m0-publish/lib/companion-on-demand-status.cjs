@@ -181,6 +181,9 @@ function buildOnDemandStatusPayload(fields) {
   if (fields.last_command_status) {
     payload.last_command_status = fields.last_command_status;
   }
+  if (fields.last_command_reject_code) {
+    payload.last_command_reject_code = fields.last_command_reject_code;
+  }
   if (fields.retrieve_outcome) {
     payload.retrieve_outcome = fields.retrieve_outcome;
   }

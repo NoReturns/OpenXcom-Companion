@@ -31,7 +31,28 @@ function isAuthErrorCode(code) {
   return code === 'AUTH_FAILED' || code === 'AUTH' || code === 'gh_not_authenticated';
 }
 
-function tryFormatTerminalCommandOrderLabel(lastCommandStatus) {
+/** Whitelisted engine reject codes → HUD text (never raw public_reason). */
+const HUD_COMMAND_REJECT_LABELS = {
+  INVALID_ACTIVE_HAND: 'Invalid active hand',
+};
+
+function hudLabelForCommandRejectCode(rejectCode) {
+  if (!rejectCode || typeof rejectCode !== 'string') {
+    return null;
+  }
+  const key = rejectCode.trim();
+  return HUD_COMMAND_REJECT_LABELS[key] ?? null;
+}
+
+function allowedHudCommandRejectCode(rawRejectCode) {
+  if (!rawRejectCode || typeof rawRejectCode !== 'string') {
+    return null;
+  }
+  const key = rawRejectCode.trim();
+  return HUD_COMMAND_REJECT_LABELS[key] ? key : null;
+}
+
+function tryFormatTerminalCommandOrderLabel(lastCommandStatus, lastCommandRejectCode) {
   if (!lastCommandStatus) {
     return null;
   }
@@ -45,12 +66,13 @@ function tryFormatTerminalCommandOrderLabel(lastCommandStatus) {
     return 'Order failed';
   }
   if (lastCommandStatus === 'REJECTED') {
-    return 'Order rejected';
+    const specific = hudLabelForCommandRejectCode(lastCommandRejectCode);
+    return specific || 'Order rejected';
   }
   return null;
 }
 
-function tryFormatRetrieveIncompleteCommandLabel(lastCommandStatus) {
+function tryFormatRetrieveIncompleteCommandLabel(lastCommandStatus, lastCommandRejectCode) {
   if (!lastCommandStatus) {
     return null;
   }
@@ -64,7 +86,8 @@ function tryFormatRetrieveIncompleteCommandLabel(lastCommandStatus) {
     return 'Order failed; relay incomplete';
   }
   if (lastCommandStatus === 'REJECTED') {
-    return 'Rejected; relay incomplete';
+    const specific = hudLabelForCommandRejectCode(lastCommandRejectCode);
+    return specific ? `${specific}; relay incomplete` : 'Rejected; relay incomplete';
   }
   return null;
 }
@@ -158,7 +181,10 @@ function formatRelayStatusLabel(status) {
   }
   if (effective.phase === 'completed') {
     if (effective.action === 'retrieve') {
-      const commandLabel = tryFormatTerminalCommandOrderLabel(effective.last_command_status);
+      const commandLabel = tryFormatTerminalCommandOrderLabel(
+        effective.last_command_status,
+        effective.last_command_reject_code,
+      );
       if (commandLabel) {
         return commandLabel;
       }
@@ -172,7 +198,10 @@ function formatRelayStatusLabel(status) {
         return 'Retrieve error';
       }
       if (effective.error_code === 'RETRIEVE_INCOMPLETE') {
-        const incompleteLabel = tryFormatRetrieveIncompleteCommandLabel(effective.last_command_status);
+        const incompleteLabel = tryFormatRetrieveIncompleteCommandLabel(
+          effective.last_command_status,
+          effective.last_command_reject_code,
+        );
         if (incompleteLabel) {
           return incompleteLabel;
         }
@@ -181,7 +210,10 @@ function formatRelayStatusLabel(status) {
       if (effective.last_command_status === 'COMPLETED') {
         return 'Order done; relay incomplete';
       }
-      const commandLabel = tryFormatTerminalCommandOrderLabel(effective.last_command_status);
+      const commandLabel = tryFormatTerminalCommandOrderLabel(
+        effective.last_command_status,
+        effective.last_command_reject_code,
+      );
       if (commandLabel) {
         return commandLabel;
       }
@@ -203,4 +235,7 @@ module.exports = {
   resolveEffectiveLabelStatus,
   tryFormatTerminalCommandOrderLabel,
   tryFormatRetrieveIncompleteCommandLabel,
+  hudLabelForCommandRejectCode,
+  allowedHudCommandRejectCode,
+  HUD_COMMAND_REJECT_LABELS,
 };

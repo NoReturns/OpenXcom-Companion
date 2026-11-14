@@ -334,6 +334,83 @@ describe('M1 retrieval status lifecycle', () => {
     assert.equal(matched.last_command_status, 'FAILED');
   });
 
+  it('resolveRetrieveCommandOutcome attaches whitelisted reject_code for HUD', () => {
+    const paths = resolveOnDemandPaths(snapshotPath);
+    const ctx = createOnDemandRelayContext({
+      snapshotPath,
+      commandRelayStateDir: relayStateDir,
+      dryRun: true,
+      contentClient: {
+        paths: {},
+        readFile: () => null,
+        publishFile: async () => {},
+        deleteFile: async () => {},
+      },
+    });
+    const idA = 'a'.repeat(32);
+    writeTextAtomic(
+      paths.localRelay.result,
+      `${JSON.stringify({
+        command_id: idA,
+        status: 'REJECTED',
+        reject_code: 'INVALID_ACTIVE_HAND',
+        public_reason: 'Active hand must be STR_LEFT_HAND or STR_RIGHT_HAND.',
+      }, null, 2)}\n`,
+      fs.writeFileSync,
+      fs.renameSync,
+    );
+    const matched = resolveRetrieveCommandOutcome(ctx.commandWatcher, {
+      deliveredCommandId: idA,
+      completionKind: 'engine_reported',
+    });
+    assert.equal(matched.last_command_status, 'REJECTED');
+    assert.equal(matched.last_command_reject_code, 'INVALID_ACTIVE_HAND');
+    writeTextAtomic(
+      paths.localRelay.result,
+      `${JSON.stringify({
+        command_id: idA,
+        status: 'REJECTED',
+        reject_code: 'STR_NO_LINE_OF_FIRE',
+        public_reason: 'No line of fire',
+      }, null, 2)}\n`,
+      fs.writeFileSync,
+      fs.renameSync,
+    );
+    const generic = resolveRetrieveCommandOutcome(ctx.commandWatcher, {
+      deliveredCommandId: idA,
+      completionKind: 'engine_reported',
+    });
+    assert.equal(generic.last_command_status, 'REJECTED');
+    assert.equal(generic.last_command_reject_code, undefined);
+  });
+
+  it('last_command_reject_code does not carry over to a newer completed command write', () => {
+    const statusPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'm1-reject-carry-')), 'status.json');
+    writeOnDemandStatus(statusPath, {
+      request_id: 'r1',
+      action: 'retrieve',
+      phase: RETRIEVE_PHASE.COMPLETED,
+      terminal: true,
+      updated_at_ms: 1000,
+      last_command_id: 'a'.repeat(32),
+      last_command_status: 'REJECTED',
+      last_command_reject_code: 'INVALID_ACTIVE_HAND',
+    });
+    writeOnDemandStatus(statusPath, {
+      request_id: 'r2',
+      action: 'retrieve',
+      phase: RETRIEVE_PHASE.COMPLETED,
+      terminal: true,
+      updated_at_ms: 2000,
+      last_command_id: 'b'.repeat(32),
+      last_command_status: 'COMPLETED',
+    });
+    const onDisk = JSON.parse(fs.readFileSync(statusPath, 'utf8'));
+    assert.equal(onDisk.last_command_id, 'b'.repeat(32));
+    assert.equal(onDisk.last_command_status, 'COMPLETED');
+    assert.equal(onDisk.last_command_reject_code, undefined);
+  });
+
   it('precedence H: SEND pending status is not blocked by sticky retrieve outcome', () => {
     const existing = {
       request_id: 'r1',

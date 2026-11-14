@@ -13,10 +13,10 @@ const SCHEMA_VERSION = 1;
  * `openxcom.exe` and commit together with any doc updates — do not deploy a build whose
  * hash is not reflected here.
  *
- * Verified Win32 Release build (ASTER-M1-TU-RUNTIME-READY-01: TU visibility + composite advisory;
- * prior pin fff75a0b…; engine f8d27f4a; companion 6d2f9001).
+ * Verified Win32 Release build (ASTER-M1-RELAY-HUD-DEPLOY-02: A3 INVALID_ACTIVE_HAND HUD labels +
+ * prefire displayedFiringAccuracy; prior pin 06701492…; engine 5f9e674).
  */
-const VERIFIED_BUILD_SHA256 = '06701492fecaeea9e5c682bba9fb44ab82c1ea40046f8c0a067e3d62387ced32';
+const VERIFIED_BUILD_SHA256 = '8bb612ff1b19f5c4aed053786e8652feb023d18f8173d5ef3ae7c02b3b61c08b';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 

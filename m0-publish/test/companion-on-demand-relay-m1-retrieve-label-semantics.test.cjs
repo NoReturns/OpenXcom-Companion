@@ -84,6 +84,37 @@ describe('M1 retrieve status label semantics (engine mirror)', () => {
     assert.equal(
       formatRelayStatusLabel({
         action: 'retrieve',
+        phase: 'completed',
+        terminal: true,
+        last_command_status: 'REJECTED',
+        last_command_reject_code: 'INVALID_ACTIVE_HAND',
+      }),
+      'Invalid active hand',
+    );
+    assert.equal(
+      formatRelayStatusLabel({
+        action: 'retrieve',
+        phase: 'failed',
+        terminal: true,
+        error_code: 'RETRIEVE_INCOMPLETE',
+        last_command_status: 'REJECTED',
+        last_command_reject_code: 'INVALID_ACTIVE_HAND',
+      }),
+      'Invalid active hand; relay incomplete',
+    );
+    assert.equal(
+      formatRelayStatusLabel({
+        action: 'retrieve',
+        phase: 'completed',
+        terminal: true,
+        last_command_status: 'REJECTED',
+        last_command_reject_code: 'Active hand must be STR_LEFT_HAND or STR_RIGHT_HAND.',
+      }),
+      'Order rejected',
+    );
+    assert.equal(
+      formatRelayStatusLabel({
+        action: 'retrieve',
         phase: 'failed',
         terminal: true,
         error_code: 'RETRIEVE_INCOMPLETE',
