@@ -62,6 +62,51 @@ describe('M1 retrieve status label semantics (engine mirror)', () => {
     );
   });
 
+  it('command INTERRUPTED and REJECTED stay distinct from FAILED and retrieval errors', () => {
+    assert.equal(
+      formatRelayStatusLabel({
+        action: 'retrieve',
+        phase: 'completed',
+        terminal: true,
+        last_command_status: 'INTERRUPTED',
+      }),
+      'Order interrupted',
+    );
+    assert.equal(
+      formatRelayStatusLabel({
+        action: 'retrieve',
+        phase: 'completed',
+        terminal: true,
+        last_command_status: 'REJECTED',
+      }),
+      'Order rejected',
+    );
+    assert.equal(
+      formatRelayStatusLabel({
+        action: 'retrieve',
+        phase: 'failed',
+        terminal: true,
+        error_code: 'RETRIEVE_INCOMPLETE',
+        last_command_status: 'INTERRUPTED',
+      }),
+      'Interrupted; relay incomplete',
+    );
+  });
+
+  it('older network retrieve attempt does not mask newer completed command label', () => {
+    const label = formatRelayStatusLabel({
+      action: 'retrieve',
+      phase: 'completed',
+      terminal: true,
+      last_command_status: 'COMPLETED',
+      updated_at_ms: 5000,
+      last_retrieve_phase: 'failed',
+      last_retrieve_error_code: 'NETWORK_FAILED',
+      last_retrieve_updated_at_ms: 2000,
+    });
+    assert.equal(label, 'Order completed');
+  });
+
   it('empty inbox label is independent of prior command outcome', () => {
     assert.equal(
       formatRelayStatusLabel({

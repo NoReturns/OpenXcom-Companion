@@ -5,9 +5,22 @@
  * Keep in sync with engine/OpenXcom/src/Engine/CompanionOnDemandRelayCore.cpp.
  */
 
+const RETRIEVAL_TRANSPORT_ERROR_CODES = new Set([
+  'RETRIEVAL_ERROR',
+  'NETWORK_FAILED',
+  'RATE_LIMIT',
+  'RELAY_OFFLINE',
+]);
+
 function isValidationErrorCode(code) {
   return (
     code === 'SNAPSHOT_VALIDATION'
+    || code === 'SNAPSHOT_ERROR'
+    || code === 'SNAPSHOT_HASH_MISMATCH'
+    || code === 'SNAPSHOT_SCHEMA'
+    || code === 'SNAPSHOT_SESSION'
+    || code === 'TURN_MISMATCH'
+    || code === 'SESSION_MISMATCH'
     || code === 'VALIDATION'
     || code === 'RELAY_SHRINK_EXHAUSTED'
     || code === 'COMMAND_BINDING_MISMATCH'
@@ -16,6 +29,48 @@ function isValidationErrorCode(code) {
 
 function isAuthErrorCode(code) {
   return code === 'AUTH_FAILED' || code === 'AUTH' || code === 'gh_not_authenticated';
+}
+
+function tryFormatTerminalCommandOrderLabel(lastCommandStatus) {
+  if (!lastCommandStatus) {
+    return null;
+  }
+  if (lastCommandStatus === 'COMPLETED') {
+    return 'Order completed';
+  }
+  if (lastCommandStatus === 'INTERRUPTED') {
+    return 'Order interrupted';
+  }
+  if (lastCommandStatus === 'FAILED') {
+    return 'Order failed';
+  }
+  if (lastCommandStatus === 'REJECTED') {
+    return 'Order rejected';
+  }
+  return null;
+}
+
+function tryFormatRetrieveIncompleteCommandLabel(lastCommandStatus) {
+  if (!lastCommandStatus) {
+    return null;
+  }
+  if (lastCommandStatus === 'COMPLETED') {
+    return 'Order done; relay incomplete';
+  }
+  if (lastCommandStatus === 'INTERRUPTED') {
+    return 'Interrupted; relay incomplete';
+  }
+  if (lastCommandStatus === 'FAILED') {
+    return 'Order failed; relay incomplete';
+  }
+  if (lastCommandStatus === 'REJECTED') {
+    return 'Rejected; relay incomplete';
+  }
+  return null;
+}
+
+function isRetrievalTransportError(errorCode) {
+  return Boolean(errorCode && RETRIEVAL_TRANSPORT_ERROR_CODES.has(errorCode));
 }
 
 /**
@@ -44,14 +99,25 @@ function resolveEffectiveLabelStatus(status) {
   if (attemptMs < stickyMs && status.phase === 'completed' && status.last_command_status) {
     return status;
   }
-  return {
+  const effective = {
     ...status,
     phase: attemptPhase,
     action: 'retrieve',
-    error_code: status.last_retrieve_error_code
-      ?? (attemptPhase === status.phase ? status.error_code : undefined),
     request_id: status.last_retrieve_request_id || status.request_id,
   };
+  if (status.last_retrieve_error_code) {
+    effective.error_code = status.last_retrieve_error_code;
+  } else if (attemptPhase !== status.phase) {
+    delete effective.error_code;
+  }
+  if (
+    isRetrievalTransportError(effective.error_code)
+    && status.last_command_status
+    && status.updated_at_ms > attemptMs
+  ) {
+    return status;
+  }
+  return effective;
 }
 
 /**
@@ -92,15 +158,9 @@ function formatRelayStatusLabel(status) {
   }
   if (effective.phase === 'completed') {
     if (effective.action === 'retrieve') {
-      if (effective.last_command_status === 'COMPLETED') {
-        return 'Order completed';
-      }
-      if (
-        effective.last_command_status === 'FAILED'
-        || effective.last_command_status === 'REJECTED'
-        || effective.last_command_status === 'INTERRUPTED'
-      ) {
-        return 'Order failed';
+      const commandLabel = tryFormatTerminalCommandOrderLabel(effective.last_command_status);
+      if (commandLabel) {
+        return commandLabel;
       }
       return 'Relay complete';
     }
@@ -108,26 +168,22 @@ function formatRelayStatusLabel(status) {
   }
   if (effective.phase === 'failed') {
     if (effective.action === 'retrieve') {
-      if (
-        effective.error_code === 'RETRIEVAL_ERROR'
-        || effective.error_code === 'NETWORK_FAILED'
-        || effective.error_code === 'RATE_LIMIT'
-        || effective.error_code === 'RELAY_OFFLINE'
-      ) {
+      if (isRetrievalTransportError(effective.error_code)) {
         return 'Retrieve error';
       }
-      if (
-        effective.last_command_status === 'FAILED'
-        || effective.last_command_status === 'REJECTED'
-        || effective.last_command_status === 'INTERRUPTED'
-      ) {
-        return 'Order failed';
+      if (effective.error_code === 'RETRIEVE_INCOMPLETE') {
+        const incompleteLabel = tryFormatRetrieveIncompleteCommandLabel(effective.last_command_status);
+        if (incompleteLabel) {
+          return incompleteLabel;
+        }
+        return 'Retrieve incomplete';
       }
       if (effective.last_command_status === 'COMPLETED') {
         return 'Order done; relay incomplete';
       }
-      if (effective.error_code === 'RETRIEVE_INCOMPLETE') {
-        return 'Retrieve incomplete';
+      const commandLabel = tryFormatTerminalCommandOrderLabel(effective.last_command_status);
+      if (commandLabel) {
+        return commandLabel;
       }
       return 'Retrieve failed';
     }
@@ -145,4 +201,6 @@ function formatRelayStatusLabel(status) {
 module.exports = {
   formatRelayStatusLabel,
   resolveEffectiveLabelStatus,
+  tryFormatTerminalCommandOrderLabel,
+  tryFormatRetrieveIncompleteCommandLabel,
 };

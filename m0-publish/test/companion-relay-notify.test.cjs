@@ -58,6 +58,24 @@ describe('companion-relay-notify classification', () => {
     assert.equal(event.inbox_sha256, 'b'.repeat(64));
   });
 
+  it('surfaces INVALID_ACTIVE_HAND public_reason on operator-visible notify', () => {
+    const publicReason = 'Active hand must be STR_LEFT_HAND or STR_RIGHT_HAND.';
+    const event = notificationFromLocalResult({
+      schema_version: 1,
+      command_id: 'drop-active-hand-1',
+      command_type: 'DROP',
+      status: 'REJECTED',
+      session_id: 'a'.repeat(32),
+      turn: 3,
+      public_reason: publicReason,
+      reject_code: 'INVALID_ACTIVE_HAND',
+    });
+    assert.equal(event.code, NOTIFICATION_CODES.COMMAND_REJECTED);
+    assert.match(event.message, /Active hand must be STR_LEFT_HAND or STR_RIGHT_HAND/);
+    assert.equal(event.reason_code, publicReason);
+    assert.equal(event.reject_code, 'INVALID_ACTIVE_HAND');
+  });
+
   it('enriches COMPLETED MOVE with move_outcome_class when command supplied', () => {
     const command = {
       command_type: 'MOVE',

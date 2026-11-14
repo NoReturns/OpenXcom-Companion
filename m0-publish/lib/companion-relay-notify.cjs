@@ -32,7 +32,7 @@ const {
 function pickCorrelation(fields = {}) {
   const out = {};
   for (const key of ['command_id', 'command_type', 'session_id', 'request_id', 'turn', 'state_version', 'reason_code',
-    'remote_sha256', 'inbox_sha256', 'result_sha256', 'channel', 'message',
+    'reject_code', 'remote_sha256', 'inbox_sha256', 'result_sha256', 'channel', 'message',
     'move_outcome_class', 'move_tactical_success', 'may_chain_next_command',
     'movement_stop_reason', 'move_interruption_cause', 'requires_fresh_binding',
     'remaining_tu', 'commanded_destination', 'final_position',
@@ -106,8 +106,10 @@ function notificationFromLocalResult(result, inboxSha256, context = {}) {
       reason_code: result.status,
     });
   }
+  const publicReason = typeof result.public_reason === 'string' ? result.public_reason.trim() : '';
+  const rejectCode = typeof result.reject_code === 'string' ? result.reject_code.trim() : '';
   if (result.status === 'REJECTED') {
-    const reasonText = `${result.public_reason || ''} ${result.reject_code || ''}`;
+    const reasonText = `${publicReason} ${rejectCode}`;
     if (/conflict|identity|mismatch/i.test(reasonText)) {
       return buildNotification(NOTIFICATION_CODES.COMMAND_CONFLICT, {
         command_id: result.command_id,
@@ -115,11 +117,11 @@ function notificationFromLocalResult(result, inboxSha256, context = {}) {
         turn: result.turn,
         state_version: result.state_version,
         inbox_sha256: result.inbox_sha256 || inboxSha256,
-        reason_code: result.public_reason || result.reject_code || 'REJECTED',
+        reason_code: publicReason || rejectCode || 'REJECTED',
       });
     }
   }
-  const reasonCode = result.public_reason || result.reject_code || result.sidecar_reject_code;
+  const reasonCode = publicReason || rejectCode || result.sidecar_reject_code;
   const code = classifyEngineTerminal(result.status, reasonCode, reasonCode);
   if (!code) {
     return null;
@@ -159,6 +161,12 @@ function notificationFromLocalResult(result, inboxSha256, context = {}) {
         fields.message = dropBrief.message;
       }
     }
+  }
+  if (!fields.message && result.status === 'REJECTED' && publicReason) {
+    fields.message = publicReason;
+  }
+  if (!fields.reject_code && rejectCode) {
+    fields.reject_code = rejectCode;
   }
   return buildNotification(code, fields);
 }
