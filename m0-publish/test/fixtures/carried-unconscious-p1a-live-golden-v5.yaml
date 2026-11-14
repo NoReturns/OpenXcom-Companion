@@ -1,0 +1,105 @@
+schemaVersion: 5
+turn: 9
+side: 0
+selectedUnitId: 5
+missionContext:
+  schemaVersion: 1
+  missionType: STR_TERROR_MISSION
+  missionClass: terror
+map:
+  width: 10
+  height: 10
+  depth: 2
+terrain:
+  memoryNote: >-
+    Golden regression slice from ASTER-M1-P1A-LIVE-SEND-RECOVERY-02 (2026-11-12 SEND failure).
+    Preserves live linkage shape STR_CORPSE + battleType 0 for carried unconscious roster soldier.
+  tiles:
+    - p: [5, 5, 0]
+      disc: 4
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+units:
+  - id: 3
+    faction: 0
+    originalFaction: 0
+    battlefieldPlacement: carried_in_inventory
+    positionKnown: false
+    carriedByUnitId: 5
+    carriedBodyBattleItemId: 103
+    name: Alberto Munoz
+    health: 37
+    timeUnits: 63
+    kneeled: false
+    activeHand: STR_RIGHT_HAND
+    hands:
+      right: null
+      left: null
+    inventory: []
+    condition:
+      energy: 44
+      maxEnergy: 60
+      morale: 100
+      stunLevel: 56
+      alive: true
+      conscious: false
+      engineStatus: unconscious
+      engineStatusId: 7
+      floating: false
+      movementTypeId: 0
+      movementType: walk
+    readiness:
+      summary: unconscious
+      engineStatus: unconscious
+      liveRosterSoldier: true
+      engineActingUnitAvailable: false
+      observationNote: Observational only.
+  - id: 5
+    faction: 0
+    originalFaction: 0
+    position: [5, 5, 0]
+    name: Aata Timu
+    health: 40
+    timeUnits: 1
+    kneeled: false
+    activeHand: STR_RIGHT_HAND
+    hands:
+      right: null
+      left: null
+    inventory:
+      - battleItemId: 103
+        slot: STR_BACK_PACK
+        inventorySlotType: slot
+        inventoryX: 0
+        inventoryY: 0
+        itemType: STR_CORPSE
+        battleType: 0
+        researchUsable: true
+        carriedRosterUnitId: 3
+    condition:
+      energy: 48
+      maxEnergy: 58
+      morale: 84
+      stunLevel: 81
+      alive: true
+      conscious: true
+      engineStatus: standing
+      engineStatusId: 0
+      floating: false
+      movementTypeId: 0
+      movementType: walk
+    readiness:
+      summary: ready_to_act
+      engineStatus: standing
+      liveRosterSoldier: true
+      engineActingUnitAvailable: true
+      observationNote: Observational only.
+eventLog:
+  sessionId: 2150fa3d27dedf5af94d9d9c7d9f124a
+  oldestSeq: 0
+  latestSeq: 0
+  droppedCount: 0
+  events: []
