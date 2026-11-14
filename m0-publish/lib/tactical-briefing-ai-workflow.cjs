@@ -31,6 +31,7 @@ const {
 const {
   getMoveExposurePolicyMarkdown,
 } = require('./move-exposure-policy.cjs');
+const { getExplosivePerceptionContractMarkdown } = require('./explosive-perception-consumer.cjs');
 
 const WORKFLOW_VERSION = 3;
 
@@ -113,6 +114,8 @@ function getAiBriefingInstructionsMarkdown() {
     getMoveExposurePolicyMarkdown(),
     '',
     getPsychologicalPerceptionContractMarkdown(),
+    '',
+    getExplosivePerceptionContractMarkdown(),
     '',
     getEquipmentReviewContractMarkdown(),
     '',
@@ -318,4 +321,5 @@ module.exports = {
   collectPsychologicalPerceptionEvents,
   buildPsychologicalHistoricalLines,
   getPsychologicalPerceptionContractMarkdown,
+  getExplosivePerceptionContractMarkdown,
 };
