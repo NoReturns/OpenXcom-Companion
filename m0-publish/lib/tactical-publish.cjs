@@ -584,7 +584,10 @@ function assertHistoricalPerceptionUnitRowWhenExported(unitId, unitById, index, 
     return;
   }
   if (unitId >= 1_000_000) {
-    assert(row.originalFaction === FACTION_HOSTILE, `perceptionLog.events[${index}] ${roleLabel} hostile origin invalid`);
+    assert(
+      row.originalFaction === FACTION_HOSTILE || row.originalFaction === FACTION_NEUTRAL,
+      `perceptionLog.events[${index}] ${roleLabel} battle-unit origin invalid`,
+    );
     return;
   }
   if (isRosterSoldierUnitId(unitId)) {
@@ -1875,8 +1878,11 @@ function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
     });
     assert(ATTRIBUTION_SCOPES_V1.has(attributionScope), `perceptionLog.events[${index}].attributionScope invalid`);
     const victimIsRoster = isRosterSoldierUnitId(subjectUnitId);
-    const victimIsHostile = subjectUnitId >= 1_000_000;
-    assert(victimIsRoster || victimIsHostile, `perceptionLog.events[${index}].subjectUnitId must be roster or hostile`);
+    const victimIsBattleUnit = subjectUnitId >= 1_000_000;
+    assert(
+      victimIsRoster || victimIsBattleUnit,
+      `perceptionLog.events[${index}].subjectUnitId must be roster soldier or battle unit`,
+    );
     assert(!travelDirection, `perceptionLog.events[${index}] travelDirection invalid for combat attribution`);
     assert(!incomingBearing, `perceptionLog.events[${index}] incomingBearing invalid for combat attribution`);
     assert(
@@ -1890,12 +1896,15 @@ function validatePerceptionEvent(raw, index, friendlyUnitIds, units) {
         `perceptionLog.events[${index}].subjectName only allowed for roster soldiers`,
       );
     }
-    if (victimIsHostile) {
-      assertHistoricalPerceptionUnitRowWhenExported(subjectUnitId, unitById, index, 'hostile victim');
+    if (victimIsBattleUnit) {
+      assertHistoricalPerceptionUnitRowWhenExported(subjectUnitId, unitById, index, 'battle-unit victim');
     }
     const actorIsRoster = isRosterSoldierUnitId(attributedActorUnitId);
-    const actorIsHostile = attributedActorUnitId >= 1_000_000;
-    assert(actorIsRoster || actorIsHostile, `perceptionLog.events[${index}].attributedActorUnitId must be roster or hostile`);
+    const actorIsBattleUnit = attributedActorUnitId >= 1_000_000;
+    assert(
+      actorIsRoster || actorIsBattleUnit,
+      `perceptionLog.events[${index}].attributedActorUnitId must be roster soldier or battle unit`,
+    );
     assertHistoricalPerceptionUnitRowWhenExported(
       attributedActorUnitId,
       unitById,

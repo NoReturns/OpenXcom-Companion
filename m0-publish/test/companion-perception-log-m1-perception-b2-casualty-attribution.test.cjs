@@ -122,14 +122,14 @@ describe('M1 PERCEPTION-B2 combat casualty attribution', () => {
     assert.equal(tactical.perceptionLog.events[0].attributedActorUnitId, 2);
   });
 
-  it('rejects live hostile victim row with non-hostile originalFaction', () => {
+  it('rejects live battle-unit victim row with player originalFaction', () => {
     const base = v4Root();
-    const units = base.units.map((u) => (u.id === 1_000_000 ? { ...u, originalFaction: 2 } : u));
+    const units = base.units.map((u) => (u.id === 1_000_000 ? { ...u, originalFaction: 0 } : u));
     const raw = v4Root({
       units,
       perceptionLog: emptyPerceptionMeta([attributionEvent()]),
     });
-    assert.throws(() => parseAndValidate(raw), /hostile victim hostile origin invalid/);
+    assert.throws(() => parseAndValidate(raw), /battle-unit victim.*origin invalid/);
   });
 
   it('preserves B1 explosion without attribution fields', () => {
