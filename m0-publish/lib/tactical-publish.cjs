@@ -43,8 +43,42 @@ const MAX_BATTLE_ITEM_ID = 2147483647;
 const MAX_INVENTORY_GRID = 32;
 
 const ROOT_KEYS = new Set(['schemaVersion', 'turn', 'side', 'selectedUnitId', 'map', 'units', 'groundItems']);
-const ROOT_KEYS_V4 = new Set([...ROOT_KEYS, 'eventLog', 'missionContext', 'perceptionLog', 'groundItems']);
+const ROOT_KEYS_V4 = new Set([...ROOT_KEYS, 'eventLog', 'missionContext', 'perceptionLog', 'groundItems', 'tuReservation']);
 const ROOT_KEYS_V5 = new Set([...ROOT_KEYS_V4, 'terrain']);
+const TU_RESERVATION_KEYS = new Set([
+  'schemaVersion',
+  'fireMode',
+  'fireModeActionType',
+  'kneelReserve',
+  'engineReservationCheckAvailable',
+  'observationNote',
+]);
+const ALLOWED_TU_FIRE_MODES = new Set(['none', 'snap', 'auto', 'aimed', 'unknown']);
+const POSTURE_OPTIONAL_KEYS = new Set([
+  'kneelDownCanAffordWithCurrentReservation',
+  'standUpCanAffordWithCurrentReservation',
+  'reservationWouldBlockKneelDown',
+  'reservationWouldBlockStandUp',
+]);
+const ACTION_ENTRY_OPTIONAL_KEYS = new Set([
+  'canAffordTuWithCurrentReservation',
+  'reservationWouldBlock',
+  'facingTuPerStep',
+  'facingTuStepsUnknownWithoutTarget',
+  'facingObservationNote',
+]);
+const MOVEMENT_TU_ADVISORY_KEYS = new Set([
+  'schemaVersion',
+  'pathTuEstimateIncluded',
+  'facingTuDuringPathPerStep',
+  'observationNote',
+  'standUpRequiredBeforeWalk',
+  'standUpTuBeforeWalk',
+  'standUpCanAffordTu',
+  'timeUnitsAfterStandEstimate',
+  'standUpCanAffordWithCurrentReservation',
+  'reservationWouldBlockStandBeforeWalk',
+]);
 const TERRAIN_KEYS_VERBOSE = new Set(['memoryNote', 'tiles', 'semantics']);
 const TERRAIN_KEYS_PACKED = new Set(['memoryNote', 'encoding', 'recordCount', 'data', 'semantics']);
 const TERRAIN_SEMANTICS_KEYS = new Set(['encoding', 'recordCount', 'data']);
@@ -100,6 +134,7 @@ const UNIT_FRIENDLY_V3_KEYS = new Set([
   'carriedWeight',
   'strength',
   'encumbranceRatio',
+  'movementTuAdvisory',
 ]);
 const UNIT_FRIENDLY_WP2_KEYS = new Set(['facing', 'condition', 'readiness']);
 const UNIT_OBSERVATION_KEYS = new Set(['observedUnitType', 'displayLabel']);
@@ -706,7 +741,9 @@ function validateReadiness(raw, label) {
 function validateActionEntry(raw, label) {
   assert(isPlainObject(raw), `${label} must be an object`);
   for (const key of Object.keys(raw)) {
-    if (!ACTION_ENTRY_KEYS.has(key)) throw new ValidationError(`${label} unknown field: ${key}`);
+    if (!ACTION_ENTRY_KEYS.has(key) && !ACTION_ENTRY_OPTIONAL_KEYS.has(key)) {
+      throw new ValidationError(`${label} unknown field: ${key}`);
+    }
   }
   for (const key of ACTION_ENTRY_KEYS) {
     assert(Object.prototype.hasOwnProperty.call(raw, key), `${label}.${key} required`);
@@ -718,7 +755,89 @@ function validateActionEntry(raw, label) {
   const tuCost = requireInt(raw.tuCost, `${label}.tuCost`, { min: 0, allowNegative: false });
   const canAffordTu = requireBool(raw.canAffordTu, `${label}.canAffordTu`);
   const usable = requireBool(raw.usable, `${label}.usable`);
-  return { id, actionType, tuCost, canAffordTu, usable };
+  const entry = { id, actionType, tuCost, canAffordTu, usable };
+  if (Object.prototype.hasOwnProperty.call(raw, 'canAffordTuWithCurrentReservation')) {
+    entry.canAffordTuWithCurrentReservation = requireBool(
+      raw.canAffordTuWithCurrentReservation,
+      `${label}.canAffordTuWithCurrentReservation`,
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'reservationWouldBlock')) {
+    entry.reservationWouldBlock = requireBool(raw.reservationWouldBlock, `${label}.reservationWouldBlock`);
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'facingTuPerStep')) {
+    entry.facingTuPerStep = requireInt(raw.facingTuPerStep, `${label}.facingTuPerStep`, {
+      min: 0,
+      allowNegative: false,
+    });
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'facingTuStepsUnknownWithoutTarget')) {
+    entry.facingTuStepsUnknownWithoutTarget = requireBool(
+      raw.facingTuStepsUnknownWithoutTarget,
+      `${label}.facingTuStepsUnknownWithoutTarget`,
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'facingObservationNote')) {
+    entry.facingObservationNote = requireString(raw.facingObservationNote, `${label}.facingObservationNote`, {
+      maxLength: 512,
+    });
+  }
+  return entry;
+}
+
+function validateMovementTuAdvisory(raw, label) {
+  assert(isPlainObject(raw), `${label} must be an object`);
+  for (const key of Object.keys(raw)) {
+    if (!MOVEMENT_TU_ADVISORY_KEYS.has(key)) throw new ValidationError(`${label} unknown field: ${key}`);
+  }
+  assert(raw.schemaVersion === 1, `${label}.schemaVersion must be 1`);
+  const pathTuEstimateIncluded = requireBool(raw.pathTuEstimateIncluded, `${label}.pathTuEstimateIncluded`);
+  const facingTuDuringPathPerStep = requireInt(raw.facingTuDuringPathPerStep, `${label}.facingTuDuringPathPerStep`, {
+    min: 0,
+    allowNegative: false,
+  });
+  const observationNote = requireString(raw.observationNote, `${label}.observationNote`, { maxLength: 512 });
+  const advisory = {
+    schemaVersion: 1,
+    pathTuEstimateIncluded,
+    facingTuDuringPathPerStep,
+    observationNote,
+  };
+  if (Object.prototype.hasOwnProperty.call(raw, 'standUpRequiredBeforeWalk')) {
+    advisory.standUpRequiredBeforeWalk = requireBool(
+      raw.standUpRequiredBeforeWalk,
+      `${label}.standUpRequiredBeforeWalk`,
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'standUpTuBeforeWalk')) {
+    advisory.standUpTuBeforeWalk = requireInt(raw.standUpTuBeforeWalk, `${label}.standUpTuBeforeWalk`, {
+      min: 0,
+      allowNegative: false,
+    });
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'standUpCanAffordTu')) {
+    advisory.standUpCanAffordTu = requireBool(raw.standUpCanAffordTu, `${label}.standUpCanAffordTu`);
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'timeUnitsAfterStandEstimate')) {
+    advisory.timeUnitsAfterStandEstimate = requireInt(
+      raw.timeUnitsAfterStandEstimate,
+      `${label}.timeUnitsAfterStandEstimate`,
+      { min: 0, allowNegative: false },
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'standUpCanAffordWithCurrentReservation')) {
+    advisory.standUpCanAffordWithCurrentReservation = requireBool(
+      raw.standUpCanAffordWithCurrentReservation,
+      `${label}.standUpCanAffordWithCurrentReservation`,
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'reservationWouldBlockStandBeforeWalk')) {
+    advisory.reservationWouldBlockStandBeforeWalk = requireBool(
+      raw.reservationWouldBlockStandBeforeWalk,
+      `${label}.reservationWouldBlockStandBeforeWalk`,
+    );
+  }
+  return advisory;
 }
 
 function validateHandActionCosts(raw, label) {
@@ -747,7 +866,9 @@ function validateActionCosts(raw, label) {
   assert(Object.prototype.hasOwnProperty.call(raw, 'hands'), `${label}.hands required`);
   assert(isPlainObject(raw.posture), `${label}.posture must be an object`);
   for (const key of Object.keys(raw.posture)) {
-    if (!POSTURE_KEYS.has(key)) throw new ValidationError(`${label}.posture unknown field: ${key}`);
+    if (!POSTURE_KEYS.has(key) && !POSTURE_OPTIONAL_KEYS.has(key)) {
+      throw new ValidationError(`${label}.posture unknown field: ${key}`);
+    }
   }
   for (const key of POSTURE_KEYS) {
     assert(Object.prototype.hasOwnProperty.call(raw.posture, key), `${label}.posture.${key} required`);
@@ -756,6 +877,11 @@ function validateActionCosts(raw, label) {
     kneelDownTu: requireInt(raw.posture.kneelDownTu, `${label}.posture.kneelDownTu`, { min: 0, allowNegative: false }),
     standUpTu: requireInt(raw.posture.standUpTu, `${label}.posture.standUpTu`, { min: 0, allowNegative: false }),
   };
+  for (const key of POSTURE_OPTIONAL_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(raw.posture, key)) {
+      posture[key] = requireBool(raw.posture[key], `${label}.posture.${key}`);
+    }
+  }
   assert(isPlainObject(raw.hands), `${label}.hands must be an object`);
   for (const key of Object.keys(raw.hands)) {
     if (!HANDS_KEYS.has(key)) throw new ValidationError(`${label}.hands unknown field: ${key}`);
@@ -1354,6 +1480,12 @@ function validateUnit(raw, index, schemaVersion = 2) {
       if (Object.prototype.hasOwnProperty.call(raw, 'actionCosts')) {
         unit.actionCosts = validateActionCosts(raw.actionCosts, `units[${index}].actionCosts`);
       }
+      if (Object.prototype.hasOwnProperty.call(raw, 'movementTuAdvisory')) {
+        unit.movementTuAdvisory = validateMovementTuAdvisory(
+          raw.movementTuAdvisory,
+          `units[${index}].movementTuAdvisory`,
+        );
+      }
       if (Object.prototype.hasOwnProperty.call(raw, 'facing')) {
         unit.facing = validateFacing(raw.facing, `units[${index}].facing`);
       }
@@ -1412,6 +1544,34 @@ function allowedRootKeys(schemaVersion) {
   if (schemaVersion === 5) return ROOT_KEYS_V5;
   if (schemaVersion === 4) return ROOT_KEYS_V4;
   return ROOT_KEYS;
+}
+
+function validateTuReservation(raw) {
+  assert(isPlainObject(raw), 'tuReservation must be an object');
+  for (const key of Object.keys(raw)) {
+    if (!TU_RESERVATION_KEYS.has(key)) throw new ValidationError(`tuReservation unknown field: ${key}`);
+  }
+  assert(raw.schemaVersion === 1, 'tuReservation.schemaVersion must be 1');
+  const fireMode = requireString(raw.fireMode, 'tuReservation.fireMode', { maxLength: 16 });
+  assert(ALLOWED_TU_FIRE_MODES.has(fireMode), 'tuReservation.fireMode invalid');
+  const fireModeActionType = requireInt(raw.fireModeActionType, 'tuReservation.fireModeActionType', {
+    min: 0,
+    allowNegative: false,
+  });
+  const kneelReserve = requireBool(raw.kneelReserve, 'tuReservation.kneelReserve');
+  const engineReservationCheckAvailable = requireBool(
+    raw.engineReservationCheckAvailable,
+    'tuReservation.engineReservationCheckAvailable',
+  );
+  const observationNote = requireString(raw.observationNote, 'tuReservation.observationNote', { maxLength: 512 });
+  return {
+    schemaVersion: 1,
+    fireMode,
+    fireModeActionType,
+    kneelReserve,
+    engineReservationCheckAvailable,
+    observationNote,
+  };
 }
 
 function requireWalkTu(value, label) {
@@ -2439,6 +2599,11 @@ function parseAndValidate(raw) {
     missionContext = validateMissionContext(raw.missionContext);
   }
   const groundItems = validateGroundItems(raw, map, schemaVersion, terrain);
+  let tuReservation;
+  if (Object.prototype.hasOwnProperty.call(raw, 'tuReservation')) {
+    assert(schemaVersion >= 4, 'tuReservation requires schemaVersion >= 4');
+    tuReservation = validateTuReservation(raw.tuReservation);
+  }
 
   return {
     schemaVersion,
@@ -2452,6 +2617,7 @@ function parseAndValidate(raw) {
     ...(terrain !== undefined ? { terrain } : {}),
     ...(missionContext !== undefined ? { missionContext } : {}),
     ...(groundItems !== undefined ? { groundItems } : {}),
+    ...(tuReservation !== undefined ? { tuReservation } : {}),
   };
 }
 

@@ -67,6 +67,39 @@ function quotaUsedDelta(before, after) {
   return null;
 }
 
+function readTuResultEvidence(snapshotDir, io = {}) {
+  if (!snapshotDir) {
+    return null;
+  }
+  const existsSync = io.existsSync ?? fs.existsSync;
+  const readFileSync = io.readFileSync ?? fs.readFileSync;
+  const resultPath = path.join(snapshotDir, 'tactical-result.json');
+  if (!existsSync(resultPath)) {
+    return null;
+  }
+  try {
+    const result = JSON.parse(readFileSync(resultPath, 'utf8'));
+    if (!result || typeof result !== 'object') {
+      return null;
+    }
+    const evidence = {
+      command_id: typeof result.command_id === 'string' ? result.command_id : null,
+      command_type: typeof result.command_type === 'string' ? result.command_type : null,
+      status: typeof result.status === 'string' ? result.status : null,
+      reject_code: typeof result.reject_code === 'string' ? result.reject_code : null,
+      movement_stop_reason: typeof result.movement_stop_reason === 'string'
+        ? result.movement_stop_reason
+        : null,
+    };
+    if (result.tu_accounting && typeof result.tu_accounting === 'object') {
+      evidence.tu_accounting = result.tu_accounting;
+    }
+    return evidence;
+  } catch {
+    return null;
+  }
+}
+
 function summarizeGhApiCalls(apiCallLog) {
   if (!apiCallLog || !Array.isArray(apiCallLog.entries)) {
     return { invocation_count: 0, invocations: [] };
@@ -153,6 +186,7 @@ function createRelayTransactionTrace(options = {}) {
       busy_rejects_logged_as: 'relay_button_enqueue',
     };
     const retrieveDiag = retrieveDiagnostics(summary.retrieveTx);
+    const tuResultEvidence = summary.tuResultEvidence ?? null;
     const payload = {
       kind: 'relay_transaction_complete',
       at_ms: finishedAtMs,
@@ -168,6 +202,7 @@ function createRelayTransactionTrace(options = {}) {
       retrieve_tx: summary.retrieveTx ?? undefined,
       poll_snapshot: summary.pollSnapshot ?? undefined,
       ...(retrieveDiag ?? {}),
+      ...(tuResultEvidence ? { tu_result_evidence: tuResultEvidence } : {}),
       flags,
       events,
       github_api: {
@@ -322,6 +357,7 @@ module.exports = {
   createRelayTransactionTrace,
   recordButtonEnqueue,
   bindTransactionScopeToContext,
+  readTuResultEvidence,
   appendTransactionLine,
   snapshotQuota,
   quotaUsedDelta,

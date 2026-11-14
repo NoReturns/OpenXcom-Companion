@@ -12,6 +12,10 @@ const {
   BT_AMMO,
 } = require('./tactical-publish.cjs');
 const { readSnapshotByteBuffer, sha256HexLower } = require('./briefing-snapshot.cjs');
+const {
+  buildMovePlanningHint,
+  buildDirectedFireCompositeHint,
+} = require('./tu-composite-advisory.cjs');
 
 const COMMAND_SCHEMA_VERSION = 1;
 const RESULT_SCHEMA_VERSION = 1;
@@ -719,7 +723,8 @@ function validateMoveAgainstSnapshot(command, tactical, snapshotSha256Lower) {
     && command.destination.y < tactical.map.height
     && command.destination.z < tactical.map.depth, 'destination out of map bounds');
   const actor = validateActorAgainstSnapshot(command, tactical);
-  return { snapshotId: computeSnapshotId(tactical), actor };
+  const planningHint = buildMovePlanningHint(actor);
+  return { snapshotId: computeSnapshotId(tactical), actor, planningHint };
 }
 
 function validateKneelAgainstSnapshot(command, tactical, snapshotSha256Lower) {
@@ -793,8 +798,11 @@ function validateDirectedFireAgainstSnapshot(command, tactical, snapshotSha256Lo
   const fireAction = findFireActionOnActor(actor, activeHand, actionId);
   assert(fireAction, `weapon in active_hand does not support ${actionId} fire mode`);
   assert(fireAction.usable !== false, 'fire mode not usable for weapon or ammunition');
-  assert(fireAction.canAffordTu !== false, 'insufficient TU for fire mode');
-  const planningHint = buildFirePlanningHint(actor, activeHand, commandType);
+  assert(fireAction.canAffordTu !== false, 'insufficient TU for fire mode (fire TU only)');
+  const planningHint = {
+    ...buildFirePlanningHint(actor, activeHand, commandType),
+    composite: buildDirectedFireCompositeHint(actor, command.target, fireAction.tuCost),
+  };
   return { snapshotId: computeSnapshotId(tactical), actor, planningHint };
 }
 
@@ -1054,6 +1062,8 @@ module.exports = {
   validateMoveAgainstSnapshotFile,
   validateTacticalCommandAgainstSnapshotFile,
   buildFirePlanningHint,
+  buildMovePlanningHint,
+  buildDirectedFireCompositeHint,
   buildGrenadePlanningHint,
   buildResultEnvelope,
   parseResultStatus,

@@ -51,6 +51,7 @@ const { writeDaemonHealth, DAEMON_STATE } = require('./on-demand-daemon-health.c
 const {
   createRelayTransactionTrace,
   bindTransactionScopeToContext,
+  readTuResultEvidence,
 } = require('./relay-transaction-trace.cjs');
 const {
   BASE_INTELLIGENCE_FILENAME,
@@ -1019,6 +1020,9 @@ async function processPendingRequest(ctx, io = {}) {
   }
   trace.record('ui_status_written', { terminal: uiTerminal, phase: outcome.phase });
 
+  const tuResultEvidence = action === 'retrieve'
+    ? readTuResultEvidence(paths.snapshotDir, io)
+    : null;
   trace.finish({
     outcomePhase: outcome.phase,
     outcomeMessage: outcome.message,
@@ -1027,6 +1031,7 @@ async function processPendingRequest(ctx, io = {}) {
     apiCallLog,
     retrieveTx: action === 'retrieve' ? ctx.commandWatcher.getRetrieveTransactionState() : null,
     pollSnapshot: action === 'retrieve' ? ctx.commandWatcher.getLastRetrievePollSnapshot() : null,
+    tuResultEvidence,
   });
 
   const retainPendingRequest = action === 'send' && outcome.outcome === RELAY_OUTCOME.DEFERRED;
