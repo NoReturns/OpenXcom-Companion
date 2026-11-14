@@ -68,7 +68,13 @@
 
 ## Source-control checkpoint
 
-*(Filled after commits/push in this pass — see git output below.)*
+| Repo | Branch | Commit | Remote sync |
+|------|--------|--------|-------------|
+| `engine/OpenXcom` | `aster/m0` | `614bbf7ec` | `origin/aster/m0` **matches** |
+| `companion` | `main` | `ae42bc8` | `origin/main` **matches** |
+
+Tracked audit archive: `companion/m0-publish/docs/audits/ASTER-M1-RELAY-HUD-DEPLOY-02.md`  
+Workspace copy: `local/m0/audits/ASTER-M1-RELAY-HUD-DEPLOY-02.md`
 
 ---
 
