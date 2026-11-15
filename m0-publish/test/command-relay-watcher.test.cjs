@@ -306,6 +306,128 @@ describe('CommandRelayWatcher', () => {
     assert.ok(!fs.existsSync(h.local.command));
     fs.rmSync(h.root, { recursive: true, force: true });
   });
+
+  it('delivers GUIDED_LAUNCH when campaign-matched rules reference present', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'command-relay-gl-'));
+    const snapshotText = fs.readFileSync(
+      path.join(__dirname, 'fixtures', 'wp8e-guided-launch-sidecar.yaml'),
+      'utf8',
+    );
+    const snapshotPath = path.join(root, 'tactical-live.yaml');
+    fs.writeFileSync(snapshotPath, snapshotText, 'utf8');
+    const tactical = loadAndValidateSnapshotFromText(snapshotText, YAML);
+    const digest = sha256HexLower(Buffer.from(snapshotText, 'utf8'));
+    const companionDir = path.dirname(snapshotPath);
+    fs.writeFileSync(
+      path.join(companionDir, 'companion-soldier-control.json'),
+      JSON.stringify({ campaign_id: '624067d2038b6f2d36f27cd0d94b8d03' }),
+      'utf8',
+    );
+    fs.writeFileSync(
+      path.join(companionDir, 'companion-rules-reference.json'),
+      fs.readFileSync(path.join(__dirname, 'fixtures', 'wp8e-rules-reference.json'), 'utf8'),
+      'utf8',
+    );
+    const local = localRelayPaths(snapshotPath);
+    const stateDir = path.join(root, 'state');
+    const publishes = [];
+    let remoteCommand = null;
+    const watcher = new CommandRelayWatcher({
+      snapshotPath,
+      stateDir,
+      dryRun: true,
+      pollIntervalMs: 5,
+      log: () => {},
+      readRemoteCommand: async () => remoteCommand,
+      publishRemoteResult: async (result) => {
+        publishes.push(result);
+      },
+      readFileSync: fs.readFileSync,
+      existsSync: fs.existsSync,
+      writeFileSync: fs.writeFileSync,
+      renameSync: fs.renameSync,
+      unlinkSync: fs.unlinkSync,
+    });
+    remoteCommand = {
+      text: `${JSON.stringify({
+        schema_version: 1,
+        command_id: 'gl-watcher-accept-1',
+        command_type: 'GUIDED_LAUNCH',
+        actor_unit_id: 1,
+        active_hand: 'STR_RIGHT_HAND',
+        waypoints: [{ x: 10, y: 12, z: 0 }],
+        snapshot_sha256: digest,
+        session_id: tactical.eventLog.sessionId,
+        turn: tactical.turn,
+        state_version: tactical.eventLog.latestSeq,
+      }, null, 2)}\n`,
+      sha: crypto.createHash('sha256').update('gl-watcher').digest('hex'),
+    };
+    await watcher._pollOnce();
+    assert.ok(fs.existsSync(local.command));
+    const localCmd = JSON.parse(fs.readFileSync(local.command, 'utf8'));
+    assert.equal(localCmd.command_type, 'GUIDED_LAUNCH');
+    assert.equal(publishes.length, 0);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('rejects GUIDED_LAUNCH without local rules reference', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'command-relay-gl-rej-'));
+    const snapshotText = fs.readFileSync(
+      path.join(__dirname, 'fixtures', 'wp8e-guided-launch-sidecar.yaml'),
+      'utf8',
+    );
+    const snapshotPath = path.join(root, 'tactical-live.yaml');
+    fs.writeFileSync(snapshotPath, snapshotText, 'utf8');
+    const tactical = loadAndValidateSnapshotFromText(snapshotText, YAML);
+    const digest = sha256HexLower(Buffer.from(snapshotText, 'utf8'));
+    const companionDir = path.dirname(snapshotPath);
+    fs.writeFileSync(
+      path.join(companionDir, 'companion-soldier-control.json'),
+      JSON.stringify({ campaign_id: '624067d2038b6f2d36f27cd0d94b8d03' }),
+      'utf8',
+    );
+    const publishes = [];
+    let remoteCommand = {
+      text: `${JSON.stringify({
+        schema_version: 1,
+        command_id: 'gl-watcher-reject-1',
+        command_type: 'GUIDED_LAUNCH',
+        actor_unit_id: 1,
+        active_hand: 'STR_RIGHT_HAND',
+        waypoints: [{ x: 10, y: 12, z: 0 }],
+        snapshot_sha256: digest,
+        session_id: tactical.eventLog.sessionId,
+        turn: tactical.turn,
+        state_version: tactical.eventLog.latestSeq,
+      }, null, 2)}\n`,
+      sha: crypto.createHash('sha256').update('gl-watcher-rej').digest('hex'),
+    };
+    const local = localRelayPaths(snapshotPath);
+    const watcher = new CommandRelayWatcher({
+      snapshotPath,
+      stateDir: path.join(root, 'state'),
+      dryRun: false,
+      pollIntervalMs: 5,
+      log: () => {},
+      readRemoteCommand: async () => remoteCommand,
+      publishRemoteResult: async (result) => {
+        publishes.push(result);
+      },
+      readFileSync: fs.readFileSync,
+      existsSync: fs.existsSync,
+      writeFileSync: fs.writeFileSync,
+      renameSync: fs.renameSync,
+      unlinkSync: fs.unlinkSync,
+    });
+    await watcher._pollOnce();
+    assert.ok(!fs.existsSync(local.command));
+    assert.equal(publishes.length, 1);
+    assert.equal(publishes[0].status, 'REJECTED');
+    assert.equal(publishes[0].sidecar_reject_code, 'SIDECAR_VALIDATION');
+    assert.match(publishes[0].public_reason, /rules reference/i);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
 });
 
 describe('TerrainQueryRelayWatcher', () => {

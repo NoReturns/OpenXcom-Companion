@@ -1,0 +1,32 @@
+{
+  "schema_version": 2,
+  "artifact": "companion-rules-reference",
+  "exported_at_ms": 1794755221895,
+  "identity": {
+    "campaign_id": "624067d2038b6f2d36f27cd0d94b8d03",
+    "research_revision_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "ruleset_revision_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "content_revision_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  },
+  "ruleset": {
+    "mods": [
+      "xcom1"
+    ]
+  },
+  "inventorySections": [],
+  "items": [
+    {
+      "type": "STR_BLASTER_BOMB",
+      "battleType": "ammo",
+      "damagePower": 200,
+      "damageType": "explosive"
+    },
+    {
+      "type": "STR_BLASTER_LAUNCHER",
+      "battleType": "firearm",
+      "clipSize": 1,
+      "flatRate": false,
+      "waypoints": 9
+    }
+  ]
+}

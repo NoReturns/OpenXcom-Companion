@@ -13,10 +13,10 @@ const SCHEMA_VERSION = 1;
  * `openxcom.exe` and commit together with any doc updates — do not deploy a build whose
  * hash is not reflected here.
  *
- * Verified Win32 Release build (ASTER-M1-GEOSCAPE-HUD-DEPLOY-02: Geoscape relay/GitHub HUD
- * chrome hidden; Basescape/Battlescape unchanged; prior pin c247a89b…).
+ * Verified Win32 Release build (ASTER-M1-WP8E-LIVE-FIX-DEPLOY-03: Battlescape rules-reference export
+ * + WP8E GUIDED_LAUNCH; prior pin 48c0340b…).
  */
-const VERIFIED_BUILD_SHA256 = '596c056e6d108b8d0211352684329f04e339fae5f23dc3a0903a5d5deb66d5fc';
+const VERIFIED_BUILD_SHA256 = '763d8dbf73ff5e6ab4702bf4b8f0816deff25a3ac989d11cb2fefa819cdd5cdc';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 

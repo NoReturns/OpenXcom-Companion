@@ -1,0 +1,56 @@
+schemaVersion: 4
+turn: 1
+side: 0
+selectedUnitId: 1
+map:
+  width: 50
+  height: 50
+  depth: 4
+units:
+  - id: 1
+    faction: 0
+    originalFaction: 0
+    position: [5, 5, 0]
+    name: Seppe
+    health: 50
+    timeUnits: 80
+    kneeled: false
+    activeHand: STR_RIGHT_HAND
+    inventory: []
+    groundInventory: []
+    hands:
+      right:
+        itemType: STR_BLASTER_LAUNCHER
+        battleType: 1
+        nestedAmmo:
+          battleItemId: 501
+          ammoType: STR_BLASTER_BOMB
+          rounds: 1
+      left: null
+    actionCosts:
+      posture:
+        kneelDownTu: 4
+        standUpTu: 8
+      hands:
+        right:
+          itemType: STR_BLASTER_LAUNCHER
+          actions:
+            - id: launch
+              actionType: 8
+              tuCost: 40
+              usable: true
+              canAffordTu: true
+        left:
+          actions: []
+eventLog:
+  sessionId: fb52739ea5e1bda18286ea341bb7e0a4
+  oldestSeq: 0
+  latestSeq: 0
+  droppedCount: 0
+  events: []
+groundItems:
+  schemaVersion: 1
+  sessionId: fb52739ea5e1bda18286ea341bb7e0a4
+  memoryNote: wp8e-watcher-fixture
+  droppedCount: 0
+  observations: []

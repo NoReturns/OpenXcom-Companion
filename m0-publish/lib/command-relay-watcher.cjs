@@ -34,6 +34,7 @@ const {
   notificationFromLocalResult,
   notificationFromMoveCommand,
 } = require('./companion-relay-notify.cjs');
+const { buildSidecarTacticalValidationOptions } = require('./rules-reference-sidecar-consumer.cjs');
 
 const DEFAULT_IDLE_POLL_MS = 5000;
 const DEFAULT_ACTIVE_POLL_MS = 1000;
@@ -893,7 +894,24 @@ class CommandRelayWatcher {
 
       try {
         parseTacticalCommand(command);
-        validateTacticalCommandAgainstSnapshotFile(command, this.snapshotPath, YAML, this.readFileSync);
+        const rulesGate = buildSidecarTacticalValidationOptions(this.snapshotPath, command, {
+          existsSync: this.existsSync,
+          readFileSync: this.readFileSync,
+        });
+        if (rulesGate.blocked) {
+          const reason = rulesGate.rules.publicReason
+            || rulesGate.rules.status
+            || 'rules reference unavailable';
+          await this.rejectRemote(command, 'SIDECAR_VALIDATION', reason, journal, remote.sha ?? '');
+          return;
+        }
+        validateTacticalCommandAgainstSnapshotFile(
+          command,
+          this.snapshotPath,
+          YAML,
+          this.readFileSync,
+          rulesGate.validationOptions,
+        );
       } catch (error) {
         const message = error instanceof ValidationError ? error.message : String(error);
         await this.rejectRemote(command, 'SIDECAR_VALIDATION', message, journal, remote.sha ?? '');

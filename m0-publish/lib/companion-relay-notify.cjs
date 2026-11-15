@@ -28,6 +28,10 @@ const {
   buildFireOutcomeBrief,
   isDirectedFireCommandType,
 } = require('./fire-result-consumer.cjs');
+const {
+  buildGuidedLaunchOutcomeBrief,
+  isGuidedLaunchCommandType,
+} = require('./guided-launch-result-consumer.cjs');
 
 function pickCorrelation(fields = {}) {
   const out = {};
@@ -36,7 +40,7 @@ function pickCorrelation(fields = {}) {
     'move_outcome_class', 'move_tactical_success', 'may_chain_next_command',
     'movement_stop_reason', 'move_interruption_cause', 'requires_fresh_binding',
     'remaining_tu', 'commanded_destination', 'final_position',
-    'fire_outcome_class']) {
+    'fire_outcome_class', 'guided_launch_outcome_class']) {
     if (fields[key] !== undefined && fields[key] !== null && fields[key] !== '') {
       out[key] = fields[key];
     }
@@ -146,6 +150,15 @@ function notificationFromLocalResult(result, inboxSha256, context = {}) {
       fields.fire_outcome_class = fireBrief.outcome_class;
       if (fireBrief.message) {
         fields.message = fireBrief.message;
+      }
+    }
+  } else if (isGuidedLaunchCommandType(result.command_type)) {
+    const launchBrief = buildGuidedLaunchOutcomeBrief(result);
+    if (launchBrief) {
+      fields.command_type = result.command_type;
+      fields.guided_launch_outcome_class = launchBrief.outcome_class;
+      if (launchBrief.message) {
+        fields.message = launchBrief.message;
       }
     }
   } else if (result.command_type === 'DROP') {

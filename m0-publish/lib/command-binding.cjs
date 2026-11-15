@@ -260,6 +260,39 @@ function composeThrowCommand(binding, options) {
   return composeDirectedFireCommand(binding, 'THROW', options);
 }
 
+function composeGuidedLaunchCommand(binding, { commandId, actorUnitId, activeHand, waypoints }) {
+  const b = parseCommandBinding(binding);
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId > 0, 'actorUnitId required');
+  assert(typeof activeHand === 'string' && (activeHand === 'STR_LEFT_HAND' || activeHand === 'STR_RIGHT_HAND'),
+    'activeHand required');
+  assert(Array.isArray(waypoints) && waypoints.length > 0, 'waypoints must be a non-empty array');
+  const soldier = b.player_soldiers.find((s) => s.id === actorUnitId);
+  assert(soldier, 'actorUnitId must be a listed player_soldier');
+  const normalized = waypoints.map((wp, index) => {
+    assert(wp && Number.isInteger(wp.x), `waypoints[${index}].x required`);
+    assert(Number.isInteger(wp.y), `waypoints[${index}].y required`);
+    assert(Number.isInteger(wp.z), `waypoints[${index}].z required`);
+    assert(wp.x >= 0 && wp.x < b.map.width, `waypoints[${index}].x out of map`);
+    assert(wp.y >= 0 && wp.y < b.map.height, `waypoints[${index}].y out of map`);
+    assert(wp.z >= 0 && wp.z < b.map.depth, `waypoints[${index}].z out of map`);
+    return { x: wp.x, y: wp.y, z: wp.z };
+  });
+
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: 'GUIDED_LAUNCH',
+    actor_unit_id: actorUnitId,
+    active_hand: activeHand,
+    waypoints: normalized,
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
 function composeReloadCommand(binding, { commandId, actorUnitId, weaponBattleItemId, ammoBattleItemId }) {
   const b = parseCommandBinding(binding);
   assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
@@ -477,6 +510,7 @@ module.exports = {
   composeAimedShotCommand,
   composePrimeCommand,
   composeThrowCommand,
+  composeGuidedLaunchCommand,
   composeReloadCommand,
   composeUnloadCommand,
   composeInventoryMoveCommand,

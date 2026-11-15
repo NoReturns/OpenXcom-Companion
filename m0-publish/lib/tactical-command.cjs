@@ -32,6 +32,7 @@ const COMMAND_TYPE_UNLOAD = 'UNLOAD';
 const COMMAND_TYPE_INVENTORY_MOVE = 'INVENTORY_MOVE';
 const COMMAND_TYPE_PICKUP = 'PICKUP';
 const COMMAND_TYPE_DROP = 'DROP';
+const COMMAND_TYPE_GUIDED_LAUNCH = 'GUIDED_LAUNCH';
 
 const DIRECTED_FIRE_COMMAND_TYPES = new Set([
   COMMAND_TYPE_SNAP_SHOT,
@@ -70,6 +71,7 @@ const COMMAND_KEYS_STAND = new Set([...COMMAND_KEYS_COMMON]);
 const COMMAND_KEYS_DIRECTED_FIRE = new Set([...COMMAND_KEYS_COMMON, 'target', 'active_hand']);
 const COMMAND_KEYS_PRIME = new Set([...COMMAND_KEYS_COMMON, 'active_hand', 'fuse_timer']);
 const COMMAND_KEYS_THROW = new Set([...COMMAND_KEYS_COMMON, 'target', 'active_hand']);
+const COMMAND_KEYS_GUIDED_LAUNCH = new Set([...COMMAND_KEYS_COMMON, 'active_hand', 'waypoints']);
 const COMMAND_KEYS_RELOAD = new Set([...COMMAND_KEYS_COMMON, 'weapon_battle_item_id', 'ammo_battle_item_id']);
 const COMMAND_KEYS_UNLOAD = new Set([...COMMAND_KEYS_COMMON, 'weapon_battle_item_id', 'loaded_ammo_battle_item_id']);
 const COMMAND_KEYS_INVENTORY_MOVE = new Set([
@@ -123,6 +125,8 @@ const GRENADE_ACTION_IDS = {
   [COMMAND_TYPE_PRIME]: 'prime',
   [COMMAND_TYPE_THROW]: 'throw',
 };
+
+const GUIDED_LAUNCH_ACTION_ID = 'launch';
 
 const RESULT_KEYS_BASE = new Set([
   'schema_version',
@@ -284,6 +288,36 @@ function parseThrowCommand(raw) {
     ...binding,
     activeHand: raw.active_hand,
     target,
+  };
+}
+
+function parseWaypointSequence(rawWaypoints) {
+  if (!Array.isArray(rawWaypoints)) {
+    throw new ValidationError('waypoints must be a non-empty array');
+  }
+  if (rawWaypoints.length === 0) {
+    throw new ValidationError('waypoints must contain at least one position');
+  }
+  const waypoints = [];
+  for (let i = 0; i < rawWaypoints.length; i += 1) {
+    waypoints.push(parseCoordinateObject(rawWaypoints[i], `waypoints[${i}]`));
+  }
+  return waypoints;
+}
+
+function parseGuidedLaunchCommand(raw) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === COMMAND_TYPE_GUIDED_LAUNCH, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, COMMAND_KEYS_GUIDED_LAUNCH);
+  assert(typeof raw.active_hand === 'string' && VALID_ACTIVE_HANDS.has(raw.active_hand), 'invalid active_hand');
+  const waypoints = parseWaypointSequence(raw.waypoints);
+  const binding = parseBindingFields(raw);
+  return {
+    ...binding,
+    activeHand: raw.active_hand,
+    waypoints,
   };
 }
 
@@ -692,6 +726,9 @@ function parseTacticalCommand(raw) {
   if (raw.command_type === COMMAND_TYPE_DROP) {
     return parseDropCommand(raw);
   }
+  if (raw.command_type === COMMAND_TYPE_GUIDED_LAUNCH) {
+    return parseGuidedLaunchCommand(raw);
+  }
   throw new ValidationError('unsupported command_type');
 }
 
@@ -852,6 +889,136 @@ function validateThrowAgainstSnapshot(command, tactical, snapshotSha256Lower) {
   return { snapshotId: computeSnapshotId(tactical), actor, planningHint };
 }
 
+function lookupRulesReferenceItem(rulesReference, itemType) {
+  if (!rulesReference || typeof itemType !== 'string' || itemType.length === 0) {
+    return null;
+  }
+  const doc = typeof rulesReference === 'string' ? JSON.parse(rulesReference) : rulesReference;
+  if (!doc || !Array.isArray(doc.items)) {
+    return null;
+  }
+  return doc.items.find((row) => row && row.type === itemType) || null;
+}
+
+/**
+ * Mirror BattlescapeGame primaryAction: weapon waypoints, else loaded ammo ruleset cap.
+ * @returns {{ kind: 'finite', max: number } | { kind: 'unlimited' } | { kind: 'unknown' }}
+ */
+function resolveGuidedWaypointLimit(handEquip, rulesReference) {
+  if (!handEquip || typeof handEquip.itemType !== 'string') {
+    return { kind: 'unknown' };
+  }
+  const weaponRule = lookupRulesReferenceItem(rulesReference, handEquip.itemType);
+  let cap = weaponRule && Number.isInteger(weaponRule.waypoints) ? weaponRule.waypoints : 0;
+  if (cap === 0 && handEquip.nestedAmmo && typeof handEquip.nestedAmmo.ammoType === 'string') {
+    const ammoRule = lookupRulesReferenceItem(rulesReference, handEquip.nestedAmmo.ammoType);
+    if (ammoRule && Number.isInteger(ammoRule.waypoints)) {
+      cap = ammoRule.waypoints;
+    }
+  }
+  if (cap === -1) {
+    return { kind: 'unlimited' };
+  }
+  if (cap > 0) {
+    return { kind: 'finite', max: cap };
+  }
+  return { kind: 'unknown' };
+}
+
+function assertGuidedLauncherLoaded(handEquip) {
+  assert(handEquip, 'no equipment in active_hand');
+  assert(handEquip.battleType === BT_FIREARM, 'guided launch requires a firearm-class weapon in hand');
+  assert(handEquip.noMagazineInserted !== true, 'guided launcher has no ammunition loaded');
+  const nested = handEquip.nestedAmmo;
+  assert(nested && Number.isInteger(nested.rounds) && nested.rounds > 0, 'guided launcher ammunition is empty');
+}
+
+function assertLaunchActionAffordable(launchAction) {
+  assert(launchAction, 'hand item does not support guided launch');
+  assert(launchAction.usable !== false, 'guided launch not usable for weapon or ammunition');
+  assert(launchAction.canAffordTu !== false, 'insufficient TU for guided launch');
+  if (launchAction.canAffordTuWithCurrentReservation === false) {
+    throw new ValidationError('insufficient TU with current reservation for guided launch');
+  }
+  if (launchAction.reservationWouldBlock === true) {
+    throw new ValidationError('TU reservation would block guided launch');
+  }
+}
+
+function validateWaypointMapBounds(waypoints, tactical) {
+  const { width, height, depth } = tactical.map;
+  for (let i = 0; i < waypoints.length; i += 1) {
+    const wp = waypoints[i];
+    assert(
+      wp.x >= 0 && wp.x < width && wp.y >= 0 && wp.y < height && wp.z >= 0 && wp.z < depth,
+      `waypoints[${i}] out of map bounds`,
+    );
+  }
+}
+
+function assertWaypointCountWithinRulesetLimit(waypointCount, limit, rulesReferencePresent) {
+  if (limit.kind === 'unlimited') {
+    return;
+  }
+  if (limit.kind === 'finite') {
+    assert(
+      waypointCount <= limit.max,
+      `waypoint count exceeds ruleset maximum (${limit.max})`,
+    );
+    return;
+  }
+  assert(
+    rulesReferencePresent,
+    'rules reference required to validate guided launch waypoint cap for this weapon',
+  );
+}
+
+function buildGuidedLaunchPlanningHint(actor, activeHand, waypoints, launchAction) {
+  const first = waypoints.length > 0 ? waypoints[0] : null;
+  const facing = first ? buildDirectedFireCompositeHint(actor, first, launchAction.tuCost) : null;
+  return {
+    advisory: true,
+    note: 'Non-authoritative; trajectory, drift, and leg impacts are engine-owned after launch starts.',
+    waypointCount: waypoints.length,
+    launchTuCost: typeof launchAction.tuCost === 'number' ? launchAction.tuCost : null,
+    ...(facing ? { firstLegFacing: facing } : {}),
+  };
+}
+
+/**
+ * @param {object} [options]
+ * @param {object|string} [options.rulesReference] — optional rules-reference JSON for waypoint caps (not a snapshot field).
+ */
+function validateGuidedLaunchAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  parseGuidedLaunchCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  const waypoints = command.waypoints;
+  validateWaypointMapBounds(waypoints, tactical);
+  const actor = validateActorAgainstSnapshot(command, tactical);
+  const activeHand = command.active_hand || command.activeHand;
+  const handEquip = findHandEquipment(actor, activeHand);
+  assertGuidedLauncherLoaded(handEquip);
+  const launchAction = findFireActionOnActor(actor, activeHand, GUIDED_LAUNCH_ACTION_ID);
+  assertLaunchActionAffordable(launchAction);
+  const limit = resolveGuidedWaypointLimit(handEquip, options.rulesReference);
+  assertWaypointCountWithinRulesetLimit(
+    waypoints.length,
+    limit,
+    options.rulesReference != null,
+  );
+  const planningHint = buildGuidedLaunchPlanningHint(actor, activeHand, waypoints, launchAction);
+  if (limit.kind === 'unknown') {
+    planningHint.waypointCapVerification = 'deferred_to_engine';
+    planningHint.note += ' Waypoint maximum not verified in Node; engine ruleset enforces cap.';
+  } else if (limit.kind === 'unlimited') {
+    planningHint.waypointCapVerification = 'unlimited_ruleset';
+  } else {
+    planningHint.waypointCapVerification = 'verified';
+    planningHint.waypointMaxRuleset = limit.max;
+  }
+  return { snapshotId: computeSnapshotId(tactical), actor, planningHint, waypointLimit: limit };
+}
+
 function buildFirePlanningHint(actor, activeHand, commandType) {
   const fireAction = findFireActionOnActor(actor, activeHand, FIRE_ACTION_IDS[commandType]);
   const snapAfter = findFireActionOnActor(actor, activeHand, 'snap');
@@ -919,7 +1086,7 @@ function buildGrenadePlanningHint(actor, activeHand) {
   };
 }
 
-function validateTacticalCommandAgainstSnapshot(command, tactical, snapshotSha256Lower) {
+function validateTacticalCommandAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
   if (command && command.command_type === COMMAND_TYPE_MOVE) {
     return validateMoveAgainstSnapshot(command, tactical, snapshotSha256Lower);
   }
@@ -958,6 +1125,9 @@ function validateTacticalCommandAgainstSnapshot(command, tactical, snapshotSha25
   }
   if (command && command.command_type === COMMAND_TYPE_DROP) {
     return validateDropAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  }
+  if (command && command.command_type === COMMAND_TYPE_GUIDED_LAUNCH) {
+    return validateGuidedLaunchAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
   }
   throw new ValidationError('unsupported command_type');
 }
@@ -1001,11 +1171,17 @@ function validateMoveAgainstSnapshotFile(command, snapshotPath, yaml, readFileSy
   return { tactical, digest, snapshotId: computeSnapshotId(tactical) };
 }
 
-function validateTacticalCommandAgainstSnapshotFile(command, snapshotPath, yaml, readFileSync = fs.readFileSync) {
+function validateTacticalCommandAgainstSnapshotFile(
+  command,
+  snapshotPath,
+  yaml,
+  readFileSync = fs.readFileSync,
+  options = {},
+) {
   const snapshotBytes = readSnapshotByteBuffer(readFileSync, snapshotPath);
   const digest = sha256HexLower(snapshotBytes);
   const tactical = loadAndValidateSnapshotFromText(snapshotBytes.toString('utf8'), yaml);
-  validateTacticalCommandAgainstSnapshot(command, tactical, digest);
+  validateTacticalCommandAgainstSnapshot(command, tactical, digest, options);
   return { tactical, digest, snapshotId: computeSnapshotId(tactical) };
 }
 
@@ -1025,7 +1201,9 @@ module.exports = {
   COMMAND_TYPE_INVENTORY_MOVE,
   COMMAND_TYPE_PICKUP,
   COMMAND_TYPE_DROP,
+  COMMAND_TYPE_GUIDED_LAUNCH,
   CARRIED_INVENTORY_SLOT_IDS,
+  GUIDED_LAUNCH_ACTION_ID,
   DIRECTED_FIRE_COMMAND_TYPES,
   GRENADE_COMMAND_TYPES,
   TERMINAL_STATUSES,
@@ -1043,6 +1221,7 @@ module.exports = {
   parseInventoryMoveCommand,
   parsePickupCommand,
   parseDropCommand,
+  parseGuidedLaunchCommand,
   parseTacticalCommand,
   commandDigest,
   validateMoveAgainstSnapshot,
@@ -1058,6 +1237,8 @@ module.exports = {
   validateInventoryMoveAgainstSnapshot,
   validatePickupAgainstSnapshot,
   validateDropAgainstSnapshot,
+  validateGuidedLaunchAgainstSnapshot,
+  resolveGuidedWaypointLimit,
   validateTacticalCommandAgainstSnapshot,
   validateMoveAgainstSnapshotFile,
   validateTacticalCommandAgainstSnapshotFile,

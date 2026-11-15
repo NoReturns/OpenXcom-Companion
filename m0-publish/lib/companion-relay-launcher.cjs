@@ -25,6 +25,7 @@ const {
   isTerminalStatus,
   canAcceptNewCommand,
 } = require('./tactical-command.cjs');
+const { buildSidecarTacticalValidationOptions } = require('./rules-reference-sidecar-consumer.cjs');
 const { loadAndValidateSnapshotFromText } = require('./tactical-publish.cjs');
 const { readSnapshotByteBuffer, sha256HexLower } = require('./briefing-snapshot.cjs');
 const { execFileSyncHidden } = require('./exec-file-sync.cjs');
@@ -224,7 +225,23 @@ function validateRemoteAgainstSnapshot(parsedCommand, snapshotPath, io = {}) {
   }
   try {
     parseTacticalCommand(parsedCommand);
-    validateTacticalCommandAgainstSnapshotFile(parsedCommand, snapshotPath, YAML, readFileSync);
+    const rulesGate = buildSidecarTacticalValidationOptions(snapshotPath, parsedCommand, {
+      existsSync,
+      readFileSync,
+    });
+    if (rulesGate.blocked) {
+      return {
+        valid: false,
+        reason: rulesGate.rules.publicReason || 'rules reference unavailable',
+      };
+    }
+    validateTacticalCommandAgainstSnapshotFile(
+      parsedCommand,
+      snapshotPath,
+      YAML,
+      readFileSync,
+      rulesGate.validationOptions,
+    );
     return { valid: true, reason: null };
   } catch (error) {
     return { valid: false, reason: error.message || String(error) };

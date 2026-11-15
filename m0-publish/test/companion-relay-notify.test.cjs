@@ -162,6 +162,21 @@ describe('companion-relay-notify classification', () => {
     assert.equal(event.message, 'Shot failed after acceptance: no line of fire.');
   });
 
+  it('enriches terminal GUIDED_LAUNCH with launch message', () => {
+    const event = notificationFromLocalResult({
+      schema_version: 1,
+      command_id: 'gl-notify-2',
+      command_type: 'GUIDED_LAUNCH',
+      status: 'COMPLETED',
+      session_id: 'a'.repeat(32),
+      turn: 2,
+    });
+    assert.equal(event.command_type, 'GUIDED_LAUNCH');
+    assert.equal(event.guided_launch_outcome_class, 'projectile_launched');
+    assert.match(event.message, /Guided launch completed/);
+    assert.equal(event.fire_outcome_class, undefined);
+  });
+
   it('AUTO_SHOT preflight REJECTED keeps raw public_reason in reason_code', () => {
     const publicReason = 'No line of fire to visible target.';
     const event = notificationFromLocalResult({
