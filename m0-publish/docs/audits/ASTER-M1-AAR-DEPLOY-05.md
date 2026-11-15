@@ -108,7 +108,12 @@ See §6 for commit IDs after push.
 
 ## 6. Post-push record
 
-*(Filled after `git push`.)*
+| Repo | Branch | Commit | Remote verification |
+|------|--------|--------|---------------------|
+| OpenXcom | `aster/m0` | `657707f13` | `git push origin aster/m0` → `614bbf7ec..657707f13` |
+| OpenXcom-Companion | `main` | `14ba72e` | `git push origin main` → `26a6ad3..14ba72e` |
+
+Local `git status`: clean on staged paths; untracked build/scratch dirs remain intentionally uncommitted.
 
 ---
 
