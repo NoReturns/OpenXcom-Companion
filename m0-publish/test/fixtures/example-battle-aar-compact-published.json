@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "type": "battle_aar_compact",
+  "status": "finalized",
+  "report_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "generation_id": "1731000000000",
+  "finalized_at_ms": 1731000000000,
+  "identity": {
+    "campaign_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "tactical_battle_id": "tactical-battle-1",
+    "tactical_session_id": "sess-1",
+    "mission_statistics_id": 7,
+    "mission_type": "STR_TERROR_MISSION",
+    "region": "STR_NORTH_AMERICA",
+    "country": "STR_USA",
+    "game_time": {
+      "year": 1999,
+      "month": 3,
+      "day": 10,
+      "hour": 14,
+      "minute": 30
+    },
+    "mission_start_time": null
+  },
+  "outcome": {
+    "aborted": false,
+    "success": true,
+    "score": 350,
+    "rating": "STR_RATING_GOOD",
+    "valiant_crux": false,
+    "loot_value": 0,
+    "score_breakdown": [
+      {
+        "line_id": "STR_ALIENS_KILLED",
+        "quantity": 8,
+        "points": 400,
+        "recovery": false
+      },
+      {
+        "line_id": "STR_ELERIUM_115",
+        "quantity": 2,
+        "points": -50,
+        "recovery": true
+      }
+    ],
+    "provisional": false
+  },
+  "debrief": {
+    "lost_in_service": [],
+    "promotions": [
+      {
+        "display_name": "Promoted Operative",
+        "rank_before": "RANK_SQUADDIE",
+        "rank_after": "RANK_SERGEANT"
+      }
+    ],
+    "wounded": [
+      {
+        "display_name": "Test Operative",
+        "rank": "RANK_SERGEANT",
+        "recovery_days": 5
+      }
+    ],
+    "commendations": [
+      {
+        "display_name": "Test Operative",
+        "commendation_type": "STR_MEDAL",
+        "noun": "STR_ALIEN",
+        "decoration_level": 1
+      }
+    ],
+    "stat_increases": []
+  },
+  "data_quality": {
+    "projection": "debrief_screens_v1",
+    "omitted_local_only": [
+      "tactical_terminal",
+      "tactical_timeline",
+      "mission_summary",
+      "attribution_policy",
+      "post_debrief.soldiers",
+      "post_debrief.injury_list",
+      "post_debrief.promotions_ui_scheduled"
+    ],
+    "missing_fields": [
+      "identity.mission_start_time"
+    ]
+  },
+  "kind": "battle_aar_relay",
+  "relay_published_at": "2026-11-15T10:00:00.000Z",
+  "relay_content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "snapshot_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "request_id": "1731000000000",
+  "published_at": "2026-11-15T10:00:00.000Z"
+}

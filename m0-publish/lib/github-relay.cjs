@@ -28,6 +28,7 @@ const RELAY_CONTENT_PATHS = {
   terrainQuery: 'm0/terrain-query.json',
   terrainQueryResult: 'm0/terrain-query-result.json',
   rulesReference: 'm0/rules-reference.json',
+  battleAar: 'm0/battle-aar.json',
 };
 
 const DEFAULT_RULES_REFERENCE_MAX_BYTES = 256 * 1024;

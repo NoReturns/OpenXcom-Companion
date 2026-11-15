@@ -1,0 +1,86 @@
+{
+  "schema_version": 1,
+  "type": "battle_aar",
+  "status": "finalized",
+  "report_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "generation_id": "1731000000000",
+  "finalized_at_ms": 1731000000000,
+  "published_at": null,
+  "identity": {
+    "campaign_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "tactical_battle_id": "tactical-battle-1",
+    "tactical_session_id": "sess-1",
+    "mission_statistics_id": 7,
+    "mission_type": "STR_TERROR_MISSION",
+    "region": "STR_NORTH_AMERICA",
+    "country": "STR_USA",
+    "game_time": { "year": 1999, "month": 3, "day": 10, "hour": 14, "minute": 30 },
+    "mission_start_time": null
+  },
+  "outcome": {
+    "aborted": false,
+    "success": true,
+    "score": 350,
+    "rating": "STR_RATING_GOOD",
+    "valiant_crux": false,
+    "loot_value": 0,
+    "score_breakdown": [
+      { "line_id": "STR_ALIENS_KILLED", "quantity": 8, "points": 400, "recovery": false },
+      { "line_id": "STR_ELERIUM_115", "quantity": 2, "points": -50, "recovery": true }
+    ],
+    "provisional": false
+  },
+  "tactical_terminal": {
+    "captured_at_phase": "pre_prepare_debriefing",
+    "terminal_payload": { "turn": 5 }
+  },
+  "post_debrief": {
+    "injury_list": { "101": 5 },
+    "soldier_stat_increases": [],
+    "soldiers": [
+      {
+        "geoscape_soldier_id": 101,
+        "display_name": "Test Operative",
+        "rank": "RANK_SERGEANT",
+        "kia": false,
+        "mia": false,
+        "wound_recovery_days": 5,
+        "career_kills": 12,
+        "engine_kills": []
+      }
+    ],
+    "lost_in_service": [],
+    "wounded": [
+      {
+        "display_name": "Test Operative",
+        "rank": "RANK_SERGEANT",
+        "recovery_days": 5
+      }
+    ],
+    "promotions_applied": [
+      {
+        "geoscape_soldier_id": 102,
+        "display_name": "Promoted Operative",
+        "rank_before": "RANK_SQUADDIE",
+        "rank_after": "RANK_SERGEANT"
+      }
+    ],
+    "commendations_awarded_this_debrief": [
+      {
+        "geoscape_soldier_id": 101,
+        "display_name": "Test Operative",
+        "commendation_type": "STR_MEDAL",
+        "noun": "STR_ALIEN",
+        "decoration_level": 1
+      }
+    ],
+    "promotions_ui_scheduled": false
+  },
+  "attribution_policy": {
+    "kill_credit_source": "engine BattleUnitStatistics + debrief stats"
+  },
+  "data_quality": {
+    "missing_fields": ["identity.mission_start_time"],
+    "perception_log_dropped_count": 0
+  }
+}

@@ -61,6 +61,7 @@ const {
   assessStrategicSendReadiness,
   publishStrategicBaseState,
 } = require('./strategic-publish.cjs');
+const { processBattleAarRelayTick } = require('./battle-aar-relay-publish.cjs');
 
 const M0_PUBLISH_ROOT = path.resolve(__dirname, '..');
 const REQUEST_FILENAME = 'companion-on-demand-request.json';
@@ -334,6 +335,9 @@ function createOnDemandRelayContext(options = {}) {
     ownershipToken: options.ownershipToken ?? null,
     commandWatcher: sidecar.commandWatcher,
     publisher,
+    relayPublisher: options.relayPublisher ?? null,
+    relayContentClient: options.relayContentClient ?? null,
+    bypassGhAuth: options.bypassGhAuth === true,
     relayOptions,
     relayIsolationContract: options.relayIsolationContract
       ?? relayOptions.relayIsolationContract
@@ -1110,6 +1114,7 @@ function createOnDemandRelayDaemon(options = {}) {
       state: DAEMON_STATE.BUSY,
     }, healthIo);
     try {
+      await processBattleAarRelayTick(ctx, { io: options.io });
       await processPendingRequest(ctx, options.io);
     } catch (error) {
       ctx.log(`On-demand relay tick error: ${error.message || String(error)}`);
