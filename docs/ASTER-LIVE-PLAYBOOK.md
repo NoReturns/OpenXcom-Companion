@@ -18,7 +18,7 @@ Repeat after every terminal `m0/tactical-result.json`:
 | 4 | **Authority** — actor ∈ `commandBinding.player_soldiers` **and** `soldierControl` `controlMode: ai` when `availability === "available"` (else operator AI list). No human-owned, MC roster, or off-binding ids (§ [Ownership](#soldier-ownership-ai-vs-human)). |
 | 5 | **One active command** — empty inbox; prior result terminal for your `command_id` + `session_id`; fresh four binding fields (§ [One active command](#one-active-command)). |
 | 6 | **Plan** — terrain from export only; advisory MOVE exposure before publish (§ [MOVE](#move-publish-verify-replan)). |
-| 7 | **Compose** — one of **13** `command_type` values; unique `command_id` (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`); no extra JSON keys (§ [Command schema](#command-schema)). |
+| 7 | **Compose** — one of **14** `command_type` values; unique `command_id` (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`); no extra JSON keys (§ [Command schema](#command-schema)). |
 | 8 | **Publish** `m0/tactical-command.json` only when inbox absent (GitHub connector or operator CLI on PC). |
 | 9 | **RETRIEVE** — operator or **AUTO RETRIEVE** (battlescape timer; § [Relay lifecycle](#relay-lifecycle-send-retrieve-daemon)). |
 | 10 | **Verify** terminal result; type-specific checks (MOVE / fire / DROP § [Results](#terminal-results)). |
@@ -56,6 +56,7 @@ Repeat after every terminal `m0/tactical-result.json`:
 | `m0/tactical-command.json` | Single-command inbox (**absent** = empty) |
 | `m0/tactical-result.json` | Latest execution result |
 | `m0/terrain-query.json` / `m0/terrain-query-result.json` | Optional bounded geometry query |
+| `m0/rules-reference.json` | Optional agent-side rules metadata; **not** a replacement for the local rules file used by sidecar validation |
 
 Never commit tokens or `relay.local.json`.
 
@@ -77,6 +78,8 @@ Two **independent** mechanisms — AUTO RETRIEVE does **not** replace the Node d
 | Publishes commands? | **No** | **No** |
 
 **SEND (F6)** → fresh `m0/state.json`. **RETRIEVE** → one command execution per transaction. One command per retrieve; session gates unchanged.
+
+**Rules export:** **Ctrl+Shift+R** in Geoscape, Basescape, or Battlescape writes `local/m0/companion-rules-reference.json` beside the configured tactical snapshot. It is **not** F6 and does **not** automatically publish `m0/rules-reference.json`. For `GUIDED_LAUNCH`, the live sidecar reads the validated **local** reference and checks the current campaign identity before delivery. If absent/stale/mismatched, export again using the current campaign; do **not** invent a waypoint limit. The optional remote rules publication can help agent authoring, but does not replace local sidecar validation.
 
 Detail: [f6-relay-lifecycle-m1-25c.md](../m0-publish/docs/f6-relay-lifecycle-m1-25c.md#issue-2-node-daemon-vs-auto-retrieve).
 
@@ -215,6 +218,17 @@ Mirror: [move-result-consumer.cjs](../m0-publish/lib/move-result-consumer.cjs).
 
 Mirror: [fire-result-consumer.cjs](../m0-publish/lib/fire-result-consumer.cjs).
 
+### Guided launch (`GUIDED_LAUNCH`)
+
+- Requires an AI-owned soldier, equipped/research-usable launcher, loaded compatible guided ammunition, sufficient TU, and a fresh snapshot binding. Verify `hands`, `inventory`, `actionCosts.hands.*.actions[]` (`id: "launch"`), and equipment IDs before authoring.
+- Command fields: `active_hand` (`STR_LEFT_HAND` or `STR_RIGHT_HAND`) and **ordered** `waypoints: [{x,y,z}, ...]`. Each coordinate is an object of integer map coordinates, not an array. The count must fit the weapon/ammunition **ruleset** `waypoints` cap, not a guessed universal maximum. The current campaign's Blaster Launcher exported a cap of **9**, but other rulesets can differ.
+- **Z is real.** Elevate early to clear friendly soldiers/obstacles, route horizontally, then descend to the terminal waypoint as appropriate. Confirm map depth, visible terrain, and nearby friendlies; a valid coordinate is **not** guaranteed clear flight. `?` terrain is unknown and targeting it is a tactical risk.
+- A `COMPLETED` relay result confirms the engine performed the launch, **not** that the last waypoint was the exact impact tile or an alien died. Confirm impact/explosion through `perceptionLog` on a new snapshot and casualties only through fair-play observations or the eventual AAR. `eventLog` can emit `weapon_fired` entries for **each waypoint of a single missile**, so do not count those as multiple spent rounds.
+- Firing consumes TU/ammunition without moving the soldier. A following `RELOAD` (if needed) uses the **live** `weapon_battle_item_id` and `ammo_battle_item_id`, and a fresh binding; never assume ammo automatically reloads.
+- If sidecar reports missing/stale/campaign-mismatched rules, operator uses **Ctrl+Shift+R** in the current game to export `local/m0/companion-rules-reference.json`, then retries a **new command_id** after the rejected command is retired and a new snapshot is published. Do not bypass reference checks.
+
+Mirror: [guided-launch-result-consumer.cjs](../m0-publish/lib/guided-launch-result-consumer.cjs); sidecar gate: [rules-reference-sidecar-consumer.cjs](../m0-publish/lib/rules-reference-sidecar-consumer.cjs).
+
 ### DROP
 
 Terminal `COMPLETED` may include `ground_placement`. Confirm scavenge via refreshed snapshot / `lastDropOutcomeBrief.verification_class` — not result status alone.
@@ -296,7 +310,7 @@ Copy **`snapshot_sha256`**, **`session_id`**, **`turn`**, **`state_version`** fr
 
 For other types: swap `command_type` / `command_id`, remove `destination` when absent, add fields from the table only — no other keys.
 
-### Parameter reference (13 types)
+### Parameter reference (14 types)
 
 | `command_type` | Extra fields | Execution |
 |----------------|--------------|-----------|
@@ -306,6 +320,7 @@ For other types: swap `command_type` / `command_id`, remove `destination` when a
 | `SNAP_SHOT` | `target` `{x,y,z}`, `active_hand`: `STR_LEFT_HAND` \| `STR_RIGHT_HAND` | async |
 | `AUTO_SHOT` | same as snap | async |
 | `AIMED_SHOT` | same as snap | async |
+| `GUIDED_LAUNCH` | `active_hand`, `waypoints`: ordered array of `{x,y,z}` integer objects; count within ruleset-defined weapon/ammo limit | async |
 | `PRIME` | `active_hand`, `fuse_timer` 0–23 | sync |
 | `THROW` | `target`, `active_hand` | async |
 | `RELOAD` | `weapon_battle_item_id`, `ammo_battle_item_id` (distinct positive ints) | sync |
@@ -330,6 +345,27 @@ For other types: swap `command_type` / `command_id`, remove `destination` when a
   "actor_unit_id": 1,
   "active_hand": "STR_RIGHT_HAND",
   "target": { "x": 4, "y": 4, "z": 0 },
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
+
+**GUIDED_LAUNCH** — three map-specific waypoints, climb then descend. Replace the example with a route grounded in the **current** snapshot, not these sample coordinates:
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "guided-example-001",
+  "command_type": "GUIDED_LAUNCH",
+  "actor_unit_id": 1,
+  "active_hand": "STR_RIGHT_HAND",
+  "waypoints": [
+    { "x": 21, "y": 3, "z": 2 },
+    { "x": 16, "y": 10, "z": 2 },
+    { "x": 12, "y": 20, "z": 0 }
+  ],
   "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
   "session_id": "a1b2c3d4e5f6789012345678abcdef01",
   "turn": 1,
@@ -397,6 +433,7 @@ For other types: swap `command_type` / `command_id`, remove `destination` when a
 | Bad / unverified MOVE `COMPLETED` | Refresh; staged ramp/grav MOVE |
 | `no_new_orders` | Empty inbox — not failure |
 | `EXECUTOR_DISABLED` | Enable executor + launcher stack |
+| `GUIDED_LAUNCH` reference missing/stale | Operator exports Ctrl+Shift+R in current campaign, checks local reference and sidecar, then resends with new binding/id after rejection is retired |
 
 ---
 
@@ -412,6 +449,8 @@ Concise intent in plain language. Human owns human soldiers and End Turn.
 |-------|------|
 | Commands | [tactical-command.cjs](../m0-publish/lib/tactical-command.cjs) |
 | MOVE results | [move-result-consumer.cjs](../m0-publish/lib/move-result-consumer.cjs) |
+| Guided-launch outcome | [guided-launch-result-consumer.cjs](../m0-publish/lib/guided-launch-result-consumer.cjs) |
+| Rules reference sidecar gate | [rules-reference-sidecar-consumer.cjs](../m0-publish/lib/rules-reference-sidecar-consumer.cjs) |
 | DROP placement | [drop-result-ground-placement.cjs](../m0-publish/lib/drop-result-ground-placement.cjs) |
 | Soldier control | [soldier-control-relay.cjs](../m0-publish/lib/soldier-control-relay.cjs) |
 | ASCII | [terrain-tactical-map.cjs](../m0-publish/lib/terrain-tactical-map.cjs) |
@@ -421,4 +460,4 @@ Index: [README.md](../README.md).
 
 ---
 
-*M1: **13** types in `parseTacticalCommand` (includes `STAND`). Stale scope doc: `M1-battlescape-capability-audit.md` (MOVE/KNEEL/SNAP only).*
+*M1: **14** types in `parseTacticalCommand` (includes `STAND` and `GUIDED_LAUNCH`). Stale scope doc: `M1-battlescape-capability-audit.md` (MOVE/KNEEL/SNAP only).*
