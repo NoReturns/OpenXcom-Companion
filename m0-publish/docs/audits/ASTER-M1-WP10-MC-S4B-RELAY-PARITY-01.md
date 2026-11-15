@@ -31,8 +31,8 @@ Same as panic, plus on every **reject** path: **hostile faction unchanged** (`FA
 
 | Gate | Result (S4B run) |
 |------|------------------|
-| `companion_psi_panic_engine_test.exe` (executor + full panic relay) | **PASS** |
-| `companion_psi_mind_control_engine_test.exe` (executor + full MC relay) | **PASS** |
+| `companion_psi_panic_engine_test.exe` (executor + full panic relay) | **PASS** (checkpoint run, exit 0) |
+| `companion_psi_mind_control_engine_test.exe` (executor + full MC relay) | **PASS** (checkpoint run, exit 0) |
 | `companion_snapshot_serialization_test.exe` | **PASS** |
 | `companion_command_test.exe` | **PASS** |
 | Node WP10 panic S1 | **PASS** |
@@ -62,6 +62,15 @@ Same as panic, plus on every **reject** path: **hostile faction unchanged** (`FA
 **Recommended commit message (when approved):**
 `Fix WP10 psi relay harness fixture and add native MC/panic rejection E2E parity.`
 
+## Checkpoint (local, 2026-11-15)
+
+| Repo | Commit |
+|------|--------|
+| `engine/OpenXcom` (`aster/m0`) | `9302181c45a6dfbb7c994ec0c4902d09d75a39a6` |
+| `companion` (`main`) | `105eabe93b5cb2f44e4306aa6a5ba6bf690404c7` |
+
+**Not pushed.** Native gates: one sequential run each after S4B harness fixes (separate relay dirs, duplicate suite ordering).
+
 ## STOP — S4B complete
 
-No production deploy. No commit/push. Await owner checkpoint approval.
+No production deploy. Local checkpoint committed; await deploy risk review before live MC.
