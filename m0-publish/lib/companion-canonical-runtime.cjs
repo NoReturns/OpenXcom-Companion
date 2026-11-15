@@ -13,10 +13,10 @@ const SCHEMA_VERSION = 1;
  * `openxcom.exe` and commit together with any doc updates — do not deploy a build whose
  * hash is not reflected here.
  *
- * Verified Win32 Release build (ASTER-M1-WP8E-LIVE-FIX-DEPLOY-03: Battlescape rules-reference export
- * + WP8E GUIDED_LAUNCH; prior pin 48c0340b…).
+ * Verified Win32 Release build (ASTER-M1-WP9-MEDIKIT-LIVE-DEPLOY-01: WP9 medikit relay + TileEngine
+ * empty-trajectory guard; prior pin 763d8dbf…).
  */
-const VERIFIED_BUILD_SHA256 = '763d8dbf73ff5e6ab4702bf4b8f0816deff25a3ac989d11cb2fefa819cdd5cdc';
+const VERIFIED_BUILD_SHA256 = '1b08eb6854f400eb486d8b378292cd5d1c67c4281769ea310d1c3fdec60ebab2';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 

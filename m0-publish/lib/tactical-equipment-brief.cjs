@@ -338,6 +338,7 @@ function getEquipmentReviewContractMarkdown() {
     '- **`tactical.groundItems`** observations for abandoned equipment (do not merge into personal carry counts)',
     '',
     'Classify tactically significant gear: standard/smoke/proximity grenades and high explosives; medikits and remaining charges; loaded firearms vs spare ammunition; other exported tools when present.',
+    'For **live roster soldiers**, use `fatalWounds` (six body parts), `condition.maxHealth`, and hand `actionCosts` `use` rows (`tuCost` from rules) when planning medikit applications — not yet available as remote commands.',
     '',
     'Respect **primed vs unprimed**, **loaded vs spare ammo**, and **depleted** medikits/empty clips. When the same `battleItemId` appears in hands and inventory, count it **once** (hands win).',
     '',

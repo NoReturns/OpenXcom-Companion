@@ -17,6 +17,8 @@ Engine `BattleUnit` direction **0–7** matches `Pathfinding::directionToVector`
 | `facing.turning` | bool? | Present when `engineStatus` is `turning` |
 | `condition.energy` | int ≥0 | Current stamina (UI energy) |
 | `condition.maxEnergy` | int ≥0? | `getBaseStats()->stamina` when available |
+| `condition.maxHealth` | int ≥1? | **Live roster soldiers only** — `getBaseStats()->health` (M1-WP9 medikit planning) |
+| `fatalWounds` | int[6]? | **Live roster soldiers only** — per-body-part fatal wound counts (head … left leg) |
 | `condition.morale` | int ≥0 | Bravery/morale stat |
 | `condition.stunLevel` | int ≥0 | Stun damage (not unconsciousness by itself) |
 | `condition.alive` | bool | `engineStatus != dead` |
