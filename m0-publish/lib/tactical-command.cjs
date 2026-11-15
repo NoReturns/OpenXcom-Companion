@@ -10,7 +10,17 @@ const {
   BT_PROXIMITYGRENADE,
   BT_FIREARM,
   BT_AMMO,
+  BT_MEDIKIT,
+  BT_PSIAMP,
 } = require('./tactical-publish.cjs');
+const { classifyCurrentHostileObservation } = require('./hostile-intelligence-consumer.cjs');
+const {
+  isFriendlyRosterSoldier,
+  isGenuineHostileUnit,
+  isMindControlledRosterSoldier,
+  isXcomControlledHostileUnit,
+} = require('./unit-state-brief.cjs');
+const { isCommandApplicableForBinding } = require('./command-binding.cjs');
 const { readSnapshotByteBuffer, sha256HexLower } = require('./briefing-snapshot.cjs');
 const {
   buildMovePlanningHint,
@@ -33,6 +43,35 @@ const COMMAND_TYPE_INVENTORY_MOVE = 'INVENTORY_MOVE';
 const COMMAND_TYPE_PICKUP = 'PICKUP';
 const COMMAND_TYPE_DROP = 'DROP';
 const COMMAND_TYPE_GUIDED_LAUNCH = 'GUIDED_LAUNCH';
+const COMMAND_TYPE_HEAL = 'HEAL';
+const COMMAND_TYPE_STIMULANT = 'STIMULANT';
+const COMMAND_TYPE_PAINKILLER = 'PAINKILLER';
+const COMMAND_TYPE_PSI_PANIC = 'PSI_PANIC';
+const COMMAND_TYPE_PSI_MIND_CONTROL = 'PSI_MIND_CONTROL';
+
+const MEDIKIT_COMMAND_TYPES = new Set([
+  COMMAND_TYPE_HEAL,
+  COMMAND_TYPE_STIMULANT,
+  COMMAND_TYPE_PAINKILLER,
+]);
+
+const MEDIKIT_CHARGE_FIELD = {
+  [COMMAND_TYPE_HEAL]: 'heal',
+  [COMMAND_TYPE_STIMULANT]: 'stimulant',
+  [COMMAND_TYPE_PAINKILLER]: 'painKiller',
+};
+
+const MEDIKIT_USE_ACTION_ID = 'use';
+
+const PSI_PANIC_COMMAND_TYPES = new Set([COMMAND_TYPE_PSI_PANIC]);
+const PSI_MIND_CONTROL_COMMAND_TYPES = new Set([COMMAND_TYPE_PSI_MIND_CONTROL]);
+const PSI_TACTICAL_COMMAND_TYPES = new Set([
+  COMMAND_TYPE_PSI_PANIC,
+  COMMAND_TYPE_PSI_MIND_CONTROL,
+]);
+
+const PSI_PANIC_ACTION_ID = 'panic';
+const PSI_MIND_CONTROL_ACTION_ID = 'mindcontrol';
 
 const DIRECTED_FIRE_COMMAND_TYPES = new Set([
   COMMAND_TYPE_SNAP_SHOT,
@@ -101,6 +140,27 @@ const COMMAND_KEYS_DROP = new Set([
   'source_x',
   'source_y',
 ]);
+
+const COMMAND_KEYS_MEDIKIT_APPLICATION = new Set([
+  ...COMMAND_KEYS_COMMON,
+  'target_unit_id',
+  'medikit_battle_item_id',
+  'active_hand',
+]);
+
+const COMMAND_KEYS_HEAL = new Set([...COMMAND_KEYS_MEDIKIT_APPLICATION, 'body_part']);
+
+const COMMAND_KEYS_PSI_PANIC = new Set([
+  ...COMMAND_KEYS_COMMON,
+  'target_unit_id',
+  'psi_amp_battle_item_id',
+  'active_hand',
+]);
+
+const COMMAND_KEYS_PSI_MIND_CONTROL = COMMAND_KEYS_PSI_PANIC;
+
+const MEDIKIT_BODY_PART_MIN = 0;
+const MEDIKIT_BODY_PART_MAX = 5;
 
 const CARRIED_INVENTORY_SLOT_IDS = new Set([
   'STR_RIGHT_HAND',
@@ -464,6 +524,119 @@ function parseDropCommand(raw) {
   };
 }
 
+function parseMedikitApplicationCommand(raw, commandType, allowedKeys) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === commandType, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, allowedKeys);
+  assert(Number.isInteger(raw.target_unit_id) && raw.target_unit_id > 0, 'target_unit_id must be positive integer');
+  assert(
+    Number.isInteger(raw.medikit_battle_item_id) && raw.medikit_battle_item_id > 0,
+    'medikit_battle_item_id must be positive integer',
+  );
+  assert(typeof raw.active_hand === 'string' && VALID_ACTIVE_HANDS.has(raw.active_hand), 'active_hand invalid');
+  const binding = parseBindingFields(raw);
+  return {
+    ...binding,
+    targetUnitId: raw.target_unit_id,
+    medikitBattleItemId: raw.medikit_battle_item_id,
+    activeHand: raw.active_hand,
+  };
+}
+
+function parseHealCommand(raw) {
+  const parsed = parseMedikitApplicationCommand(raw, COMMAND_TYPE_HEAL, COMMAND_KEYS_HEAL);
+  assert(Number.isInteger(raw.body_part), 'body_part required');
+  assert(
+    raw.body_part >= MEDIKIT_BODY_PART_MIN && raw.body_part <= MEDIKIT_BODY_PART_MAX,
+    'body_part must be 0..5',
+  );
+  return { ...parsed, bodyPart: raw.body_part };
+}
+
+function parseStimulantCommand(raw) {
+  return parseMedikitApplicationCommand(raw, COMMAND_TYPE_STIMULANT, COMMAND_KEYS_MEDIKIT_APPLICATION);
+}
+
+function parsePainKillerCommand(raw) {
+  return parseMedikitApplicationCommand(raw, COMMAND_TYPE_PAINKILLER, COMMAND_KEYS_MEDIKIT_APPLICATION);
+}
+
+function parsePsiAmpApplicationCommand(raw, expectedType, allowedKeys) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === expectedType, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, allowedKeys);
+  assert(Number.isInteger(raw.target_unit_id) && raw.target_unit_id > 0, 'target_unit_id must be positive integer');
+  assert(
+    Number.isInteger(raw.psi_amp_battle_item_id) && raw.psi_amp_battle_item_id > 0,
+    'psi_amp_battle_item_id must be positive integer',
+  );
+  assert(typeof raw.active_hand === 'string' && VALID_ACTIVE_HANDS.has(raw.active_hand), 'active_hand invalid');
+  const binding = parseBindingFields(raw);
+  return {
+    ...binding,
+    targetUnitId: raw.target_unit_id,
+    psiAmpBattleItemId: raw.psi_amp_battle_item_id,
+    activeHand: raw.active_hand,
+  };
+}
+
+function parsePsiPanicCommand(raw) {
+  return parsePsiAmpApplicationCommand(raw, COMMAND_TYPE_PSI_PANIC, COMMAND_KEYS_PSI_PANIC);
+}
+
+function parsePsiMindControlCommand(raw) {
+  return parsePsiAmpApplicationCommand(raw, COMMAND_TYPE_PSI_MIND_CONTROL, COMMAND_KEYS_PSI_MIND_CONTROL);
+}
+
+/**
+ * Parse medikit command JSON (S1 contract). Delegates to type-specific parsers.
+ */
+function parseMedikitTacticalCommand(raw) {
+  if (raw.command_type === COMMAND_TYPE_HEAL) {
+    return parseHealCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_STIMULANT) {
+    return parseStimulantCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_PAINKILLER) {
+    return parsePainKillerCommand(raw);
+  }
+  throw new ValidationError('unsupported command_type');
+}
+
+function isMedikitCommandType(commandType) {
+  return MEDIKIT_COMMAND_TYPES.has(commandType);
+}
+
+/**
+ * Parse WP10 psi command JSON (S1 — PSI_PANIC and PSI_MIND_CONTROL).
+ */
+function parsePsiTacticalCommand(raw) {
+  if (raw.command_type === COMMAND_TYPE_PSI_PANIC) {
+    return parsePsiPanicCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_PSI_MIND_CONTROL) {
+    return parsePsiMindControlCommand(raw);
+  }
+  throw new ValidationError('unsupported command_type');
+}
+
+function isPsiPanicCommandType(commandType) {
+  return PSI_PANIC_COMMAND_TYPES.has(commandType);
+}
+
+function isPsiMindControlCommandType(commandType) {
+  return PSI_MIND_CONTROL_COMMAND_TYPES.has(commandType);
+}
+
+function isPsiTacticalCommandType(commandType) {
+  return PSI_TACTICAL_COMMAND_TYPES.has(commandType);
+}
+
 function findInventoryRowByBattleItemId(actor, battleItemId) {
   if (!actor || !Array.isArray(actor.inventory)) {
     return null;
@@ -650,6 +823,369 @@ function validatePickupAgainstSnapshot(command, tactical, snapshotSha256Lower) {
   };
 }
 
+function validateMedikitHandAgainstSnapshot(actor, parsed) {
+  const handEquip = findHandEquipment(actor, parsed.activeHand);
+  assert(handEquip, 'active_hand has no equipment in snapshot');
+  assert(
+    Number.isInteger(handEquip.battleItemId) && handEquip.battleItemId === parsed.medikitBattleItemId,
+    'medikit_battle_item_id does not match active_hand item',
+  );
+  assert(handEquip.battleType === BT_MEDIKIT, 'active_hand item must be a medikit');
+  if (typeof handEquip.slot === 'string' && handEquip.slot.length > 0) {
+    assert(handEquip.slot === parsed.activeHand, 'medikit snapshot slot does not match active_hand');
+  }
+  return handEquip;
+}
+
+function validateMedikitTargetAgainstSnapshot(actor, targetUnitId, tactical) {
+  const target = tactical.units.find((u) => u && u.id === targetUnitId);
+  assert(target, 'target_unit_id not in snapshot');
+  assert(isFriendlyRosterSoldier(target), 'target must be a friendly roster soldier in snapshot');
+  assert(typeof target.name === 'string' && target.name.length > 0, 'target is not eligible for medikit command');
+  assert(target.id === targetUnitId, 'target identity mismatch');
+  return target;
+}
+
+function validateMedikitChargeAvailable(handEquip, commandType) {
+  const chargeKey = MEDIKIT_CHARGE_FIELD[commandType];
+  assert(chargeKey, 'internal medikit charge mapping missing');
+  if (!handEquip.medikitCharges || typeof handEquip.medikitCharges !== 'object') {
+    return {
+      advisory: true,
+      note: 'medikitCharges not in snapshot; engine enforces charge availability',
+    };
+  }
+  const remaining = handEquip.medikitCharges[chargeKey];
+  if (typeof remaining !== 'number') {
+    return {
+      advisory: true,
+      note: `medikitCharges.${chargeKey} not in snapshot; engine enforces charge availability`,
+    };
+  }
+  assert(remaining > 0, 'medikit charge depleted for requested application');
+  return null;
+}
+
+function validateMedikitTuAgainstSnapshot(actor, activeHand) {
+  const useAction = findFireActionOnActor(actor, activeHand, MEDIKIT_USE_ACTION_ID);
+  if (!useAction) {
+    return {
+      advisory: true,
+      note: 'BA_USE medikit actionCosts not in snapshot; engine enforces TU',
+    };
+  }
+  assert(useAction.usable !== false, 'medikit use not usable in current conditions');
+  assert(useAction.canAffordTu !== false, 'insufficient TU for medikit use (export)');
+  return null;
+}
+
+function buildMedikitTargetGeometryAdvisory(actor, target) {
+  const advisories = [];
+  if (target.battlefieldPlacement === 'carried_in_inventory') {
+    advisories.push({
+      code: 'target_carried_in_inventory',
+      note: 'Carried unconscious soldiers are not engine medikit targets until on the map; engine remains authoritative.',
+    });
+  }
+  if (Array.isArray(actor.position) && Array.isArray(target.position)) {
+    const sameTile = actor.position[0] === target.position[0]
+      && actor.position[1] === target.position[1]
+      && actor.position[2] === target.position[2];
+    if (!sameTile) {
+      advisories.push({
+        code: 'target_not_same_tile',
+        note: 'Native medikit targeting uses facing and melee-range geometry; adjacency is engine-validated only.',
+      });
+    }
+  }
+  if (advisories.length === 0) {
+    return null;
+  }
+  return { advisory: true, items: advisories };
+}
+
+function buildHealBodyPartAdvisory(target, bodyPart) {
+  if (!Array.isArray(target.fatalWounds) || target.fatalWounds.length !== 6) {
+    return {
+      advisory: true,
+      code: 'fatal_wounds_unavailable',
+      note: 'fatalWounds not exported; engine may consume a heal charge with no wound effect on body_part',
+    };
+  }
+  if (target.fatalWounds[bodyPart] > 0) {
+    return null;
+  }
+  return {
+    advisory: true,
+    code: 'heal_no_fatal_wound_on_part',
+    note: 'Engine may spend TU and a heal charge even when the selected body_part has no fatal wound',
+    bodyPart,
+  };
+}
+
+function validateMedikitApplicationAgainstSnapshot(command, tactical, snapshotSha256Lower, commandType) {
+  let parsed;
+  if (commandType === COMMAND_TYPE_HEAL) {
+    parsed = parseHealCommand(command);
+  } else if (commandType === COMMAND_TYPE_STIMULANT) {
+    parsed = parseStimulantCommand(command);
+  } else if (commandType === COMMAND_TYPE_PAINKILLER) {
+    parsed = parsePainKillerCommand(command);
+  } else {
+    throw new ValidationError('unsupported command_type');
+  }
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  const actor = validateActorAgainstSnapshot(command, tactical);
+  const handEquip = validateMedikitHandAgainstSnapshot(actor, parsed);
+  const target = validateMedikitTargetAgainstSnapshot(actor, parsed.targetUnitId, tactical);
+
+  const planningHints = [];
+  const chargeAdvisory = validateMedikitChargeAvailable(handEquip, commandType);
+  if (chargeAdvisory) {
+    planningHints.push(chargeAdvisory);
+  }
+  const tuAdvisory = validateMedikitTuAgainstSnapshot(actor, parsed.activeHand);
+  if (tuAdvisory) {
+    planningHints.push(tuAdvisory);
+  }
+  const geometryAdvisory = buildMedikitTargetGeometryAdvisory(actor, target);
+  if (geometryAdvisory) {
+    planningHints.push(geometryAdvisory);
+  }
+  if (commandType === COMMAND_TYPE_HEAL) {
+    const healAdvisory = buildHealBodyPartAdvisory(target, parsed.bodyPart);
+    if (healAdvisory) {
+      planningHints.push(healAdvisory);
+    }
+  }
+
+  return {
+    snapshotId: computeSnapshotId(tactical),
+    actor,
+    target,
+    medikitBattleItemId: parsed.medikitBattleItemId,
+    planningHint: planningHints.length
+      ? { advisory: true, items: planningHints }
+      : { advisory: true, note: 'Medikit geometry and wound checks are engine-authoritative.' },
+  };
+}
+
+function validateHealAgainstSnapshot(command, tactical, snapshotSha256Lower) {
+  return validateMedikitApplicationAgainstSnapshot(
+    command,
+    tactical,
+    snapshotSha256Lower,
+    COMMAND_TYPE_HEAL,
+  );
+}
+
+function validateStimulantAgainstSnapshot(command, tactical, snapshotSha256Lower) {
+  return validateMedikitApplicationAgainstSnapshot(
+    command,
+    tactical,
+    snapshotSha256Lower,
+    COMMAND_TYPE_STIMULANT,
+  );
+}
+
+function validatePainKillerAgainstSnapshot(command, tactical, snapshotSha256Lower) {
+  return validateMedikitApplicationAgainstSnapshot(
+    command,
+    tactical,
+    snapshotSha256Lower,
+    COMMAND_TYPE_PAINKILLER,
+  );
+}
+
+function validatePsiActorEligibility(actor) {
+  assert(isFriendlyRosterSoldier(actor), 'actor must be a friendly roster soldier in snapshot');
+  assert(isCommandApplicableForBinding(actor), 'actor is not command-applicable at export');
+}
+
+function validatePsiAmpHandAgainstSnapshot(actor, parsed) {
+  const handEquip = findHandEquipment(actor, parsed.activeHand);
+  assert(handEquip, `no equipment in ${parsed.activeHand}`);
+  const battleItemId = handHeldWeaponBattleItemId(actor, handCostsKey(parsed.activeHand));
+  assert(
+    battleItemId === parsed.psiAmpBattleItemId,
+    'psi_amp_battle_item_id must match Psi-Amp in the declared hand',
+  );
+  assert(handEquip.battleType === BT_PSIAMP, 'active_hand item must be a Psi-Amp');
+  if (typeof handEquip.slot === 'string' && handEquip.slot.length > 0) {
+    assert(handEquip.slot === parsed.activeHand, 'Psi-Amp snapshot slot does not match active_hand');
+  }
+  return handEquip;
+}
+
+function validatePsiSkillWhenExported(actor) {
+  if (typeof actor.psiSkill !== 'number' || !Number.isInteger(actor.psiSkill)) {
+    return {
+      advisory: true,
+      note: 'psiSkill not in snapshot; engine enforces psionic eligibility',
+    };
+  }
+  assert(actor.psiSkill > 0, 'actor psiSkill must be positive for psionic commands');
+  return null;
+}
+
+function validatePsiAmpTuAgainstSnapshot(actor, activeHand, actionId, actionLabel) {
+  const psiAction = findFireActionOnActor(actor, activeHand, actionId);
+  if (!psiAction) {
+    return {
+      advisory: true,
+      note: `${actionLabel} actionCosts not in snapshot; engine enforces TU`,
+    };
+  }
+  assert(psiAction.usable !== false, `${actionLabel} action not usable in current conditions`);
+  assert(psiAction.canAffordTu !== false, `insufficient TU for ${actionLabel} (export)`);
+  return null;
+}
+
+function validatePsiPanicTuAgainstSnapshot(actor, activeHand) {
+  return validatePsiAmpTuAgainstSnapshot(actor, activeHand, PSI_PANIC_ACTION_ID, 'panic');
+}
+
+function validatePsiMindControlTuAgainstSnapshot(actor, activeHand) {
+  return validatePsiAmpTuAgainstSnapshot(actor, activeHand, PSI_MIND_CONTROL_ACTION_ID, 'mindcontrol');
+}
+
+function validatePsiHostileTargetAgainstSnapshot(tactical, targetUnitId, ineligibleTargetMessage) {
+  const target = tactical.units.find((u) => u && u.id === targetUnitId);
+  assert(target, 'target_unit_id not in snapshot');
+  if (isMindControlledRosterSoldier(target) || isXcomControlledHostileUnit(target)) {
+    assert(false, ineligibleTargetMessage);
+  }
+  if (isFriendlyRosterSoldier(target)) {
+    assert(false, 'target must not be a friendly roster soldier');
+  }
+  if (!isGenuineHostileUnit(target)) {
+    assert(false, 'target must be a genuine hostile unit at export');
+  }
+  const observation = classifyCurrentHostileObservation(tactical, targetUnitId);
+  assert(
+    observation.availability === 'confirmed_current_los',
+    'target must have confirmed current line of sight at export (facing present)',
+  );
+  return target;
+}
+
+function validatePsiPanicTargetAgainstSnapshot(tactical, targetUnitId) {
+  return validatePsiHostileTargetAgainstSnapshot(
+    tactical,
+    targetUnitId,
+    'target is not a hostile threat eligible for panic',
+  );
+}
+
+function validatePsiMindControlTargetAgainstSnapshot(tactical, targetUnitId) {
+  return validatePsiHostileTargetAgainstSnapshot(
+    tactical,
+    targetUnitId,
+    'target is not a hostile threat eligible for mind control',
+  );
+}
+
+function validatePsiPanicAgainstSnapshot(command, tactical, snapshotSha256Lower) {
+  const parsed = parsePsiPanicCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  const actor = validateActorAgainstSnapshot(command, tactical);
+  validatePsiActorEligibility(actor);
+  validatePsiAmpHandAgainstSnapshot(actor, parsed);
+  const target = validatePsiPanicTargetAgainstSnapshot(tactical, parsed.targetUnitId);
+
+  const planningHints = [];
+  const psiSkillAdvisory = validatePsiSkillWhenExported(actor);
+  if (psiSkillAdvisory) {
+    planningHints.push(psiSkillAdvisory);
+  }
+  const tuAdvisory = validatePsiPanicTuAgainstSnapshot(actor, parsed.activeHand);
+  if (tuAdvisory) {
+    planningHints.push(tuAdvisory);
+  }
+
+  return {
+    snapshotId: computeSnapshotId(tactical),
+    actor,
+    target,
+    psiAmpBattleItemId: parsed.psiAmpBattleItemId,
+    planningHint: buildPsiPlanningHint(planningHints),
+  };
+}
+
+function buildPsiPlanningHint(planningHints, { mindControl = false } = {}) {
+  const mindControlNote = mindControl
+    ? ' Faction conversion and mind-controlled aliens remaining non-commandable in M1 are engine-authoritative.'
+    : '';
+  if (planningHints.length) {
+    return {
+      advisory: true,
+      items: planningHints,
+      note: `Psychic success, failure, and TU spend on failed attacks are engine-authoritative (no Node RNG).${mindControlNote}`,
+    };
+  }
+  return {
+    advisory: true,
+    note: `Psychic resolution and visibility re-checks are engine-authoritative.${mindControlNote}`,
+  };
+}
+
+function validatePsiMindControlAgainstSnapshot(command, tactical, snapshotSha256Lower) {
+  const parsed = parsePsiMindControlCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  const actor = validateActorAgainstSnapshot(command, tactical);
+  validatePsiActorEligibility(actor);
+  validatePsiAmpHandAgainstSnapshot(actor, parsed);
+  const target = validatePsiMindControlTargetAgainstSnapshot(tactical, parsed.targetUnitId);
+
+  const planningHints = [];
+  const psiSkillAdvisory = validatePsiSkillWhenExported(actor);
+  if (psiSkillAdvisory) {
+    planningHints.push(psiSkillAdvisory);
+  }
+  const tuAdvisory = validatePsiMindControlTuAgainstSnapshot(actor, parsed.activeHand);
+  if (tuAdvisory) {
+    planningHints.push(tuAdvisory);
+  }
+
+  return {
+    snapshotId: computeSnapshotId(tactical),
+    actor,
+    target,
+    psiAmpBattleItemId: parsed.psiAmpBattleItemId,
+    planningHint: buildPsiPlanningHint(planningHints, { mindControl: true }),
+  };
+}
+
+/**
+ * Dispatch psi snapshot validation (S1). PSI_PANIC and PSI_MIND_CONTROL.
+ */
+function validatePsiTacticalCommandAgainstSnapshot(command, tactical, snapshotSha256Lower) {
+  if (command && command.command_type === COMMAND_TYPE_PSI_PANIC) {
+    return validatePsiPanicAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  }
+  if (command && command.command_type === COMMAND_TYPE_PSI_MIND_CONTROL) {
+    return validatePsiMindControlAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  }
+  throw new ValidationError('unsupported command_type');
+}
+
+/**
+ * Dispatch medikit snapshot validation (S1). Also available via validateTacticalCommandAgainstSnapshot.
+ */
+function validateMedikitTacticalCommandAgainstSnapshot(command, tactical, snapshotSha256Lower) {
+  const commandType = command && command.command_type;
+  if (commandType === COMMAND_TYPE_HEAL) {
+    return validateHealAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  }
+  if (commandType === COMMAND_TYPE_STIMULANT) {
+    return validateStimulantAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  }
+  if (commandType === COMMAND_TYPE_PAINKILLER) {
+    return validatePainKillerAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  }
+  throw new ValidationError('unsupported command_type');
+}
+
 function validateDropAgainstSnapshot(command, tactical, snapshotSha256Lower) {
   const parsed = parseDropCommand(command);
   validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
@@ -728,6 +1264,21 @@ function parseTacticalCommand(raw) {
   }
   if (raw.command_type === COMMAND_TYPE_GUIDED_LAUNCH) {
     return parseGuidedLaunchCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_HEAL) {
+    return parseHealCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_STIMULANT) {
+    return parseStimulantCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_PAINKILLER) {
+    return parsePainKillerCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_PSI_PANIC) {
+    return parsePsiPanicCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_PSI_MIND_CONTROL) {
+    return parsePsiMindControlCommand(raw);
   }
   throw new ValidationError('unsupported command_type');
 }
@@ -1129,6 +1680,21 @@ function validateTacticalCommandAgainstSnapshot(command, tactical, snapshotSha25
   if (command && command.command_type === COMMAND_TYPE_GUIDED_LAUNCH) {
     return validateGuidedLaunchAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
   }
+  if (command && command.command_type === COMMAND_TYPE_HEAL) {
+    return validateHealAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  }
+  if (command && command.command_type === COMMAND_TYPE_STIMULANT) {
+    return validateStimulantAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  }
+  if (command && command.command_type === COMMAND_TYPE_PAINKILLER) {
+    return validatePainKillerAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  }
+  if (command && command.command_type === COMMAND_TYPE_PSI_PANIC) {
+    return validatePsiPanicAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  }
+  if (command && command.command_type === COMMAND_TYPE_PSI_MIND_CONTROL) {
+    return validatePsiMindControlAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  }
   throw new ValidationError('unsupported command_type');
 }
 
@@ -1202,6 +1768,18 @@ module.exports = {
   COMMAND_TYPE_PICKUP,
   COMMAND_TYPE_DROP,
   COMMAND_TYPE_GUIDED_LAUNCH,
+  COMMAND_TYPE_HEAL,
+  COMMAND_TYPE_STIMULANT,
+  COMMAND_TYPE_PAINKILLER,
+  COMMAND_TYPE_PSI_PANIC,
+  COMMAND_TYPE_PSI_MIND_CONTROL,
+  MEDIKIT_COMMAND_TYPES,
+  MEDIKIT_USE_ACTION_ID,
+  PSI_PANIC_COMMAND_TYPES,
+  PSI_MIND_CONTROL_COMMAND_TYPES,
+  PSI_TACTICAL_COMMAND_TYPES,
+  PSI_PANIC_ACTION_ID,
+  PSI_MIND_CONTROL_ACTION_ID,
   CARRIED_INVENTORY_SLOT_IDS,
   GUIDED_LAUNCH_ACTION_ID,
   DIRECTED_FIRE_COMMAND_TYPES,
@@ -1222,6 +1800,17 @@ module.exports = {
   parsePickupCommand,
   parseDropCommand,
   parseGuidedLaunchCommand,
+  parseHealCommand,
+  parseStimulantCommand,
+  parsePainKillerCommand,
+  parseMedikitTacticalCommand,
+  isMedikitCommandType,
+  parsePsiPanicCommand,
+  parsePsiMindControlCommand,
+  parsePsiTacticalCommand,
+  isPsiPanicCommandType,
+  isPsiMindControlCommandType,
+  isPsiTacticalCommandType,
   parseTacticalCommand,
   commandDigest,
   validateMoveAgainstSnapshot,
@@ -1238,6 +1827,13 @@ module.exports = {
   validatePickupAgainstSnapshot,
   validateDropAgainstSnapshot,
   validateGuidedLaunchAgainstSnapshot,
+  validateHealAgainstSnapshot,
+  validateStimulantAgainstSnapshot,
+  validatePainKillerAgainstSnapshot,
+  validateMedikitTacticalCommandAgainstSnapshot,
+  validatePsiPanicAgainstSnapshot,
+  validatePsiMindControlAgainstSnapshot,
+  validatePsiTacticalCommandAgainstSnapshot,
   resolveGuidedWaypointLimit,
   validateTacticalCommandAgainstSnapshot,
   validateMoveAgainstSnapshotFile,

@@ -38,6 +38,7 @@ const BT_MELEE = 3;
 const BT_GRENADE = 4;
 const BT_PROXIMITYGRENADE = 5;
 const BT_MEDIKIT = 6;
+const BT_PSIAMP = 9;
 const BT_CORPSE = 11;
 const MAX_BATTLE_ITEM_ID = 2147483647;
 const MAX_INVENTORY_GRID = 32;
@@ -139,7 +140,8 @@ const UNIT_FRIENDLY_V3_KEYS = new Set([
   'encumbranceRatio',
   'movementTuAdvisory',
 ]);
-const UNIT_FRIENDLY_WP2_KEYS = new Set(['facing', 'condition', 'readiness']);
+const UNIT_FRIENDLY_WP2_KEYS = new Set(['facing', 'condition', 'readiness', 'fatalWounds', 'psiSkill']);
+const FATAL_WOUND_PART_COUNT = 6;
 const UNIT_OBSERVATION_KEYS = new Set(['observedUnitType', 'displayLabel']);
 const UNIT_FACING_KEYS = new Set(['direction', 'label', 'vector', 'turning']);
 const UNIT_FACING_VECTOR_KEYS = new Set(['dx', 'dy']);
@@ -156,6 +158,7 @@ const ALLOWED_FACING_LABELS = new Set([
 const UNIT_CONDITION_KEYS = new Set([
   'energy',
   'maxEnergy',
+  'maxHealth',
   'morale',
   'stunLevel',
   'alive',
@@ -204,8 +207,8 @@ const ACTION_COSTS_KEYS = new Set(['posture', 'hands']);
 const POSTURE_KEYS = new Set(['kneelDownTu', 'standUpTu']);
 const HAND_ACTION_COST_KEYS = new Set(['itemType', 'actions']);
 const ACTION_ENTRY_KEYS = new Set(['id', 'actionType', 'tuCost', 'canAffordTu', 'usable']);
-const ALLOWED_ACTION_IDS = new Set(['snap', 'aimed', 'auto', 'launch', 'throw', 'prime', 'melee']);
-const ALLOWED_ACTION_TYPES = new Set([3, 4, 5, 6, 7, 8, 10]); // BA_* companion actions
+const ALLOWED_ACTION_IDS = new Set(['snap', 'aimed', 'auto', 'launch', 'throw', 'prime', 'melee', 'use', 'panic', 'mindcontrol']);
+const ALLOWED_ACTION_TYPES = new Set([3, 4, 5, 6, 7, 8, 9, 10, 11, 12]); // BA_USE=9, BA_MINDCONTROL=11, BA_PANIC=12
 const MAX_ACTIONS_PER_HAND = 16;
 const EQUIPMENT_ITEM_KEYS = new Set([
   'battleItemId',
@@ -678,6 +681,18 @@ function validateFacing(raw, label) {
   };
 }
 
+function validateFatalWounds(raw, label) {
+  assert(Array.isArray(raw), `${label} must be an array`);
+  assert(raw.length === FATAL_WOUND_PART_COUNT, `${label} must have exactly ${FATAL_WOUND_PART_COUNT} entries`);
+  const wounds = [];
+  for (let i = 0; i < FATAL_WOUND_PART_COUNT; i += 1) {
+    wounds.push(
+      requireInt(raw[i], `${label}[${i}]`, { min: 0, allowNegative: false }),
+    );
+  }
+  return wounds;
+}
+
 function validateCondition(raw, label) {
   assert(isPlainObject(raw), `${label} must be an object`);
   for (const key of Object.keys(raw)) {
@@ -699,6 +714,9 @@ function validateCondition(raw, label) {
   assert(ALLOWED_MOVEMENT_TYPES.has(condition.movementType), `${label}.movementType invalid`);
   if (Object.prototype.hasOwnProperty.call(raw, 'maxEnergy')) {
     condition.maxEnergy = requireInt(raw.maxEnergy, `${label}.maxEnergy`, { min: 0, allowNegative: false });
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'maxHealth')) {
+    condition.maxHealth = requireInt(raw.maxHealth, `${label}.maxHealth`, { min: 1, allowNegative: false });
   }
   return condition;
 }
@@ -1439,6 +1457,9 @@ function validateUnit(raw, index, schemaVersion = 2) {
       throw new ValidationError(`units[${index}] must not include ${key}`);
     }
   }
+  if (Object.prototype.hasOwnProperty.call(raw, 'fatalWounds') && !friendlyRosterSoldier) {
+    throw new ValidationError(`units[${index}] must not include fatalWounds`);
+  }
   if (schemaVersion === 2 && Object.prototype.hasOwnProperty.call(raw, 'facing')) {
     throw new ValidationError(`units[${index}] must not include facing`);
   }
@@ -1508,9 +1529,19 @@ function validateUnit(raw, index, schemaVersion = 2) {
       if (Object.prototype.hasOwnProperty.call(raw, 'readiness')) {
         unit.readiness = validateReadiness(raw.readiness, `units[${index}].readiness`);
       }
+      if (Object.prototype.hasOwnProperty.call(raw, 'fatalWounds')) {
+        unit.fatalWounds = validateFatalWounds(raw.fatalWounds, `units[${index}].fatalWounds`);
+      }
+      if (Object.prototype.hasOwnProperty.call(raw, 'psiSkill')) {
+        unit.psiSkill = requireInt(raw.psiSkill, `units[${index}].psiSkill`, {
+          min: 0,
+          max: 200,
+          allowNegative: false,
+        });
+      }
     }
   } else {
-    for (const key of [...v2Extras, ...(schemaSupportsV3UnitFields ? v3Extras : []), ...wp2FriendlyOnlyExtras]) {
+    for (const key of [...v2Extras, ...(schemaSupportsV3UnitFields ? v3Extras : []), ...wp2FriendlyOnlyExtras, 'psiSkill']) {
       if ((key === 'kneeled' || key === 'facing') && !friendly && Object.prototype.hasOwnProperty.call(raw, key)) {
         continue;
       }
@@ -2758,6 +2789,7 @@ module.exports = {
   BT_GRENADE,
   BT_PROXIMITYGRENADE,
   BT_MEDIKIT,
+  BT_PSIAMP,
   ValidationError,
   parseAndValidate,
   validateActionCosts,

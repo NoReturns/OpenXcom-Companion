@@ -487,6 +487,94 @@ function composeDropCommand(binding, {
   return cmd;
 }
 
+function composeMedikitApplicationCommand(binding, commandType, {
+  commandId,
+  actorUnitId,
+  targetUnitId,
+  medikitBattleItemId,
+  activeHand,
+  bodyPart,
+}) {
+  const b = parseCommandBinding(binding);
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId > 0, 'actorUnitId required');
+  assert(Number.isInteger(targetUnitId) && targetUnitId > 0, 'targetUnitId required');
+  assert(Number.isInteger(medikitBattleItemId) && medikitBattleItemId > 0, 'medikitBattleItemId required');
+  assert(activeHand === 'STR_RIGHT_HAND' || activeHand === 'STR_LEFT_HAND', 'activeHand invalid');
+  const soldier = b.player_soldiers.find((s) => s.id === actorUnitId);
+  assert(soldier, 'actorUnitId must be a listed player_soldier');
+  const cmd = {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: commandType,
+    actor_unit_id: actorUnitId,
+    target_unit_id: targetUnitId,
+    medikit_battle_item_id: medikitBattleItemId,
+    active_hand: activeHand,
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+  if (commandType === 'HEAL') {
+    assert(Number.isInteger(bodyPart) && bodyPart >= 0 && bodyPart <= 5, 'bodyPart must be 0..5');
+    cmd.body_part = bodyPart;
+  }
+  return cmd;
+}
+
+function composeHealCommand(binding, options) {
+  return composeMedikitApplicationCommand(binding, 'HEAL', options);
+}
+
+function composeStimulantCommand(binding, options) {
+  return composeMedikitApplicationCommand(binding, 'STIMULANT', options);
+}
+
+function composePainKillerCommand(binding, options) {
+  return composeMedikitApplicationCommand(binding, 'PAINKILLER', options);
+}
+
+function composePsiAmpCommand(binding, {
+  commandId,
+  commandType,
+  actorUnitId,
+  targetUnitId,
+  psiAmpBattleItemId,
+  activeHand,
+}) {
+  const b = parseCommandBinding(binding);
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(typeof commandType === 'string' && commandType.length > 0, 'commandType required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId > 0, 'actorUnitId required');
+  assert(Number.isInteger(targetUnitId) && targetUnitId > 0, 'targetUnitId required');
+  assert(Number.isInteger(psiAmpBattleItemId) && psiAmpBattleItemId > 0, 'psiAmpBattleItemId required');
+  assert(activeHand === 'STR_RIGHT_HAND' || activeHand === 'STR_LEFT_HAND', 'activeHand invalid');
+  const soldier = b.player_soldiers.find((s) => s.id === actorUnitId);
+  assert(soldier, 'actorUnitId must be a listed player_soldier');
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: commandType,
+    actor_unit_id: actorUnitId,
+    target_unit_id: targetUnitId,
+    psi_amp_battle_item_id: psiAmpBattleItemId,
+    active_hand: activeHand,
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
+function composePsiPanicCommand(binding, options) {
+  return composePsiAmpCommand(binding, { ...options, commandType: 'PSI_PANIC' });
+}
+
+function composePsiMindControlCommand(binding, options) {
+  return composePsiAmpCommand(binding, { ...options, commandType: 'PSI_MIND_CONTROL' });
+}
+
 function bindingMatchesTactical(binding, tactical) {
   const built = buildCommandBinding(tactical, binding.snapshot_sha256);
   return built.state_version === binding.state_version
@@ -516,5 +604,10 @@ module.exports = {
   composeInventoryMoveCommand,
   composePickupCommand,
   composeDropCommand,
+  composeHealCommand,
+  composeStimulantCommand,
+  composePainKillerCommand,
+  composePsiPanicCommand,
+  composePsiMindControlCommand,
   bindingMatchesTactical,
 };
