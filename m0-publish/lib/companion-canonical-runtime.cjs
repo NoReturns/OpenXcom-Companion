@@ -13,10 +13,10 @@ const SCHEMA_VERSION = 1;
  * `openxcom.exe` and commit together with any doc updates — do not deploy a build whose
  * hash is not reflected here.
  *
- * Verified Win32 Release build (ASTER-M1-AAR-DEPLOY-05: post-mission battle AAR capture +
- * aar-produced durability; prior pin 8bb612ff…; engine build-isolated-m1-23e).
+ * Verified Win32 Release build (ASTER-M1-GEOSCAPE-HUD-DEPLOY-02: Geoscape relay/GitHub HUD
+ * chrome hidden; Basescape/Battlescape unchanged; prior pin c247a89b…).
  */
-const VERIFIED_BUILD_SHA256 = 'c247a89ba486c93f8a9c65eea5c88dabcfb9266dc4931e7b3fa119df631d6793';
+const VERIFIED_BUILD_SHA256 = '596c056e6d108b8d0211352684329f04e339fae5f23dc3a0903a5d5deb66d5fc';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 
