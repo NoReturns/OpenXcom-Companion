@@ -13,10 +13,10 @@ const SCHEMA_VERSION = 1;
  * `openxcom.exe` and commit together with any doc updates — do not deploy a build whose
  * hash is not reflected here.
  *
- * Verified Win32 Release build (ASTER-M1-WP9-MEDIKIT-LIVE-DEPLOY-01: WP9 medikit relay + TileEngine
- * empty-trajectory guard; prior pin 763d8dbf…).
+ * Verified Win32 Release build (ASTER-M1-S4K: WP9 medikit + WP10 psi relay; CMake build-s4j-rc from
+ * engine c5aa0293e; prior pin 1b08eb685…).
  */
-const VERIFIED_BUILD_SHA256 = '1b08eb6854f400eb486d8b378292cd5d1c67c4281769ea310d1c3fdec60ebab2';
+const VERIFIED_BUILD_SHA256 = '1f75c565e2f59f0909e4a79aa12ec54937a8585ff275fd59eb95aea4c322dad7';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 
@@ -41,7 +41,7 @@ function companionRuntimeLayout(repoRoot = resolveRepoRoot()) {
       root,
       'engine',
       'OpenXcom',
-      'build-isolated-m1-23e',
+      'build-s4j-rc',
       'bin',
       'Release',
       'openxcom.exe',
