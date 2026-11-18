@@ -86,6 +86,7 @@ if (-not $env:OPENXCOM_COMPANION_RELAY_REPO -and (Test-Path -LiteralPath $RelayL
 
 $env:OPENXCOM_COMPANION_SNAPSHOT_PATH = $layout.snapshotYaml
 $env:OPENXCOM_COMPANION_COMMAND_EXECUTOR = '1'
+$env:OPENXCOM_COMPANION_MELEE_EXECUTION = '1'
 if ($DisableTerrainFullAsciiRelay) {
   Remove-Item Env:OPENXCOM_COMPANION_RELAY_TERRAIN_FULL_ASCII -ErrorAction SilentlyContinue
 } else {
@@ -181,6 +182,7 @@ try {
   Write-Host "  User:       $($layout.userDir)"
   Write-Host "  Snapshot:   $($layout.snapshotYaml)"
   Write-Host "  EXECUTOR:   $env:OPENXCOM_COMPANION_COMMAND_EXECUTOR"
+  Write-Host "  MELEE EXEC: $env:OPENXCOM_COMPANION_MELEE_EXECUTION"
   Write-Host "  ASCII relay: $(if ($env:OPENXCOM_COMPANION_RELAY_TERRAIN_FULL_ASCII -eq '1') { 'ON (OPENXCOM_COMPANION_RELAY_TERRAIN_FULL_ASCII=1)' } else { 'off' })"
   Write-Host "  Daemon:     pid $daemonPid (started_by_launcher=$daemonStartedByUs; session-scoped shutdown)"
   Write-Host "  Session:    $playSessionId"

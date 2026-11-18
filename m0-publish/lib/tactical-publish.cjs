@@ -2789,6 +2789,7 @@ module.exports = {
   BT_GRENADE,
   BT_PROXIMITYGRENADE,
   BT_MEDIKIT,
+  BT_MELEE,
   BT_PSIAMP,
   ValidationError,
   parseAndValidate,

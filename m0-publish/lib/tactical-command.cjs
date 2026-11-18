@@ -11,6 +11,7 @@ const {
   BT_FIREARM,
   BT_AMMO,
   BT_MEDIKIT,
+  BT_MELEE,
   BT_PSIAMP,
 } = require('./tactical-publish.cjs');
 const { classifyCurrentHostileObservation } = require('./hostile-intelligence-consumer.cjs');
@@ -48,6 +49,7 @@ const COMMAND_TYPE_STIMULANT = 'STIMULANT';
 const COMMAND_TYPE_PAINKILLER = 'PAINKILLER';
 const COMMAND_TYPE_PSI_PANIC = 'PSI_PANIC';
 const COMMAND_TYPE_PSI_MIND_CONTROL = 'PSI_MIND_CONTROL';
+const COMMAND_TYPE_MELEE_ATTACK = 'MELEE_ATTACK';
 
 const MEDIKIT_COMMAND_TYPES = new Set([
   COMMAND_TYPE_HEAL,
@@ -72,6 +74,9 @@ const PSI_TACTICAL_COMMAND_TYPES = new Set([
 
 const PSI_PANIC_ACTION_ID = 'panic';
 const PSI_MIND_CONTROL_ACTION_ID = 'mindcontrol';
+
+const MELEE_TACTICAL_COMMAND_TYPES = new Set([COMMAND_TYPE_MELEE_ATTACK]);
+const MELEE_ACTION_ID = 'melee';
 
 const DIRECTED_FIRE_COMMAND_TYPES = new Set([
   COMMAND_TYPE_SNAP_SHOT,
@@ -158,6 +163,13 @@ const COMMAND_KEYS_PSI_PANIC = new Set([
 ]);
 
 const COMMAND_KEYS_PSI_MIND_CONTROL = COMMAND_KEYS_PSI_PANIC;
+
+const COMMAND_KEYS_MELEE_ATTACK = new Set([
+  ...COMMAND_KEYS_COMMON,
+  'target_unit_id',
+  'melee_weapon_battle_item_id',
+  'active_hand',
+]);
 
 const MEDIKIT_BODY_PART_MIN = 0;
 const MEDIKIT_BODY_PART_MAX = 5;
@@ -590,6 +602,38 @@ function parsePsiPanicCommand(raw) {
 
 function parsePsiMindControlCommand(raw) {
   return parsePsiAmpApplicationCommand(raw, COMMAND_TYPE_PSI_MIND_CONTROL, COMMAND_KEYS_PSI_MIND_CONTROL);
+}
+
+function parseMeleeAttackCommand(raw) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === COMMAND_TYPE_MELEE_ATTACK, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, COMMAND_KEYS_MELEE_ATTACK);
+  assert(Number.isInteger(raw.target_unit_id) && raw.target_unit_id > 0, 'target_unit_id must be positive integer');
+  assert(
+    Number.isInteger(raw.melee_weapon_battle_item_id) && raw.melee_weapon_battle_item_id > 0,
+    'melee_weapon_battle_item_id must be positive integer',
+  );
+  assert(typeof raw.active_hand === 'string' && VALID_ACTIVE_HANDS.has(raw.active_hand), 'active_hand invalid');
+  const binding = parseBindingFields(raw);
+  return {
+    ...binding,
+    targetUnitId: raw.target_unit_id,
+    meleeWeaponBattleItemId: raw.melee_weapon_battle_item_id,
+    activeHand: raw.active_hand,
+  };
+}
+
+function parseMeleeTacticalCommand(raw) {
+  if (raw.command_type === COMMAND_TYPE_MELEE_ATTACK) {
+    return parseMeleeAttackCommand(raw);
+  }
+  throw new ValidationError('unsupported command_type');
+}
+
+function isMeleeTacticalCommandType(commandType) {
+  return MELEE_TACTICAL_COMMAND_TYPES.has(commandType);
 }
 
 /**
@@ -1169,6 +1213,137 @@ function validatePsiTacticalCommandAgainstSnapshot(command, tactical, snapshotSh
   throw new ValidationError('unsupported command_type');
 }
 
+function validateActorListedInPlayerSoldiers(command, options = {}) {
+  if (!options || !options.commandBinding) {
+    return;
+  }
+  const binding = options.commandBinding;
+  assert(Array.isArray(binding.player_soldiers), 'commandBinding.player_soldiers required');
+  const listed = binding.player_soldiers.some((s) => s && s.id === command.actor_unit_id);
+  assert(listed, 'actor_unit_id must be listed in commandBinding.player_soldiers');
+}
+
+function validateMeleeActorEligibility(actor) {
+  assert(isFriendlyRosterSoldier(actor), 'actor must be a friendly roster soldier in snapshot');
+  assert(isCommandApplicableForBinding(actor), 'actor is not command-applicable at export');
+}
+
+function validateMeleeWeaponHandAgainstSnapshot(actor, parsed) {
+  const handEquip = findHandEquipment(actor, parsed.activeHand);
+  assert(handEquip, `no equipment in ${parsed.activeHand}`);
+  const battleItemId = handHeldWeaponBattleItemId(actor, handCostsKey(parsed.activeHand));
+  assert(
+    battleItemId === parsed.meleeWeaponBattleItemId,
+    'melee_weapon_battle_item_id must match weapon in the declared hand',
+  );
+  assert(handEquip.battleType === BT_MELEE, 'active_hand item must be a melee weapon');
+  if (typeof handEquip.slot === 'string' && handEquip.slot.length > 0) {
+    assert(handEquip.slot === parsed.activeHand, 'melee weapon snapshot slot does not match active_hand');
+  }
+  return handEquip;
+}
+
+function validateMeleeActionAffordanceAgainstSnapshot(actor, activeHand) {
+  if (!actor.actionCosts || !actor.actionCosts.hands) {
+    return {
+      advisory: true,
+      note: 'actionCosts not in snapshot; engine enforces melee affordance and TU',
+    };
+  }
+  const meleeAction = findFireActionOnActor(actor, activeHand, MELEE_ACTION_ID);
+  assert(meleeAction, 'weapon in active_hand does not expose melee action in actionCosts');
+  assert(meleeAction.usable !== false, 'melee action not usable in current conditions');
+  assert(meleeAction.canAffordTu !== false, 'insufficient TU for melee (export)');
+  return null;
+}
+
+function buildMeleeTargetGeometryAdvisory(actor, target) {
+  const advisories = [];
+  if (!Array.isArray(actor.position) || !Array.isArray(target.position)) {
+    return {
+      advisory: true,
+      code: 'melee_geometry_unknown',
+      note: 'Melee range, facing, turning, elevation, and obstruction are engine-authoritative (validMeleeRange / canTargetUnit).',
+    };
+  }
+  const dx = Math.abs(actor.position[0] - target.position[0]);
+  const dy = Math.abs(actor.position[1] - target.position[1]);
+  const dz = Math.abs(actor.position[2] - target.position[2]);
+  if (dx > 1 || dy > 1) {
+    advisories.push({
+      code: 'target_beyond_one_tile',
+      note: 'Export positions suggest the target may be outside native one-step melee range; engine validates validMeleeRange.',
+    });
+  }
+  if (dz > 0) {
+    advisories.push({
+      code: 'target_different_elevation',
+      note: 'Different Z levels may still be melee-legal via floor-hole rules; engine-authoritative.',
+    });
+  }
+  if (advisories.length === 0) {
+    return null;
+  }
+  return { advisory: true, items: advisories };
+}
+
+function buildMeleePlanningHint(planningHints) {
+  if (planningHints.length) {
+    return {
+      advisory: true,
+      items: planningHints,
+      note: 'Melee hit chance, miss outcomes, and incapacitation are engine-authoritative (no Node RNG).',
+    };
+  }
+  return {
+    advisory: true,
+    note: 'Melee range, turning, obstruction, and elevation are engine-authoritative.',
+  };
+}
+
+function validateMeleeHostileTargetAgainstSnapshot(tactical, targetUnitId) {
+  return validatePsiHostileTargetAgainstSnapshot(
+    tactical,
+    targetUnitId,
+    'target is not a hostile threat eligible for melee attack',
+  );
+}
+
+function validateMeleeAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  const parsed = parseMeleeAttackCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  const actor = validateActorAgainstSnapshot(command, tactical);
+  validateMeleeActorEligibility(actor);
+  validateActorListedInPlayerSoldiers(command, options);
+  validateMeleeWeaponHandAgainstSnapshot(actor, parsed);
+  const target = validateMeleeHostileTargetAgainstSnapshot(tactical, parsed.targetUnitId);
+
+  const planningHints = [];
+  const affordanceAdvisory = validateMeleeActionAffordanceAgainstSnapshot(actor, parsed.activeHand);
+  if (affordanceAdvisory) {
+    planningHints.push(affordanceAdvisory);
+  }
+  const geometryAdvisory = buildMeleeTargetGeometryAdvisory(actor, target);
+  if (geometryAdvisory) {
+    planningHints.push(geometryAdvisory);
+  }
+
+  return {
+    snapshotId: computeSnapshotId(tactical),
+    actor,
+    target,
+    meleeWeaponBattleItemId: parsed.meleeWeaponBattleItemId,
+    planningHint: buildMeleePlanningHint(planningHints),
+  };
+}
+
+function validateMeleeTacticalCommandAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  if (command && command.command_type === COMMAND_TYPE_MELEE_ATTACK) {
+    return validateMeleeAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
+  throw new ValidationError('unsupported command_type');
+}
+
 /**
  * Dispatch medikit snapshot validation (S1). Also available via validateTacticalCommandAgainstSnapshot.
  */
@@ -1279,6 +1454,9 @@ function parseTacticalCommand(raw) {
   }
   if (raw.command_type === COMMAND_TYPE_PSI_MIND_CONTROL) {
     return parsePsiMindControlCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_MELEE_ATTACK) {
+    return parseMeleeAttackCommand(raw);
   }
   throw new ValidationError('unsupported command_type');
 }
@@ -1695,6 +1873,9 @@ function validateTacticalCommandAgainstSnapshot(command, tactical, snapshotSha25
   if (command && command.command_type === COMMAND_TYPE_PSI_MIND_CONTROL) {
     return validatePsiMindControlAgainstSnapshot(command, tactical, snapshotSha256Lower);
   }
+  if (command && command.command_type === COMMAND_TYPE_MELEE_ATTACK) {
+    return validateMeleeAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
   throw new ValidationError('unsupported command_type');
 }
 
@@ -1773,6 +1954,7 @@ module.exports = {
   COMMAND_TYPE_PAINKILLER,
   COMMAND_TYPE_PSI_PANIC,
   COMMAND_TYPE_PSI_MIND_CONTROL,
+  COMMAND_TYPE_MELEE_ATTACK,
   MEDIKIT_COMMAND_TYPES,
   MEDIKIT_USE_ACTION_ID,
   PSI_PANIC_COMMAND_TYPES,
@@ -1780,6 +1962,8 @@ module.exports = {
   PSI_TACTICAL_COMMAND_TYPES,
   PSI_PANIC_ACTION_ID,
   PSI_MIND_CONTROL_ACTION_ID,
+  MELEE_TACTICAL_COMMAND_TYPES,
+  MELEE_ACTION_ID,
   CARRIED_INVENTORY_SLOT_IDS,
   GUIDED_LAUNCH_ACTION_ID,
   DIRECTED_FIRE_COMMAND_TYPES,
@@ -1811,6 +1995,9 @@ module.exports = {
   isPsiPanicCommandType,
   isPsiMindControlCommandType,
   isPsiTacticalCommandType,
+  parseMeleeAttackCommand,
+  parseMeleeTacticalCommand,
+  isMeleeTacticalCommandType,
   parseTacticalCommand,
   commandDigest,
   validateMoveAgainstSnapshot,
@@ -1834,6 +2021,9 @@ module.exports = {
   validatePsiPanicAgainstSnapshot,
   validatePsiMindControlAgainstSnapshot,
   validatePsiTacticalCommandAgainstSnapshot,
+  validateMeleeAgainstSnapshot,
+  validateMeleeTacticalCommandAgainstSnapshot,
+  validateActorListedInPlayerSoldiers,
   resolveGuidedWaypointLimit,
   validateTacticalCommandAgainstSnapshot,
   validateMoveAgainstSnapshotFile,

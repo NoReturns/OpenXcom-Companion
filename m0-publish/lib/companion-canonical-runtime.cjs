@@ -13,10 +13,10 @@ const SCHEMA_VERSION = 1;
  * `openxcom.exe` and commit together with any doc updates — do not deploy a build whose
  * hash is not reflected here.
  *
- * Verified Win32 Release build (ASTER-M1-S4K: WP9 medikit + WP10 psi relay; CMake build-s4j-rc from
- * engine c5aa0293e; prior pin 1b08eb685…).
+ * Verified Win32 Release build (ASTER-M1-MELEE-FINAL-RELEASE-01: live acceptance + orphan recovery;
+ * CMake build-s4j-rc; prior pin 6606e492…).
  */
-const VERIFIED_BUILD_SHA256 = '1f75c565e2f59f0909e4a79aa12ec54937a8585ff275fd59eb95aea4c322dad7';
+const VERIFIED_BUILD_SHA256 = '69012052542ef4dd32c65dd155e6ccf75b76bef8112dc270812a71b87bdbec66';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 

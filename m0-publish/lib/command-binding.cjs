@@ -575,6 +575,39 @@ function composePsiMindControlCommand(binding, options) {
   return composePsiAmpCommand(binding, { ...options, commandType: 'PSI_MIND_CONTROL' });
 }
 
+function composeMeleeAttackCommand(binding, {
+  commandId,
+  actorUnitId,
+  targetUnitId,
+  meleeWeaponBattleItemId,
+  activeHand,
+}) {
+  const b = parseCommandBinding(binding);
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId > 0, 'actorUnitId required');
+  assert(Number.isInteger(targetUnitId) && targetUnitId > 0, 'targetUnitId required');
+  assert(
+    Number.isInteger(meleeWeaponBattleItemId) && meleeWeaponBattleItemId > 0,
+    'meleeWeaponBattleItemId required',
+  );
+  assert(activeHand === 'STR_RIGHT_HAND' || activeHand === 'STR_LEFT_HAND', 'activeHand invalid');
+  const soldier = b.player_soldiers.find((s) => s.id === actorUnitId);
+  assert(soldier, 'actorUnitId must be a listed player_soldier');
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: 'MELEE_ATTACK',
+    actor_unit_id: actorUnitId,
+    target_unit_id: targetUnitId,
+    melee_weapon_battle_item_id: meleeWeaponBattleItemId,
+    active_hand: activeHand,
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
 function bindingMatchesTactical(binding, tactical) {
   const built = buildCommandBinding(tactical, binding.snapshot_sha256);
   return built.state_version === binding.state_version
@@ -609,5 +642,6 @@ module.exports = {
   composePainKillerCommand,
   composePsiPanicCommand,
   composePsiMindControlCommand,
+  composeMeleeAttackCommand,
   bindingMatchesTactical,
 };
