@@ -74,10 +74,10 @@ Summary: Kees van der Linden (#28) → Sectoid (#1000001), **COMPLETED**, `melee
 
 ## 6. Git checkpoint
 
-Recorded after `git push` in this order — fill commit SHAs from §7 when documenting locally:
-
-- **Engine** `aster/m0`: S1–S3 melee + recovery support sources
-- **Companion** `main`: Node contract, pin, audits, launcher template, playbook
+| Repository | Branch | Commit | Remote match |
+|------------|--------|--------|--------------|
+| OpenXcom (engine) | `aster/m0` | `7b3789da3` | `origin/aster/m0` **==** HEAD (fast-forward push) |
+| OpenXcom-Companion | `main` | `a7fa118` | `origin/main` **==** HEAD (fast-forward push) |
 
 ---
 
