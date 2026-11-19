@@ -54,6 +54,8 @@ Friendly heavy weapons platforms are **not** geoscape roster soldiers: battlesca
 - Mandatory tactical equipment review — `buildTacticalEquipmentBrief()` skips non-roster friendlies
 - Remote command authority — `isLiveCampaignPlayerSoldierUnit()` requires roster id + geoscape soldier link
 
+**HWP-S2a ownership and binding:** `companion-soldier-control.json` schema **2** adds optional `hwp_assignments` (HWP ids `≥ 1_000_000`, `ai` entries only — default human). Relay `soldierControl.hwps[]` and `commandBinding.player_hwps[]` (binding schema **2**) mirror position, trimmed `friendlyHwpObservationV1`, and `controlMode`; `commandExecutionSupported` remains **false**. HWPs never appear in `player_soldiers` or soldier `assignments`.
+
 **HWP-S1 additive observation (`friendlyHwpObservationV1`, schema 1):** Engine may attach a versioned block on the sparse unit row. Top-level shell keys remain `id`, `faction`, `originalFaction`, `position` only (no roster soldier fields). The block carries `hwpUnitType`, `displayLabel`, duplicated `position`, `bodyFacing`, optional `turretFacing`, TU/health, `fixedWeapons` (engine inventory only), and `capabilities`. Friendly HWPs are never in `commandBinding.player_soldiers`. Validate with `lib/friendly-hwp-observation-v1.cjs` and fixtures `friendly-hwp-sparse-v5.yaml` / `friendly-hwp-observation-v1.yaml`.
 
 ## Visible non-friendly units

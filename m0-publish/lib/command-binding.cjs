@@ -2,6 +2,7 @@
 
 const { SNAPSHOT_SHA256_RE } = require('./briefing-request.cjs');
 const { isFriendlyRosterSoldier } = require('./unit-state-brief.cjs');
+const { buildPlayerHwpBindingRows } = require('./hwp-command-binding.cjs');
 
 function isOnMapPlayerSoldierForBinding(unit) {
   return isFriendlyRosterSoldier(unit)
@@ -10,7 +11,8 @@ function isOnMapPlayerSoldierForBinding(unit) {
     && unit.position.length === 3;
 }
 
-const BINDING_SCHEMA_VERSION = 1;
+const BINDING_SCHEMA_VERSION = 2;
+const BINDING_SCHEMA_VERSIONS = new Set([1, 2]);
 
 class CommandBindingError extends Error {
   constructor(message) {
@@ -79,7 +81,7 @@ function mapPlayerSoldierBindingRow(unit) {
  * Lives on the relay envelope beside `tactical`; does not affect snapshot_id.
  * snapshot_sha256 must be the digest of on-disk tactical YAML bytes at publish time.
  */
-function buildCommandBinding(tactical, snapshotSha256Lower) {
+function buildCommandBinding(tactical, snapshotSha256Lower, options = {}) {
   assert(typeof snapshotSha256Lower === 'string' && SNAPSHOT_SHA256_RE.test(snapshotSha256Lower),
     'snapshot_sha256 must be 64 lowercase hex from verified YAML bytes');
   assert(tactical.eventLog && typeof tactical.eventLog.sessionId === 'string',
@@ -91,6 +93,8 @@ function buildCommandBinding(tactical, snapshotSha256Lower) {
   const playerSoldiers = tactical.units
     .filter(isOnMapPlayerSoldierForBinding)
     .map(mapPlayerSoldierBindingRow);
+
+  const playerHwps = buildPlayerHwpBindingRows(tactical, options.soldierControl ?? null);
 
   return {
     schema_version: BINDING_SCHEMA_VERSION,
@@ -107,7 +111,13 @@ function buildCommandBinding(tactical, snapshotSha256Lower) {
     },
     selected_unit_id: tactical.selectedUnitId ?? null,
     player_soldiers: playerSoldiers,
+    player_hwps: playerHwps,
+    hwp_binding_schema_version: 1,
     ownership_note: 'All soldiers default to human control locally. Remote commands cannot assign AI; owner must set companion-soldier-control.json.',
+    player_hwps_note:
+      'Friendly HWPs are never listed in player_soldiers. '
+      + 'commandExecutionSupported is always false until a future HWP command work package; '
+      + 'controlMode reflects companion-soldier-control.json hwp_assignments when the control mirror is available.',
     player_soldiers_tu_note:
       'timeUnits is command-spendable TU only when set to a non-negative integer. '
       + 'null with timeUnitsApplicability not_command_applicable means the soldier is listed for identity/position '
@@ -118,7 +128,15 @@ function buildCommandBinding(tactical, snapshotSha256Lower) {
 
 function parseCommandBinding(raw) {
   assert(raw && typeof raw === 'object', 'commandBinding must be an object');
-  assert(raw.schema_version === BINDING_SCHEMA_VERSION, 'unsupported commandBinding schema_version');
+  assert(BINDING_SCHEMA_VERSIONS.has(raw.schema_version), 'unsupported commandBinding schema_version');
+  if (raw.schema_version >= 2) {
+    assert(Array.isArray(raw.player_hwps), 'commandBinding.player_hwps required for schema v2');
+    for (const hwp of raw.player_hwps) {
+      assert(hwp && typeof hwp === 'object', 'player_hwps row must be object');
+      assert(Number.isInteger(hwp.id) && hwp.id >= 1_000_000, 'player_hwps id must be friendly HWP');
+      assert(hwp.commandExecutionSupported === false, 'HWP command execution not supported in binding v2');
+    }
+  }
   assert(typeof raw.snapshot_sha256 === 'string' && SNAPSHOT_SHA256_RE.test(raw.snapshot_sha256),
     'commandBinding.snapshot_sha256 invalid');
   assert(Number.isInteger(raw.state_version) && raw.state_version >= 0, 'commandBinding.state_version invalid');

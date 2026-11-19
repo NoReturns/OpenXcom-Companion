@@ -2761,14 +2761,15 @@ function buildRelayPayload(tactical, publishedAt, briefingMeta = null, options =
     payload.unitStateBrief = buildUnitStateBrief(tactical);
   }
   if (options.snapshotSha256 && tactical.eventLog && typeof tactical.eventLog.sessionId === 'string') {
-    payload.commandBinding = buildCommandBinding(tactical, options.snapshotSha256);
-    payload.soldierControl = buildSoldierControlMirror(tactical, {
+    const soldierControl = buildSoldierControlMirror(tactical, {
       capturedAt: publishedAt,
       soldierControlFileJson: options.soldierControlFileJson,
       soldierControlFilePath: options.soldierControlFilePath,
       snapshotPath: options.snapshotPath,
       ownershipBindingContext: options.ownershipBindingContext,
     });
+    payload.soldierControl = soldierControl;
+    payload.commandBinding = buildCommandBinding(tactical, options.snapshotSha256, { soldierControl });
   }
   if (options.lastMoveOutcomeBrief !== undefined && options.lastMoveOutcomeBrief !== null) {
     payload.lastMoveOutcomeBrief = options.lastMoveOutcomeBrief;

@@ -2,9 +2,15 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { isFriendlyRosterSoldier } = require('./unit-state-brief.cjs');
+const { isFriendlyRosterSoldier, isFriendlyHwpUnit } = require('./unit-state-brief.cjs');
+const {
+  assertControlAssignmentsDisjoint,
+  isOnMapFriendlyHwpForBinding,
+} = require('./hwp-command-binding.cjs');
 
-const SOLDIER_CONTROL_SCHEMA_VERSION = 1;
+const SOLDIER_CONTROL_SCHEMA_VERSION = 2;
+const SOLDIER_CONTROL_SCHEMA_VERSIONS = new Set([1, 2]);
+const MAX_ROSTER_UNIT_ID_EXCLUSIVE = 1_000_000;
 const SESSION_ID_RE = /^[a-f0-9]{32}$/;
 const DURABLE_ID_RE = /^[a-f0-9]{32}$/;
 
@@ -29,7 +35,7 @@ function parseSoldierControlDocument(jsonText) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new SoldierControlParseError('invalid_root');
   }
-  if (value.schema_version !== SOLDIER_CONTROL_SCHEMA_VERSION) {
+  if (!SOLDIER_CONTROL_SCHEMA_VERSIONS.has(value.schema_version)) {
     throw new SoldierControlParseError('unsupported_schema_version');
   }
   if (typeof value.session_id !== 'string' || !SESSION_ID_RE.test(value.session_id)) {
@@ -42,13 +48,33 @@ function parseSoldierControlDocument(jsonText) {
   const normalizedAssignments = {};
   for (const [key, mode] of Object.entries(assignments)) {
     const id = Number.parseInt(String(key), 10);
-    if (!Number.isInteger(id) || id <= 0) {
+    if (!Number.isInteger(id) || id <= 0 || id >= MAX_ROSTER_UNIT_ID_EXCLUSIVE) {
       throw new SoldierControlParseError('invalid_assignment_soldier_id');
     }
     if (mode !== 'ai') {
       throw new SoldierControlParseError('invalid_assignment_mode');
     }
     normalizedAssignments[id] = 'ai';
+  }
+  const normalizedHwpAssignments = {};
+  if (Object.prototype.hasOwnProperty.call(value, 'hwp_assignments')) {
+    if (value.schema_version < 2) {
+      throw new SoldierControlParseError('hwp_assignments_requires_schema_v2');
+    }
+    const hwpAssignments = value.hwp_assignments;
+    if (!hwpAssignments || typeof hwpAssignments !== 'object' || Array.isArray(hwpAssignments)) {
+      throw new SoldierControlParseError('invalid_hwp_assignments');
+    }
+    for (const [key, mode] of Object.entries(hwpAssignments)) {
+      const id = Number.parseInt(String(key), 10);
+      if (!Number.isInteger(id) || id < MAX_ROSTER_UNIT_ID_EXCLUSIVE) {
+        throw new SoldierControlParseError('invalid_assignment_hwp_id');
+      }
+      if (mode !== 'ai') {
+        throw new SoldierControlParseError('invalid_assignment_mode');
+      }
+      normalizedHwpAssignments[id] = 'ai';
+    }
   }
   let campaignId;
   let tacticalBattleId;
@@ -65,11 +91,12 @@ function parseSoldierControlDocument(jsonText) {
     tacticalBattleId = value.tactical_battle_id;
   }
   return {
-    schema_version: SOLDIER_CONTROL_SCHEMA_VERSION,
+    schema_version: value.schema_version,
     session_id: value.session_id,
     campaign_id: campaignId,
     tactical_battle_id: tacticalBattleId,
     assignments: normalizedAssignments,
+    hwp_assignments: normalizedHwpAssignments,
   };
 }
 
@@ -100,6 +127,13 @@ function relayControlBindingMatches(doc, bindingContext) {
 function listRosterSoldierIds(tactical) {
   return tactical.units
     .filter(isFriendlyRosterSoldier)
+    .map((u) => u.id)
+    .sort((a, b) => a - b);
+}
+
+function listFriendlyHwpIdsOnMap(tactical) {
+  return tactical.units
+    .filter(isOnMapFriendlyHwpForBinding)
     .map((u) => u.id)
     .sort((a, b) => a - b);
 }
@@ -173,6 +207,15 @@ function buildSoldierControlMirror(tactical, options = {}) {
     });
   }
 
+  const disjointError = assertControlAssignmentsDisjoint(doc);
+  if (disjointError) {
+    return buildUnavailableSoldierControl({
+      capturedAt,
+      reason: disjointError,
+      sessionId: battleSessionId,
+    });
+  }
+
   const rosterIds = new Set(listRosterSoldierIds(tactical));
   for (const assignedId of Object.keys(doc.assignments)) {
     const id = Number(assignedId);
@@ -180,6 +223,19 @@ function buildSoldierControlMirror(tactical, options = {}) {
       return buildUnavailableSoldierControl({
         capturedAt,
         reason: 'unknown_assignment_soldier_id',
+        sessionId: battleSessionId,
+      });
+    }
+  }
+
+  const hwpIds = new Set(listFriendlyHwpIdsOnMap(tactical));
+  for (const assignedId of Object.keys(doc.hwp_assignments ?? {})) {
+    const id = Number(assignedId);
+    const unit = tactical.units.find((u) => u.id === id);
+    if (!hwpIds.has(id) || !unit || !isFriendlyHwpUnit(unit)) {
+      return buildUnavailableSoldierControl({
+        capturedAt,
+        reason: 'unknown_assignment_hwp_id',
         sessionId: battleSessionId,
       });
     }
@@ -214,8 +270,15 @@ function buildSoldierControlMirror(tactical, options = {}) {
       controlMode: doc.assignments[id] === 'ai' ? 'ai' : 'human',
     }));
 
+  const hwps = [...hwpIds]
+    .sort((a, b) => a - b)
+    .map((id) => ({
+      id,
+      controlMode: doc.hwp_assignments?.[id] === 'ai' ? 'ai' : 'human',
+    }));
+
   const mirror = {
-    schema_version: SOLDIER_CONTROL_SCHEMA_VERSION,
+    schema_version: doc.schema_version,
     availability: 'available',
     captured_at: capturedAt,
     source: 'companion-soldier-control.json',
@@ -224,7 +287,8 @@ function buildSoldierControlMirror(tactical, options = {}) {
     binding_match: true,
     snapshot_session_id: battleSessionId,
     soldiers,
-    note: 'Read-only mirror at publish time; remote relay cannot assign control.',
+    hwps,
+    note: 'Read-only mirror at publish time; remote relay cannot assign control. HWP defaults are human unless listed in hwp_assignments.',
   };
   if (doc.campaign_id) {
     mirror.campaign_id = doc.campaign_id;
@@ -240,11 +304,13 @@ function buildSoldierControlMirror(tactical, options = {}) {
 
 module.exports = {
   SOLDIER_CONTROL_SCHEMA_VERSION,
+  SOLDIER_CONTROL_SCHEMA_VERSIONS,
   SESSION_ID_RE,
   SoldierControlParseError,
   parseSoldierControlDocument,
   relayControlBindingMatches,
   listRosterSoldierIds,
+  listFriendlyHwpIdsOnMap,
   buildSoldierControlMirror,
   resolveControlFileJson,
 };
