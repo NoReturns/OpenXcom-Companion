@@ -8,10 +8,12 @@ const { buildTerrainBrief } = require('./terrain-brief.cjs');
 const { buildTerrainMapBrief } = require('./terrain-map-brief.cjs');
 const { buildTacticalMapWindowV2 } = require('./terrain-tactical-map-window-v2.cjs');
 const { buildUnitStateBrief } = require('./unit-state-brief.cjs');
+const { validateFriendlyHwpObservationV1 } = require('./friendly-hwp-observation-v1.cjs');
 const { buildCommandBinding } = require('./command-binding.cjs');
 const { buildSoldierControlMirror } = require('./soldier-control-relay.cjs');
 const {
   isRosterSoldierUnitId,
+  isFriendlyHwpUnit,
   isFriendlyRosterSoldier,
   isMindControlledRosterSoldier,
   isNeutralCivilianUnit,
@@ -143,6 +145,7 @@ const UNIT_FRIENDLY_V3_KEYS = new Set([
 const UNIT_FRIENDLY_WP2_KEYS = new Set(['facing', 'condition', 'readiness', 'fatalWounds', 'psiSkill']);
 const FATAL_WOUND_PART_COUNT = 6;
 const UNIT_OBSERVATION_KEYS = new Set(['observedUnitType', 'displayLabel']);
+const FRIENDLY_HWP_SPARSE_EXTRA_KEYS = new Set(['friendlyHwpObservationV1']);
 const UNIT_FACING_KEYS = new Set(['direction', 'label', 'vector', 'turning']);
 const UNIT_FACING_VECTOR_KEYS = new Set(['dx', 'dy']);
 const ALLOWED_FACING_LABELS = new Set([
@@ -649,6 +652,7 @@ function allowedUnitKeys(schemaVersion) {
   for (const k of UNIT_FRIENDLY_V2_KEYS) keys.add(k);
   for (const k of UNIT_FRIENDLY_V3_KEYS) keys.add(k);
   for (const k of UNIT_FRIENDLY_WP2_KEYS) keys.add(k);
+  for (const k of FRIENDLY_HWP_SPARSE_EXTRA_KEYS) keys.add(k);
   return keys;
 }
 
@@ -1579,6 +1583,27 @@ function validateUnit(raw, index, schemaVersion = 2) {
       }
       unit.displayLabel = requireString(raw.displayLabel, `units[${index}].displayLabel`, { maxLength: 96 });
     }
+  }
+
+  if (isFriendlyHwpUnit(unit)) {
+  const allowedHwpUnitKeys = new Set([
+    ...UNIT_BASE_KEYS,
+    ...FRIENDLY_HWP_SPARSE_EXTRA_KEYS,
+  ]);
+  for (const key of Object.keys(raw)) {
+    if (!allowedHwpUnitKeys.has(key)) {
+      throw new ValidationError(`units[${index}] friendly HWP unknown field: ${key}`);
+    }
+  }
+    if (Object.prototype.hasOwnProperty.call(raw, 'friendlyHwpObservationV1')) {
+      unit.friendlyHwpObservationV1 = validateFriendlyHwpObservationV1(raw.friendlyHwpObservationV1, index);
+      assert(
+        unit.friendlyHwpObservationV1.unitId === unit.id,
+        `units[${index}].friendlyHwpObservationV1.unitId must match unit id`,
+      );
+    }
+  } else if (Object.prototype.hasOwnProperty.call(raw, 'friendlyHwpObservationV1')) {
+    throw new ValidationError(`units[${index}] friendlyHwpObservationV1 is only allowed on friendly HWP units`);
   }
 
   return unit;

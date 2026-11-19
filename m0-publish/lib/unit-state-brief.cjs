@@ -11,6 +11,22 @@ function isFriendlyPlayerControlled(unit) {
   return unit.originalFaction === FACTION_PLAYER && unit.faction === FACTION_PLAYER;
 }
 
+/** X-COM HWP / tank under player control (id >= MAX_SOLDIER_ID, no geoscape soldier row). */
+function isFriendlyHwpUnit(unit) {
+  return isFriendlyPlayerControlled(unit) && !isRosterSoldierUnitId(unit.id);
+}
+
+function friendlyUnitDisplayLabel(unit) {
+  if (isFriendlyRosterSoldier(unit)) {
+    return unit.name;
+  }
+  if (isFriendlyHwpUnit(unit) && unit.friendlyHwpObservationV1) {
+    const obs = unit.friendlyHwpObservationV1;
+    return obs.displayLabel ?? obs.hwpUnitType ?? `HWP#${unit.id}`;
+  }
+  return undefined;
+}
+
 /** X-COM roster soldier under player control (excludes friendly HWP / id >= MAX_SOLDIER_ID). */
 function unitStateBriefPlacementFields(unit) {
   if (unit.battlefieldPlacement === 'carried_in_inventory') {
@@ -76,7 +92,15 @@ function buildUnitStateBrief(tactical, options = {}) {
   const facingNotes = [];
 
   for (const unit of friendly) {
-    const base = { id: unit.id, name: unit.name, ...unitStateBriefPlacementFields(unit) };
+    if (isFriendlyHwpUnit(unit)) {
+      continue;
+    }
+    const label = friendlyUnitDisplayLabel(unit);
+    const base = {
+      id: unit.id,
+      ...(typeof label === 'string' ? { name: label } : {}),
+      ...unitStateBriefPlacementFields(unit),
+    };
     const readiness = unit.readiness?.summary;
     if (readiness && readiness !== 'ready_to_act') {
       exceptions.push({
@@ -207,6 +231,8 @@ function buildUnitStateBrief(tactical, options = {}) {
 module.exports = {
   buildUnitStateBrief,
   isFriendlyPlayerControlled,
+  isFriendlyHwpUnit,
+  friendlyUnitDisplayLabel,
   isFriendlyRosterSoldier,
   isMindControlledRosterSoldier,
   isXcomControlledHostileUnit,
