@@ -118,7 +118,7 @@ function buildCommandBinding(tactical, snapshotSha256Lower, options = {}) {
     ownership_note: 'All soldiers default to human control locally. Remote commands cannot assign AI; owner must set companion-soldier-control.json.',
     player_hwps_note:
       'Friendly HWPs are never listed in player_soldiers. '
-      + 'commandExecutionSupported remains false for non-MOVE HWP types; hwpMoveExecutionSupported reports HWP_MOVE relay capability; '
+      + 'commandExecutionSupported remains false globally for HWPs; hwpMoveExecutionSupported / hwpTurnExecutionSupported report per-type relay capability; '
       + 'controlMode reflects companion-soldier-control.json hwp_assignments when the control mirror is available.',
     player_soldiers_tu_note:
       'timeUnits is command-spendable TU only when set to a non-negative integer. '
@@ -139,6 +139,9 @@ function parseCommandBinding(raw) {
       assert(hwp.commandExecutionSupported === false, 'HWP global command execution flag remains false in binding v2');
       if (Object.prototype.hasOwnProperty.call(hwp, 'hwpMoveExecutionSupported')) {
         assert(typeof hwp.hwpMoveExecutionSupported === 'boolean', 'hwpMoveExecutionSupported must be boolean when present');
+      }
+      if (Object.prototype.hasOwnProperty.call(hwp, 'hwpTurnExecutionSupported')) {
+        assert(typeof hwp.hwpTurnExecutionSupported === 'boolean', 'hwpTurnExecutionSupported must be boolean when present');
       }
     }
   }
@@ -255,6 +258,46 @@ function composeMoveCommand(binding, { commandId, actorUnitId, destination }) {
  * HWP movement contract (S3B): schema v1 envelope, actor listed in player_hwps with controlMode ai.
  * Engine path/TU/footprint remain authoritative; no path promise in Node.
  */
+/**
+ * HWP turn-in-place (S4): bearing tile + explicit hull vs turret axis. Engine owns TU and Options::strafe for turret.
+ */
+function composeHwpTurnCommand(binding, { commandId, actorUnitId, target, turnPart }) {
+  const b = parseCommandBinding(binding);
+  assert(b.schema_version >= 2, 'HWP_TURN requires commandBinding schema v2 with player_hwps');
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'HWP_TURN actor must be a friendly HWP unit id');
+  assert(target && Number.isInteger(target.x), 'target required');
+  assert(turnPart === 'body' || turnPart === 'turret', 'turnPart must be "body" or "turret"');
+  assert(!b.player_soldiers.some((s) => s.id === actorUnitId),
+    'HWP_TURN actor must not be listed in player_soldiers');
+  const hwp = (b.player_hwps ?? []).find((h) => h.id === actorUnitId);
+  assert(hwp, 'actorUnitId must be a listed player_hwp');
+  assert(hwp.controlMode === 'ai', 'HWP must be AI-owned in binding for remote HWP_TURN');
+  assert(target.x >= 0 && target.x < b.map.width, 'target.x out of map');
+  assert(target.y >= 0 && target.y < b.map.height, 'target.y out of map');
+  assert(target.z >= 0 && target.z < b.map.depth, 'target.z out of map');
+  if (Array.isArray(hwp.position) && hwp.position.length === 3) {
+    const sameTile = target.x === hwp.position[0]
+      && target.y === hwp.position[1]
+      && target.z === hwp.position[2];
+    assert(!sameTile, 'target must differ from actor position (facing bearing)');
+  }
+
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: 'HWP_TURN',
+    actor_unit_id: actorUnitId,
+    turn_part: turnPart,
+    target: { x: target.x, y: target.y, z: target.z },
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
 function composeHwpMoveCommand(binding, { commandId, actorUnitId, destination }) {
   const b = parseCommandBinding(binding);
   assert(b.schema_version >= 2, 'HWP_MOVE requires commandBinding schema v2 with player_hwps');
@@ -716,6 +759,7 @@ module.exports = {
   parseCommandBinding,
   composeMoveCommand,
   composeHwpMoveCommand,
+  composeHwpTurnCommand,
   composeKneelCommand,
   composeStandCommand,
   composeTurnFaceCommand,

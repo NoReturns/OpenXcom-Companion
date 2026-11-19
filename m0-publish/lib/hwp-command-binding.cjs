@@ -35,6 +35,7 @@ function mapPlayerHwpBindingRow(unit, soldierControlMirror) {
     controlMode,
     commandExecutionSupported: false,
     hwpMoveExecutionSupported: true,
+    hwpTurnExecutionSupported: true,
     observationPresent: obs != null,
   };
   if (obs) {

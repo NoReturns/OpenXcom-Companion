@@ -79,6 +79,87 @@ function buildMovePlanningHint(actor) {
   };
 }
 
+const HWP_TURN_PARTS = new Set(['body', 'turret']);
+
+function actorPositionForHwpTurn(actor) {
+  const obs = actor?.friendlyHwpObservationV1;
+  if (obs?.position && typeof obs.position.x === 'number') {
+    return { x: obs.position.x, y: obs.position.y, z: obs.position.z ?? 0 };
+  }
+  if (Array.isArray(actor?.position) && actor.position.length >= 2) {
+    return {
+      x: actor.position[0],
+      y: actor.position[1],
+      z: actor.position[2] ?? 0,
+    };
+  }
+  return null;
+}
+
+function estimateHwpTurnFacing(actor, target, turnPart) {
+  const fromPos = actorPositionForHwpTurn(actor);
+  if (!fromPos) {
+    return { steps: null, facingTu: null, uncertainty: 'missing_actor_position' };
+  }
+  if (!target || typeof target.x !== 'number' || typeof target.y !== 'number') {
+    return { steps: null, facingTu: null, uncertainty: 'missing_target' };
+  }
+  const obs = actor.friendlyHwpObservationV1;
+  if (!obs) {
+    return { steps: null, facingTu: null, uncertainty: 'missing_hwp_observation' };
+  }
+  let fromDir;
+  if (turnPart === 'turret') {
+    if (obs.capabilities?.turretTurn !== true) {
+      return { steps: null, facingTu: null, uncertainty: 'turret_turn_not_supported' };
+    }
+    if (!obs.turretFacing || typeof obs.turretFacing.direction !== 'number') {
+      return { steps: null, facingTu: null, uncertainty: 'missing_turret_facing' };
+    }
+    fromDir = obs.turretFacing.direction;
+  } else if (turnPart === 'body') {
+    if (obs.bodyFacing && typeof obs.bodyFacing.direction === 'number') {
+      fromDir = obs.bodyFacing.direction;
+    } else if (actor.facing && typeof actor.facing.direction === 'number') {
+      fromDir = actor.facing.direction;
+    } else {
+      return { steps: null, facingTu: null, uncertainty: 'missing_body_facing' };
+    }
+  } else {
+    return { steps: null, facingTu: null, uncertainty: 'invalid_turn_part' };
+  }
+  const desired = directionToGrid(fromPos, target);
+  const steps = octagonalTurnSteps(fromDir, desired);
+  return { steps, facingTu: steps, uncertainty: null };
+}
+
+function buildHwpTurnPlanningHint(actor, target, turnPart) {
+  const facing = estimateHwpTurnFacing(actor, target, turnPart);
+  const facingTu = facing.steps != null ? facing.steps : null;
+  const tu = actor?.friendlyHwpObservationV1?.timeUnits ?? actor?.timeUnits;
+  let turnAffordableEstimate = null;
+  if (typeof tu === 'number' && facingTu != null) {
+    turnAffordableEstimate = tu >= facingTu;
+  }
+  const notes = [
+    'Non-authoritative; engine charges up to 1 TU per facing step.',
+    'Hull turn couples turret to body in native gameplay.',
+    'turn_part "turret" requires Options::strafe at execution (engine-enforced).',
+    'Engine must preflight full turn cost before mutation (see ASTER-M1-HWP-S4-TURN-AUDIT-01).',
+  ];
+  return {
+    advisory: true,
+    turnPart,
+    note: notes.join(' '),
+    facingTuStepsEstimated: facing.steps,
+    facingTuEstimate: facingTu,
+    facingStepsUncertainty: facing.uncertainty,
+    turnAffordableEstimate,
+    engineStrafeRequiredForTurret: turnPart === 'turret',
+    ...(typeof tu === 'number' ? { exportTimeUnits: tu } : {}),
+  };
+}
+
 function buildTurnFacePlanningHint(actor, target) {
   const facing = estimateDirectedFireFacing(actor, target);
   const facingTu = facing.steps != null ? facing.steps : null;
@@ -130,6 +211,8 @@ module.exports = {
   estimateDirectedFireFacing,
   buildMovePlanningHint,
   buildHwpMovePlanningHint,
+  buildHwpTurnPlanningHint,
+  HWP_TURN_PARTS,
   buildTurnFacePlanningHint,
   buildDirectedFireCompositeHint,
 };

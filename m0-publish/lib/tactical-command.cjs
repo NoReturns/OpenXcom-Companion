@@ -30,12 +30,15 @@ const {
   buildHwpMovePlanningHint,
   buildDirectedFireCompositeHint,
   buildTurnFacePlanningHint,
+  buildHwpTurnPlanningHint,
+  HWP_TURN_PARTS,
 } = require('./tu-composite-advisory.cjs');
 
 const COMMAND_SCHEMA_VERSION = 1;
 const RESULT_SCHEMA_VERSION = 1;
 const COMMAND_TYPE_MOVE = 'MOVE';
 const COMMAND_TYPE_HWP_MOVE = 'HWP_MOVE';
+const COMMAND_TYPE_HWP_TURN = 'HWP_TURN';
 const COMMAND_TYPE_KNEEL = 'KNEEL';
 const COMMAND_TYPE_STAND = 'STAND';
 const COMMAND_TYPE_SNAP_SHOT = 'SNAP_SHOT';
@@ -119,6 +122,7 @@ const COMMAND_KEYS_COMMON = new Set([
 
 const COMMAND_KEYS_MOVE = new Set([...COMMAND_KEYS_COMMON, 'destination']);
 const COMMAND_KEYS_HWP_MOVE = new Set([...COMMAND_KEYS_COMMON, 'destination']);
+const COMMAND_KEYS_HWP_TURN = new Set([...COMMAND_KEYS_COMMON, 'target', 'turn_part']);
 const COMMAND_KEYS_KNEEL = new Set([...COMMAND_KEYS_COMMON]);
 const COMMAND_KEYS_STAND = new Set([...COMMAND_KEYS_COMMON]);
 const COMMAND_KEYS_TURN_FACE = new Set([...COMMAND_KEYS_COMMON, 'target']);
@@ -249,6 +253,23 @@ function parseBindingFields(raw) {
     sessionId: raw.session_id,
     turn: raw.turn,
     stateVersion: raw.state_version,
+  };
+}
+
+function parseHwpTurnCommand(raw) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === COMMAND_TYPE_HWP_TURN, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, COMMAND_KEYS_HWP_TURN);
+  assert(typeof raw.turn_part === 'string' && HWP_TURN_PARTS.has(raw.turn_part),
+    'turn_part must be "body" or "turret"');
+  const target = parseCoordinateObject(raw.target, 'target');
+  const binding = parseBindingFields(raw);
+  return {
+    ...binding,
+    turnPart: raw.turn_part,
+    target,
   };
 }
 
@@ -1458,6 +1479,9 @@ function parseTacticalCommand(raw) {
   if (raw.command_type === COMMAND_TYPE_HWP_MOVE) {
     return parseHwpMoveCommand(raw);
   }
+  if (raw.command_type === COMMAND_TYPE_HWP_TURN) {
+    return parseHwpTurnCommand(raw);
+  }
   if (raw.command_type === COMMAND_TYPE_KNEEL) {
     return parseKneelCommand(raw);
   }
@@ -1550,8 +1574,8 @@ function isHwpOperationalInSnapshot(actor) {
 function validateHwpActorAgainstSnapshot(command, tactical) {
   const actor = tactical.units.find((u) => u.id === command.actor_unit_id);
   assert(actor, 'actor_unit_id not in snapshot');
-  assert(isFriendlyHwpUnit(actor), 'HWP_MOVE actor must be a friendly HWP in snapshot');
-  assert(command.actor_unit_id >= MAX_ROSTER_UNIT_ID_EXCLUSIVE, 'HWP_MOVE actor id out of band');
+  assert(isFriendlyHwpUnit(actor), 'HWP command actor must be a friendly HWP in snapshot');
+  assert(command.actor_unit_id >= MAX_ROSTER_UNIT_ID_EXCLUSIVE, 'HWP actor id out of band');
   assert(isHwpOperationalInSnapshot(actor), 'HWP actor is not operational at export');
   return actor;
 }
@@ -1569,6 +1593,46 @@ function validateHwpActorListedInPlayerHwps(command, options = {}) {
     'binding must keep HWP commandExecutionSupported false for non-MOVE HWP types');
   assert(listed.hwpMoveExecutionSupported === true,
     'binding must report hwpMoveExecutionSupported for HWP_MOVE publish validation');
+}
+
+function validateHwpActorListedForHwpTurn(command, options = {}) {
+  if (!options || !options.commandBinding) {
+    return;
+  }
+  const binding = options.commandBinding;
+  assert(Array.isArray(binding.player_hwps), 'commandBinding.player_hwps required for HWP_TURN');
+  const listed = binding.player_hwps.find((h) => h && h.id === command.actor_unit_id);
+  assert(listed, 'actor_unit_id must be listed in commandBinding.player_hwps');
+  assert(listed.controlMode === 'ai', 'HWP must be AI-owned in commandBinding for HWP_TURN');
+  assert(listed.commandExecutionSupported === false,
+    'binding must keep HWP commandExecutionSupported false');
+  assert(listed.hwpTurnExecutionSupported === true,
+    'binding must report hwpTurnExecutionSupported for HWP_TURN publish validation');
+}
+
+function assertHwpTurnTargetDiffersFromActor(command, actor) {
+  const obs = actor.friendlyHwpObservationV1;
+  const pos = obs?.position
+    ? [obs.position.x, obs.position.y, obs.position.z ?? 0]
+    : (Array.isArray(actor.position) ? actor.position : null);
+  if (!pos || pos.length < 3) {
+    return;
+  }
+  const sameTile = command.target.x === pos[0]
+    && command.target.y === pos[1]
+    && command.target.z === pos[2];
+  assert(!sameTile, 'target must differ from actor position (facing bearing)');
+}
+
+function validateHwpTurnCapabilities(command, actor) {
+  const obs = actor.friendlyHwpObservationV1;
+  assert(obs, 'HWP_TURN requires friendlyHwpObservationV1 on actor');
+  assert(obs.capabilities, 'HWP capabilities required for HWP_TURN');
+  if (command.turn_part === 'body') {
+    assert(obs.capabilities.bodyTurn === true, 'HWP body turn not supported at export');
+  } else if (command.turn_part === 'turret') {
+    assert(obs.capabilities.turretTurn === true, 'HWP turret turn not supported at export');
+  }
 }
 
 function validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower) {
@@ -1606,6 +1670,30 @@ function validateHwpMoveAgainstSnapshot(command, tactical, snapshotSha256Lower, 
   validateHwpActorListedInPlayerHwps(command, options);
   const planningHint = buildHwpMovePlanningHint(actor);
   return { snapshotId: computeSnapshotId(tactical), actor, planningHint };
+}
+
+function isHwpTurnCommandType(commandType) {
+  return commandType === COMMAND_TYPE_HWP_TURN;
+}
+
+function validateHwpTurnAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  const parsed = parseHwpTurnCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  assert(command.target.x < tactical.map.width
+    && command.target.y < tactical.map.height
+    && command.target.z < tactical.map.depth, 'target out of map bounds');
+  const actor = validateHwpActorAgainstSnapshot(command, tactical);
+  validateHwpTurnCapabilities(command, actor);
+  validateHwpActorListedForHwpTurn(command, options);
+  assertHwpTurnTargetDiffersFromActor(command, actor);
+  const planningHint = buildHwpTurnPlanningHint(actor, parsed.target, parsed.turnPart);
+  return {
+    snapshotId: computeSnapshotId(tactical),
+    actor,
+    target: parsed.target,
+    turnPart: parsed.turnPart,
+    planningHint,
+  };
 }
 
 function validateKneelAgainstSnapshot(command, tactical, snapshotSha256Lower) {
@@ -1975,6 +2063,9 @@ function validateTacticalCommandAgainstSnapshot(command, tactical, snapshotSha25
   if (command && command.command_type === COMMAND_TYPE_HWP_MOVE) {
     return validateHwpMoveAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
   }
+  if (command && command.command_type === COMMAND_TYPE_HWP_TURN) {
+    return validateHwpTurnAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
   if (command && command.command_type === COMMAND_TYPE_KNEEL) {
     return validateKneelAgainstSnapshot(command, tactical, snapshotSha256Lower);
   }
@@ -2096,6 +2187,7 @@ module.exports = {
   RESULT_SCHEMA_VERSION,
   COMMAND_TYPE_MOVE,
   COMMAND_TYPE_HWP_MOVE,
+  COMMAND_TYPE_HWP_TURN,
   COMMAND_TYPE_KNEEL,
   COMMAND_TYPE_STAND,
   COMMAND_TYPE_SNAP_SHOT,
@@ -2134,6 +2226,7 @@ module.exports = {
   NON_TERMINAL_STATUSES,
   parseMoveCommand,
   parseHwpMoveCommand,
+  parseHwpTurnCommand,
   parseKneelCommand,
   parseStandCommand,
   parseTurnFaceCommand,
@@ -2164,10 +2257,12 @@ module.exports = {
   isMeleeTacticalCommandType,
   isTurnFaceCommandType,
   isHwpMoveCommandType,
+  isHwpTurnCommandType,
   parseTacticalCommand,
   commandDigest,
   validateMoveAgainstSnapshot,
   validateHwpMoveAgainstSnapshot,
+  validateHwpTurnAgainstSnapshot,
   validateKneelAgainstSnapshot,
   validateStandAgainstSnapshot,
   validateTurnFaceAgainstSnapshot,
