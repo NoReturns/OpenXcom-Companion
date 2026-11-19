@@ -178,6 +178,58 @@ function buildTurnFacePlanningHint(actor, target) {
   };
 }
 
+/**
+ * HWP directed fire advisory — turret bearing + export actionCosts on fixed weapon (tactical snapshot only).
+ * Binding rows may omit actionCosts; pass resolved fireTuCost or leave null when unavailable.
+ */
+function buildHwpFirePlanningHint(actor, target, fireMode, { fireTuCost = null, fireAction = null } = {}) {
+  const facing = estimateHwpTurnFacing(actor, target, 'turret');
+  const facingTu = facing.steps != null ? facing.steps : null;
+  const tu = actor?.friendlyHwpObservationV1?.timeUnits ?? actor?.timeUnits;
+  const fireTu = typeof fireTuCost === 'number' ? fireTuCost : null;
+  let compositeMinTu = null;
+  let compositeAffordable = null;
+  if (typeof tu === 'number' && fireTu != null) {
+    if (facingTu != null) {
+      compositeMinTu = fireTu + facingTu;
+      compositeAffordable = tu >= compositeMinTu;
+    } else {
+      compositeMinTu = fireTu;
+      compositeAffordable = null;
+    }
+  }
+  const bodyFacingDir = actor?.friendlyHwpObservationV1?.bodyFacing?.direction;
+  const turretFacingDir = actor?.friendlyHwpObservationV1?.turretFacing?.direction;
+  const turretDiffersFromHull = typeof bodyFacingDir === 'number'
+    && typeof turretFacingDir === 'number'
+    && bodyFacingDir !== turretFacingDir;
+  const notes = [
+    'Non-authoritative; engine enforces TU, LOS, and reaction reserve.',
+    'Turret rotation TU estimated from turretFacing, not hull bodyFacing.',
+    'fireTuCost from validated snapshot fixedWeapons[].actionCosts when present.',
+  ];
+  const fireTuCostUnavailable = fireTu == null;
+  const reservationNote = fireAction && fireAction.canAffordTuWithCurrentReservation === false
+    ? 'Export marks canAffordTuWithCurrentReservation false; engine may reject under reaction reserve.'
+    : null;
+  return {
+    advisory: true,
+    fireMode,
+    note: notes.join(' '),
+    fireTuCost: fireTu,
+    fireTuCostUnavailable,
+    turretFacingDiffersFromHull: turretDiffersFromHull,
+    facingTuStepsEstimated: facing.steps,
+    facingTuEstimate: facingTu,
+    facingStepsUncertainty: facing.uncertainty,
+    compositeMinTuEstimate: compositeMinTu,
+    compositeAffordableEstimate: compositeAffordable,
+    canAffordTuWithCurrentReservation: fireAction?.canAffordTuWithCurrentReservation,
+    ...(reservationNote ? { reactionReservationAdvisory: reservationNote } : {}),
+    ...(typeof tu === 'number' ? { exportTimeUnits: tu } : {}),
+  };
+}
+
 function buildDirectedFireCompositeHint(actor, target, fireTuCost) {
   const facing = estimateDirectedFireFacing(actor, target);
   const fireTu = typeof fireTuCost === 'number' ? fireTuCost : null;
@@ -212,7 +264,9 @@ module.exports = {
   buildMovePlanningHint,
   buildHwpMovePlanningHint,
   buildHwpTurnPlanningHint,
+  buildHwpFirePlanningHint,
   HWP_TURN_PARTS,
+  estimateHwpTurnFacing,
   buildTurnFacePlanningHint,
   buildDirectedFireCompositeHint,
 };

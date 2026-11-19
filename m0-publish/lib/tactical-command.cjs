@@ -31,6 +31,7 @@ const {
   buildDirectedFireCompositeHint,
   buildTurnFacePlanningHint,
   buildHwpTurnPlanningHint,
+  buildHwpFirePlanningHint,
   HWP_TURN_PARTS,
 } = require('./tu-composite-advisory.cjs');
 
@@ -39,6 +40,7 @@ const RESULT_SCHEMA_VERSION = 1;
 const COMMAND_TYPE_MOVE = 'MOVE';
 const COMMAND_TYPE_HWP_MOVE = 'HWP_MOVE';
 const COMMAND_TYPE_HWP_TURN = 'HWP_TURN';
+const COMMAND_TYPE_HWP_FIRE = 'HWP_FIRE';
 const COMMAND_TYPE_KNEEL = 'KNEEL';
 const COMMAND_TYPE_STAND = 'STAND';
 const COMMAND_TYPE_SNAP_SHOT = 'SNAP_SHOT';
@@ -123,6 +125,17 @@ const COMMAND_KEYS_COMMON = new Set([
 const COMMAND_KEYS_MOVE = new Set([...COMMAND_KEYS_COMMON, 'destination']);
 const COMMAND_KEYS_HWP_MOVE = new Set([...COMMAND_KEYS_COMMON, 'destination']);
 const COMMAND_KEYS_HWP_TURN = new Set([...COMMAND_KEYS_COMMON, 'target', 'turn_part']);
+const COMMAND_KEYS_HWP_FIRE = new Set([
+  ...COMMAND_KEYS_COMMON,
+  'target',
+  'fire_mode',
+  'weapon_battle_item_id',
+]);
+const HWP_FIRE_MODES = new Set(['snap', 'aimed']);
+const HWP_FIRE_MODE_ACTION_IDS = {
+  snap: 'snap',
+  aimed: 'aimed',
+};
 const COMMAND_KEYS_KNEEL = new Set([...COMMAND_KEYS_COMMON]);
 const COMMAND_KEYS_STAND = new Set([...COMMAND_KEYS_COMMON]);
 const COMMAND_KEYS_TURN_FACE = new Set([...COMMAND_KEYS_COMMON, 'target']);
@@ -269,6 +282,28 @@ function parseHwpTurnCommand(raw) {
   return {
     ...binding,
     turnPart: raw.turn_part,
+    target,
+  };
+}
+
+function parseHwpFireCommand(raw) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === COMMAND_TYPE_HWP_FIRE, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, COMMAND_KEYS_HWP_FIRE);
+  assert(typeof raw.fire_mode === 'string', 'fire_mode required');
+  assert(HWP_FIRE_MODES.has(raw.fire_mode), 'fire_mode must be "snap" or "aimed"');
+  assert(
+    Number.isInteger(raw.weapon_battle_item_id) && raw.weapon_battle_item_id >= 0,
+    'weapon_battle_item_id must be a non-negative integer',
+  );
+  const target = parseCoordinateObject(raw.target, 'target');
+  const binding = parseBindingFields(raw);
+  return {
+    ...binding,
+    fireMode: raw.fire_mode,
+    weaponBattleItemId: raw.weapon_battle_item_id,
     target,
   };
 }
@@ -1482,6 +1517,9 @@ function parseTacticalCommand(raw) {
   if (raw.command_type === COMMAND_TYPE_HWP_TURN) {
     return parseHwpTurnCommand(raw);
   }
+  if (raw.command_type === COMMAND_TYPE_HWP_FIRE) {
+    return parseHwpFireCommand(raw);
+  }
   if (raw.command_type === COMMAND_TYPE_KNEEL) {
     return parseKneelCommand(raw);
   }
@@ -1595,6 +1633,63 @@ function validateHwpActorListedInPlayerHwps(command, options = {}) {
     'binding must report hwpMoveExecutionSupported for HWP_MOVE publish validation');
 }
 
+function findHwpFixedWeapon(actor, weaponBattleItemId) {
+  const obs = actor?.friendlyHwpObservationV1;
+  const weapons = obs?.fixedWeapons;
+  if (!Array.isArray(weapons)) {
+    return null;
+  }
+  const matches = weapons.filter((w) => w && w.battleItemId === weaponBattleItemId);
+  if (matches.length !== 1) {
+    return null;
+  }
+  return matches[0];
+}
+
+function findHwpFireActionOnWeapon(weapon, fireMode) {
+  const actionId = HWP_FIRE_MODE_ACTION_IDS[fireMode];
+  if (!actionId || !weapon || !Array.isArray(weapon.actionCosts)) {
+    return null;
+  }
+  return weapon.actionCosts.find((entry) => entry && entry.id === actionId) || null;
+}
+
+function assertHwpFixedWeaponHasFireableAmmo(weapon) {
+  assert(weapon, 'fixed weapon required');
+  const hasMagazineFields = weapon.nestedAmmo != null || weapon.loaded != null
+    || weapon.noMagazineInserted === true || weapon.empty === true;
+  if (!hasMagazineFields) {
+    return;
+  }
+  if (weapon.noMagazineInserted === true) {
+    throw new ValidationError('fixed weapon has no magazine inserted');
+  }
+  if (weapon.empty === true) {
+    throw new ValidationError('fixed weapon is empty at export');
+  }
+  if (weapon.nestedAmmo && weapon.nestedAmmo.rounds === 0) {
+    throw new ValidationError('fixed weapon magazine has no rounds');
+  }
+  if (weapon.loaded && weapon.loaded.rounds === 0) {
+    throw new ValidationError('fixed weapon has no rounds loaded');
+  }
+}
+
+function validateHwpActorListedForHwpFire(command, options = {}) {
+  if (!options || !options.commandBinding) {
+    return;
+  }
+  const binding = options.commandBinding;
+  assert(Array.isArray(binding.player_hwps), 'commandBinding.player_hwps required for HWP_FIRE');
+  const listed = binding.player_hwps.find((h) => h && h.id === command.actor_unit_id);
+  assert(listed, 'actor_unit_id must be listed in commandBinding.player_hwps');
+  assert(listed.controlMode === 'ai', 'HWP must be AI-owned in commandBinding for HWP_FIRE');
+  assert(listed.commandExecutionSupported === false,
+    'binding must keep HWP commandExecutionSupported false');
+  assert(listed.hwpFireExecutionSupported === true,
+    'binding must report hwpFireExecutionSupported for HWP_FIRE publish validation');
+}
+
 function validateHwpActorListedForHwpTurn(command, options = {}) {
   if (!options || !options.commandBinding) {
     return;
@@ -1674,6 +1769,41 @@ function validateHwpMoveAgainstSnapshot(command, tactical, snapshotSha256Lower, 
 
 function isHwpTurnCommandType(commandType) {
   return commandType === COMMAND_TYPE_HWP_TURN;
+}
+
+function isHwpFireCommandType(commandType) {
+  return commandType === COMMAND_TYPE_HWP_FIRE;
+}
+
+function validateHwpFireAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  const parsed = parseHwpFireCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  assert(command.target.x < tactical.map.width
+    && command.target.y < tactical.map.height
+    && command.target.z < tactical.map.depth, 'target out of map bounds');
+  const actor = validateHwpActorAgainstSnapshot(command, tactical);
+  validateHwpActorListedForHwpFire(command, options);
+  const weapon = findHwpFixedWeapon(actor, parsed.weaponBattleItemId);
+  assert(weapon, 'weapon_battle_item_id must match exactly one fixed weapon on HWP actor');
+  assertHwpFixedWeaponHasFireableAmmo(weapon);
+  const fireAction = findHwpFireActionOnWeapon(weapon, parsed.fireMode);
+  assert(fireAction, `fixed weapon does not support ${parsed.fireMode} fire mode at export`);
+  assert(fireAction.usable !== false, 'fire mode not usable for weapon or ammunition');
+  assert(fireAction.canAffordTu !== false, 'insufficient TU for fire mode (fire TU only)');
+  const fireTuCost = typeof fireAction.tuCost === 'number' ? fireAction.tuCost : null;
+  const planningHint = buildHwpFirePlanningHint(actor, parsed.target, parsed.fireMode, {
+    fireTuCost,
+    fireAction,
+  });
+  return {
+    snapshotId: computeSnapshotId(tactical),
+    actor,
+    target: parsed.target,
+    fireMode: parsed.fireMode,
+    weaponBattleItemId: parsed.weaponBattleItemId,
+    weapon,
+    planningHint,
+  };
 }
 
 function validateHwpTurnAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
@@ -2066,6 +2196,9 @@ function validateTacticalCommandAgainstSnapshot(command, tactical, snapshotSha25
   if (command && command.command_type === COMMAND_TYPE_HWP_TURN) {
     return validateHwpTurnAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
   }
+  if (command && command.command_type === COMMAND_TYPE_HWP_FIRE) {
+    return validateHwpFireAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
   if (command && command.command_type === COMMAND_TYPE_KNEEL) {
     return validateKneelAgainstSnapshot(command, tactical, snapshotSha256Lower);
   }
@@ -2188,6 +2321,8 @@ module.exports = {
   COMMAND_TYPE_MOVE,
   COMMAND_TYPE_HWP_MOVE,
   COMMAND_TYPE_HWP_TURN,
+  COMMAND_TYPE_HWP_FIRE,
+  HWP_FIRE_MODES,
   COMMAND_TYPE_KNEEL,
   COMMAND_TYPE_STAND,
   COMMAND_TYPE_SNAP_SHOT,
@@ -2227,6 +2362,7 @@ module.exports = {
   parseMoveCommand,
   parseHwpMoveCommand,
   parseHwpTurnCommand,
+  parseHwpFireCommand,
   parseKneelCommand,
   parseStandCommand,
   parseTurnFaceCommand,
@@ -2258,11 +2394,13 @@ module.exports = {
   isTurnFaceCommandType,
   isHwpMoveCommandType,
   isHwpTurnCommandType,
+  isHwpFireCommandType,
   parseTacticalCommand,
   commandDigest,
   validateMoveAgainstSnapshot,
   validateHwpMoveAgainstSnapshot,
   validateHwpTurnAgainstSnapshot,
+  validateHwpFireAgainstSnapshot,
   validateKneelAgainstSnapshot,
   validateStandAgainstSnapshot,
   validateTurnFaceAgainstSnapshot,

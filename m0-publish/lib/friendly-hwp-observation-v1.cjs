@@ -93,6 +93,7 @@ const WEAPON_KEYS = new Set([
 ]);
 
 const LOADED_KEYS = new Set(['ammoType', 'rounds', 'battleItemId', 'researchUsable']);
+const NESTED_AMMO_KEYS = new Set(['battleItemId', 'ammoType', 'rounds', 'researchUsable']);
 
 function validateFacingBlock(raw, label) {
   assert(isPlainObject(raw), `${label} must be an object`);
@@ -136,6 +137,63 @@ function validateLoadedBlock(raw, label) {
   return loaded;
 }
 
+function validateNestedAmmo(raw, label) {
+  assert(isPlainObject(raw), `${label} must be an object`);
+  for (const key of Object.keys(raw)) {
+    if (!NESTED_AMMO_KEYS.has(key)) throw new ValidationError(`${label} unknown field: ${key}`);
+  }
+  assert(Object.prototype.hasOwnProperty.call(raw, 'battleItemId'), `${label}.battleItemId required`);
+  assert(Object.prototype.hasOwnProperty.call(raw, 'ammoType'), `${label}.ammoType required`);
+  assert(Object.prototype.hasOwnProperty.call(raw, 'rounds'), `${label}.rounds required`);
+  const out = {
+    battleItemId: requireInt(raw.battleItemId, `${label}.battleItemId`, BATTLE_ITEM_ID_BOUNDS),
+    ammoType: requireString(raw.ammoType, `${label}.ammoType`, { maxLength: 128 }),
+    rounds: requireInt(raw.rounds, `${label}.rounds`, { min: 0, allowNegative: false }),
+  };
+  if (Object.prototype.hasOwnProperty.call(raw, 'researchUsable')) {
+    out.researchUsable = requireBool(raw.researchUsable, `${label}.researchUsable`);
+  }
+  return out;
+}
+
+function assertFixedWeaponFieldSemantics(weapon, label, raw) {
+  const bt = weapon.battleType;
+  if (bt !== BT_FIREARM) {
+    return;
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'empty')) {
+    assert(bt === BT_FIREARM, `${label}.empty is only valid on firearms`);
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'noMagazineInserted')) {
+    assert(!Object.prototype.hasOwnProperty.call(raw, 'loaded'), `${label} must not combine loaded with noMagazineInserted`);
+    assert(!Object.prototype.hasOwnProperty.call(raw, 'nestedAmmo'), `${label} must not combine nestedAmmo with noMagazineInserted`);
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'nestedAmmo')) {
+    assert(!Object.prototype.hasOwnProperty.call(raw, 'noMagazineInserted'), `${label} must not combine nestedAmmo with noMagazineInserted`);
+    if (Object.prototype.hasOwnProperty.call(raw, 'empty') && raw.empty === true) {
+      assert(
+        raw.nestedAmmo && raw.nestedAmmo.rounds === 0,
+        `${label}.empty true with nestedAmmo requires a dry magazine (nestedAmmo.rounds 0)`,
+      );
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'empty') && raw.empty === true) {
+    assert(
+      Object.prototype.hasOwnProperty.call(raw, 'loaded'),
+      `${label}.empty true requires loaded (include rounds 0 for dry magazine) or use noMagazineInserted for no magazine`,
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(raw, 'loaded')) {
+    if (raw.loaded && raw.loaded.rounds === 0) {
+      assert(Object.prototype.hasOwnProperty.call(raw, 'empty') && raw.empty === true,
+        `${label}.loaded with 0 rounds requires empty true`);
+    }
+    if (raw.loaded && raw.loaded.rounds > 0) {
+      assert(!Object.prototype.hasOwnProperty.call(raw, 'empty'), `${label} must not include empty when loaded has rounds`);
+    }
+  }
+}
+
 function validateFixedWeapon(raw, label) {
   assert(isPlainObject(raw), `${label} must be an object`);
   for (const key of Object.keys(raw)) {
@@ -164,6 +222,10 @@ function validateFixedWeapon(raw, label) {
     assert(Array.isArray(raw.actionCosts), `${label}.actionCosts must be an array`);
     weapon.actionCosts = raw.actionCosts;
   }
+  if (Object.prototype.hasOwnProperty.call(raw, 'nestedAmmo')) {
+    weapon.nestedAmmo = validateNestedAmmo(raw.nestedAmmo, `${label}.nestedAmmo`);
+  }
+  assertFixedWeaponFieldSemantics(weapon, label, raw);
   return weapon;
 }
 

@@ -118,7 +118,7 @@ function buildCommandBinding(tactical, snapshotSha256Lower, options = {}) {
     ownership_note: 'All soldiers default to human control locally. Remote commands cannot assign AI; owner must set companion-soldier-control.json.',
     player_hwps_note:
       'Friendly HWPs are never listed in player_soldiers. '
-      + 'commandExecutionSupported remains false globally for HWPs; hwpMoveExecutionSupported / hwpTurnExecutionSupported report per-type relay capability; '
+      + 'commandExecutionSupported remains false globally for HWPs; hwpMoveExecutionSupported / hwpTurnExecutionSupported / hwpFireExecutionSupported report per-type relay capability (FIRE defaults false until owner gate flip); '
       + 'controlMode reflects companion-soldier-control.json hwp_assignments when the control mirror is available.',
     player_soldiers_tu_note:
       'timeUnits is command-spendable TU only when set to a non-negative integer. '
@@ -290,6 +290,45 @@ function composeHwpTurnCommand(binding, { commandId, actorUnitId, target, turnPa
     command_type: 'HWP_TURN',
     actor_unit_id: actorUnitId,
     turn_part: turnPart,
+    target: { x: target.x, y: target.y, z: target.z },
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
+/**
+ * HWP directed fire (S5-1a): map target + fire_mode + fixed weapon battle item id.
+ */
+function composeHwpFireCommand(binding, { commandId, actorUnitId, target, fireMode, weaponBattleItemId }) {
+  const b = parseCommandBinding(binding);
+  assert(b.schema_version >= 2, 'HWP_FIRE requires commandBinding schema v2 with player_hwps');
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'HWP_FIRE actor must be a friendly HWP unit id');
+  assert(fireMode === 'snap' || fireMode === 'aimed', 'fireMode must be "snap" or "aimed"');
+  assert(Number.isInteger(weaponBattleItemId) && weaponBattleItemId >= 0, 'weaponBattleItemId required');
+  assert(target && Number.isInteger(target.x), 'target required');
+  assert(!b.player_soldiers.some((s) => s.id === actorUnitId),
+    'HWP_FIRE actor must not be listed in player_soldiers');
+  const hwp = (b.player_hwps ?? []).find((h) => h.id === actorUnitId);
+  assert(hwp, 'actorUnitId must be a listed player_hwp');
+  assert(hwp.controlMode === 'ai', 'HWP must be AI-owned in binding for remote HWP_FIRE');
+  assert(target.x >= 0 && target.x < b.map.width, 'target.x out of map');
+  assert(target.y >= 0 && target.y < b.map.height, 'target.y out of map');
+  assert(target.z >= 0 && target.z < b.map.depth, 'target.z out of map');
+  const fixedWeapons = hwp.friendlyHwpObservationV1?.fixedWeapons ?? [];
+  const matches = fixedWeapons.filter((w) => w && w.battleItemId === weaponBattleItemId);
+  assert(matches.length === 1, 'weapon_battle_item_id must match exactly one fixed weapon on HWP');
+
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: 'HWP_FIRE',
+    actor_unit_id: actorUnitId,
+    fire_mode: fireMode,
+    weapon_battle_item_id: weaponBattleItemId,
     target: { x: target.x, y: target.y, z: target.z },
     snapshot_sha256: b.snapshot_sha256,
     session_id: b.session_id,
@@ -760,6 +799,7 @@ module.exports = {
   composeMoveCommand,
   composeHwpMoveCommand,
   composeHwpTurnCommand,
+  composeHwpFireCommand,
   composeKneelCommand,
   composeStandCommand,
   composeTurnFaceCommand,
