@@ -13,10 +13,10 @@ const SCHEMA_VERSION = 1;
  * `openxcom.exe` and commit together with any doc updates — do not deploy a build whose
  * hash is not reflected here.
  *
- * Verified Win32 Release build (ASTER-M1-WP-TURN-VISUAL-03: TURN_FACE sprite
- * cacheUnit refresh after sync turn; build-s4j-rc; prior pin 8b697b9d… TURN-1D).
+ * Verified Win32 Release build (ASTER-M1-HWP-S3B live prep: HWP_MOVE relay
+ * terminal lifecycle + final_direction; build-s4j-rc; prior pin 1b93b14f… VISUAL-03).
  */
-const VERIFIED_BUILD_SHA256 = '1b93b14fe0626df059e4316fd56097681b593f2cd2afdd843f10f3bb963f4c85';
+const VERIFIED_BUILD_SHA256 = 'ae36e683e0801f12edf3eb0685edaf55e7a680885f744b8b6f0d1a7ef6c3d5ab';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 

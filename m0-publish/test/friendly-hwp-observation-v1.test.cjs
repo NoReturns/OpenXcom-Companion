@@ -8,7 +8,11 @@ const YAML = require('yaml');
 
 const { loadAndValidateSnapshotFromText } = require('../lib/tactical-publish.cjs');
 const { buildCommandBinding } = require('../lib/command-binding.cjs');
-const { listFriendlyHwpObservations } = require('../lib/friendly-hwp-observation-v1.cjs');
+const {
+  listFriendlyHwpObservations,
+  validateFriendlyHwpObservationV1,
+  ValidationError,
+} = require('../lib/friendly-hwp-observation-v1.cjs');
 const {
   buildUnitStateBrief,
   isFriendlyHwpUnit,
@@ -17,6 +21,7 @@ const {
 
 const FIXTURE_SPARSE = path.join(__dirname, 'fixtures', 'friendly-hwp-sparse-v5.yaml');
 const FIXTURE_OBS = path.join(__dirname, 'fixtures', 'friendly-hwp-observation-v1.yaml');
+const FIXTURE_BATTLE_ITEM_ID_ZERO = path.join(__dirname, 'fixtures', 'friendly-hwp-battle-item-id-zero.yaml');
 
 describe('HWP-S1 friendlyHwpObservationV1', () => {
   it('preserves sparse v5 fixture without observation extension', () => {
@@ -48,6 +53,38 @@ describe('HWP-S1 friendlyHwpObservationV1', () => {
     const listed = listFriendlyHwpObservations(tactical);
     assert.equal(listed.length, 1);
     assert.equal(listed[0].unitId, 1_000_000);
+  });
+
+  it('accepts engine-low fixedWeapons battleItemId 0 through full snapshot validation', () => {
+    const text = fs.readFileSync(FIXTURE_BATTLE_ITEM_ID_ZERO, 'utf8');
+    const tactical = loadAndValidateSnapshotFromText(text, YAML);
+    const obs = tactical.units.find((u) => u.id === 1_000_000).friendlyHwpObservationV1;
+    assert.equal(obs.fixedWeapons[0].battleItemId, 0);
+    assert.equal(obs.fixedWeapons[0].loaded.battleItemId, 1);
+  });
+
+  it('accepts positive fixedWeapons battleItemId (pinned observation fixture)', () => {
+    const text = fs.readFileSync(FIXTURE_OBS, 'utf8');
+    const tactical = loadAndValidateSnapshotFromText(text, YAML);
+    const obs = tactical.units.find((u) => u.id === 1_000_000).friendlyHwpObservationV1;
+    assert.equal(obs.fixedWeapons[0].battleItemId, 9001);
+    assert.equal(obs.fixedWeapons[0].loaded.battleItemId, 9002);
+  });
+
+  it('rejects negative fixedWeapons battleItemId', () => {
+    const base = {
+      schemaVersion: 1,
+      unitId: 1_000_000,
+      hwpUnitType: 'STR_TANK_CANNON',
+      position: { x: 0, y: 0, z: 0 },
+      timeUnits: 10,
+      kneeled: false,
+      fixedWeapons: [{ battleItemId: -1, itemType: 'STR_TANK_CANNON', battleType: 1 }],
+    };
+    assert.throws(
+      () => validateFriendlyHwpObservationV1(base, 0),
+      (err) => err instanceof ValidationError && /battleItemId/.test(err.message),
+    );
   });
 
   it('unitStateBrief skips friendly HWP rows (roster exceptions only)', () => {

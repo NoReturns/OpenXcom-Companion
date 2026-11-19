@@ -209,11 +209,12 @@ describe('M1-HWP-S3B HWP_MOVE Node contract', () => {
     );
   });
 
-  it('binding keeps commandExecutionSupported false for HWPs', () => {
+  it('binding keeps commandExecutionSupported false but reports HWP_MOVE capability', () => {
     const tactical = tacticalFixture();
     const binding = bindingForAiHwp(tactical);
     const hwp = binding.player_hwps.find((h) => h.id === 1_000_000);
     assert.equal(hwp.commandExecutionSupported, false);
+    assert.equal(hwp.hwpMoveExecutionSupported, true);
   });
 
   it('soldier MOVE regression unchanged', () => {

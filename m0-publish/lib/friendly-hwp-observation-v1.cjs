@@ -48,6 +48,10 @@ const FACING_LABELS = new Set([
 
 const BT_FIREARM = 1;
 const BT_AMMO = 2;
+/** Same upper bound as roster equipment in tactical-publish.cjs */
+const MAX_BATTLE_ITEM_ID = 2147483647;
+
+const BATTLE_ITEM_ID_BOUNDS = { min: 0, max: MAX_BATTLE_ITEM_ID, allowNegative: false };
 
 const OBSERVATION_KEYS = new Set([
   'schemaVersion',
@@ -124,7 +128,7 @@ function validateLoadedBlock(raw, label) {
     rounds: requireInt(raw.rounds, `${label}.rounds`, { min: 0, allowNegative: false }),
   };
   if (Object.prototype.hasOwnProperty.call(raw, 'battleItemId')) {
-    loaded.battleItemId = requireInt(raw.battleItemId, `${label}.battleItemId`, { min: 1, allowNegative: false });
+    loaded.battleItemId = requireInt(raw.battleItemId, `${label}.battleItemId`, BATTLE_ITEM_ID_BOUNDS);
   }
   if (Object.prototype.hasOwnProperty.call(raw, 'researchUsable')) {
     loaded.researchUsable = requireBool(raw.researchUsable, `${label}.researchUsable`);
@@ -140,7 +144,7 @@ function validateFixedWeapon(raw, label) {
   const battleType = requireInt(raw.battleType, `${label}.battleType`, { min: 0, max: 11, allowNegative: false });
   assert(battleType === BT_FIREARM || battleType === BT_AMMO, `${label}.battleType must be firearm or HWP weapon type`);
   const weapon = {
-    battleItemId: requireInt(raw.battleItemId, `${label}.battleItemId`, { min: 1, allowNegative: false }),
+    battleItemId: requireInt(raw.battleItemId, `${label}.battleItemId`, BATTLE_ITEM_ID_BOUNDS),
     itemType: requireString(raw.itemType, `${label}.itemType`, { maxLength: 128 }),
     battleType,
   };

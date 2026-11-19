@@ -1566,7 +1566,9 @@ function validateHwpActorListedInPlayerHwps(command, options = {}) {
   assert(listed, 'actor_unit_id must be listed in commandBinding.player_hwps');
   assert(listed.controlMode === 'ai', 'HWP must be AI-owned in commandBinding for HWP_MOVE');
   assert(listed.commandExecutionSupported === false,
-    'binding must keep HWP commandExecutionSupported false until engine execution is enabled');
+    'binding must keep HWP commandExecutionSupported false for non-MOVE HWP types');
+  assert(listed.hwpMoveExecutionSupported === true,
+    'binding must report hwpMoveExecutionSupported for HWP_MOVE publish validation');
 }
 
 function validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower) {

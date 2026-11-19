@@ -118,7 +118,7 @@ function buildCommandBinding(tactical, snapshotSha256Lower, options = {}) {
     ownership_note: 'All soldiers default to human control locally. Remote commands cannot assign AI; owner must set companion-soldier-control.json.',
     player_hwps_note:
       'Friendly HWPs are never listed in player_soldiers. '
-      + 'commandExecutionSupported is always false until a future HWP command work package; '
+      + 'commandExecutionSupported remains false for non-MOVE HWP types; hwpMoveExecutionSupported reports HWP_MOVE relay capability; '
       + 'controlMode reflects companion-soldier-control.json hwp_assignments when the control mirror is available.',
     player_soldiers_tu_note:
       'timeUnits is command-spendable TU only when set to a non-negative integer. '
@@ -136,7 +136,10 @@ function parseCommandBinding(raw) {
     for (const hwp of raw.player_hwps) {
       assert(hwp && typeof hwp === 'object', 'player_hwps row must be object');
       assert(Number.isInteger(hwp.id) && hwp.id >= 1_000_000, 'player_hwps id must be friendly HWP');
-      assert(hwp.commandExecutionSupported === false, 'HWP command execution not supported in binding v2');
+      assert(hwp.commandExecutionSupported === false, 'HWP global command execution flag remains false in binding v2');
+      if (Object.prototype.hasOwnProperty.call(hwp, 'hwpMoveExecutionSupported')) {
+        assert(typeof hwp.hwpMoveExecutionSupported === 'boolean', 'hwpMoveExecutionSupported must be boolean when present');
+      }
     }
   }
   assert(typeof raw.snapshot_sha256 === 'string' && SNAPSHOT_SHA256_RE.test(raw.snapshot_sha256),
