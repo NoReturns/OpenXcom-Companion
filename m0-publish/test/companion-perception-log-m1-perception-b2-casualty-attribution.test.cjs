@@ -132,6 +132,64 @@ describe('M1 PERCEPTION-B2 combat casualty attribution', () => {
     assert.throws(() => parseAndValidate(raw), /battle-unit victim.*origin invalid/);
   });
 
+  it('accepts friendly HWP attributed actor when victim absent from units[] (S5 live kill shape)', () => {
+    const base = v4Root();
+    const units = [
+      ...base.units.filter((u) => u.id !== 1_000_000),
+      {
+        id: 1_000_000,
+        faction: 0,
+        originalFaction: 0,
+        position: [25, 38, 0],
+        friendlyHwpObservationV1: {
+          schemaVersion: 1,
+          unitId: 1_000_000,
+          hwpUnitType: 'STR_TANK_CANNON',
+          position: { x: 25, y: 38, z: 0 },
+          timeUnits: 15,
+          kneeled: false,
+          fixedWeapons: [{ battleItemId: 0, itemType: 'STR_TANK_CANNON', battleType: 1 }],
+        },
+      },
+    ];
+    const raw = v4Root({
+      units,
+      perceptionLog: emptyPerceptionMeta([
+        attributionEvent({
+          seq: 1,
+          turn: 3,
+          subjectUnitId: 1_000_002,
+          attributedActorUnitId: 1_000_000,
+          position: [28, 37, 0],
+        }),
+      ]),
+    });
+    const tactical = parseAndValidate(raw);
+    const ev = tactical.perceptionLog.events[0];
+    assert.equal(ev.attributedActorUnitId, 1_000_000);
+    assert.equal(ev.subjectUnitId, 1_000_002);
+  });
+
+  it('rejects high-id attributed actor when row is not friendly HWP control', () => {
+    const raw = v4Root({
+      units: [
+        {
+          id: 1_000_099,
+          originalFaction: 0,
+          faction: 1,
+          position: [5, 5, 0],
+        },
+      ],
+      perceptionLog: emptyPerceptionMeta([
+        attributionEvent({
+          subjectUnitId: 1_000_002,
+          attributedActorUnitId: 1_000_099,
+        }),
+      ]),
+    });
+    assert.throws(() => parseAndValidate(raw), /attributed actor battle-unit origin invalid/);
+  });
+
   it('preserves B1 explosion without attribution fields', () => {
     const raw = v4Root({
       perceptionLog: emptyPerceptionMeta([

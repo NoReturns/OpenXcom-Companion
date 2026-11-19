@@ -628,6 +628,9 @@ function assertHistoricalPerceptionUnitRowWhenExported(unitId, unitById, index, 
     return;
   }
   if (unitId >= 1_000_000) {
+    if (isFriendlyHwpUnit(row)) {
+      return;
+    }
     assert(
       row.originalFaction === FACTION_HOSTILE || row.originalFaction === FACTION_NEUTRAL,
       `perceptionLog.events[${index}] ${roleLabel} battle-unit origin invalid`,
