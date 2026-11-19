@@ -4,6 +4,8 @@ const { SNAPSHOT_SHA256_RE } = require('./briefing-request.cjs');
 const { isFriendlyRosterSoldier } = require('./unit-state-brief.cjs');
 const { buildPlayerHwpBindingRows } = require('./hwp-command-binding.cjs');
 
+const MAX_ROSTER_UNIT_ID_EXCLUSIVE = 1_000_000;
+
 function isOnMapPlayerSoldierForBinding(unit) {
   return isFriendlyRosterSoldier(unit)
     && unit.battlefieldPlacement !== 'carried_in_inventory'
@@ -225,6 +227,8 @@ function composeMoveCommand(binding, { commandId, actorUnitId, destination }) {
   assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
   assert(Number.isInteger(actorUnitId) && actorUnitId > 0, 'actorUnitId required');
   assert(destination && Number.isInteger(destination.x), 'destination required');
+  assert(actorUnitId < MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'roster soldiers use MOVE; HWPs use HWP_MOVE with player_hwps binding');
   const soldier = b.player_soldiers.find((s) => s.id === actorUnitId);
   assert(soldier, 'actorUnitId must be a listed player_soldier');
   assert(destination.x >= 0 && destination.x < b.map.width, 'destination.x out of map');
@@ -235,6 +239,39 @@ function composeMoveCommand(binding, { commandId, actorUnitId, destination }) {
     schema_version: 1,
     command_id: commandId,
     command_type: 'MOVE',
+    actor_unit_id: actorUnitId,
+    destination: { x: destination.x, y: destination.y, z: destination.z },
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
+/**
+ * HWP movement contract (S3B): schema v1 envelope, actor listed in player_hwps with controlMode ai.
+ * Engine path/TU/footprint remain authoritative; no path promise in Node.
+ */
+function composeHwpMoveCommand(binding, { commandId, actorUnitId, destination }) {
+  const b = parseCommandBinding(binding);
+  assert(b.schema_version >= 2, 'HWP_MOVE requires commandBinding schema v2 with player_hwps');
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'HWP_MOVE actor must be a friendly HWP unit id');
+  assert(destination && Number.isInteger(destination.x), 'destination required');
+  assert(!b.player_soldiers.some((s) => s.id === actorUnitId),
+    'HWP_MOVE actor must not be listed in player_soldiers');
+  const hwp = (b.player_hwps ?? []).find((h) => h.id === actorUnitId);
+  assert(hwp, 'actorUnitId must be a listed player_hwp');
+  assert(hwp.controlMode === 'ai', 'HWP must be AI-owned in binding for remote HWP_MOVE');
+  assert(destination.x >= 0 && destination.x < b.map.width, 'destination.x out of map');
+  assert(destination.y >= 0 && destination.y < b.map.height, 'destination.y out of map');
+  assert(destination.z >= 0 && destination.z < b.map.depth, 'destination.z out of map');
+
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: 'HWP_MOVE',
     actor_unit_id: actorUnitId,
     destination: { x: destination.x, y: destination.y, z: destination.z },
     snapshot_sha256: b.snapshot_sha256,
@@ -675,6 +712,7 @@ module.exports = {
   buildCommandBinding,
   parseCommandBinding,
   composeMoveCommand,
+  composeHwpMoveCommand,
   composeKneelCommand,
   composeStandCommand,
   composeTurnFaceCommand,

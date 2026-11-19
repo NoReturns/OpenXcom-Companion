@@ -49,6 +49,18 @@ function estimateDirectedFireFacing(actor, target) {
   return { steps, facingTu: steps, uncertainty: null };
 }
 
+function buildHwpMovePlanningHint(actor) {
+  const tu = actor?.friendlyHwpObservationV1?.timeUnits ?? actor?.timeUnits;
+  return {
+    advisory: true,
+    note: 'Non-authoritative. Engine Pathfinding::calculate owns path legality, 2x2 footprint, '
+      + 'TU costs, doors, terrain, occupancy, and partial walk stops. Node validates binding and map bounds only.',
+    pathTuEstimateIncluded: false,
+    footprintEstimateIncluded: false,
+    ...(typeof tu === 'number' ? { exportTimeUnits: tu } : {}),
+  };
+}
+
 function buildMovePlanningHint(actor) {
   if (!actor || typeof actor.timeUnits !== 'number') {
     return { advisory: true, note: 'MOVE planning hint unavailable.' };
@@ -117,6 +129,7 @@ module.exports = {
   octagonalTurnSteps,
   estimateDirectedFireFacing,
   buildMovePlanningHint,
+  buildHwpMovePlanningHint,
   buildTurnFacePlanningHint,
   buildDirectedFireCompositeHint,
 };
