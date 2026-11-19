@@ -118,7 +118,7 @@ function buildCommandBinding(tactical, snapshotSha256Lower, options = {}) {
     ownership_note: 'All soldiers default to human control locally. Remote commands cannot assign AI; owner must set companion-soldier-control.json.',
     player_hwps_note:
       'Friendly HWPs are never listed in player_soldiers. '
-      + 'commandExecutionSupported remains false globally for HWPs; hwpMoveExecutionSupported / hwpTurnExecutionSupported / hwpFireExecutionSupported report per-type relay capability (FIRE defaults false until owner gate flip); '
+      + 'commandExecutionSupported remains false globally for HWPs; hwpMoveExecutionSupported / hwpTurnExecutionSupported / hwpFireExecutionSupported report per-type relay capability; '
       + 'controlMode reflects companion-soldier-control.json hwp_assignments when the control mirror is available.',
     player_soldiers_tu_note:
       'timeUnits is command-spendable TU only when set to a non-negative integer. '

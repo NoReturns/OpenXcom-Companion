@@ -286,7 +286,20 @@ describe('M1-HWP-S5 HWP_FIRE Node contract', () => {
     );
   });
 
-  it('binding reports hwpFireExecutionSupported false by default; gate rejects when off', () => {
+  it('binding reports hwpFireExecutionSupported true when production gate is on', () => {
+    const tactical = loadTactical();
+    const mirror = buildSoldierControlMirror(tactical, {
+      soldierControlFileJson: mixedControlJson({ soldierAi: [1], hwpAi: [HWP_CANNON_ID, HWP_LASER_ID] }),
+      ownershipBindingContext: { campaign_id: CAMPAIGN, tactical_battle_id: TACTICAL },
+    });
+    const binding = buildCommandBinding(tactical, DIGEST, { soldierControl: mirror });
+    const cannon = binding.player_hwps.find((h) => h.id === HWP_CANNON_ID);
+    const laser = binding.player_hwps.find((h) => h.id === HWP_LASER_ID);
+    assert.equal(cannon.hwpFireExecutionSupported, true);
+    assert.equal(laser.hwpFireExecutionSupported, true);
+  });
+
+  it('validate rejects publish when hwpFireExecutionSupported is false', () => {
     const tactical = loadTactical();
     const binding = bindingForAiHwp(tactical, undefined, { fireEnabled: false });
     const cannon = binding.player_hwps.find((h) => h.id === HWP_CANNON_ID);
