@@ -169,6 +169,39 @@ function composeStandCommand(binding, { commandId, actorUnitId }) {
   };
 }
 
+/**
+ * Turn in place: target tile sets facing bearing (native right-click turn), not movement.
+ */
+function composeTurnFaceCommand(binding, { commandId, actorUnitId, target }) {
+  const b = parseCommandBinding(binding);
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId > 0, 'actorUnitId required');
+  assert(target && Number.isInteger(target.x), 'target required');
+  const soldier = b.player_soldiers.find((s) => s.id === actorUnitId);
+  assert(soldier, 'actorUnitId must be a listed player_soldier');
+  assert(target.x >= 0 && target.x < b.map.width, 'target.x out of map');
+  assert(target.y >= 0 && target.y < b.map.height, 'target.y out of map');
+  assert(target.z >= 0 && target.z < b.map.depth, 'target.z out of map');
+  if (Array.isArray(soldier.position) && soldier.position.length === 3) {
+    const sameTile = target.x === soldier.position[0]
+      && target.y === soldier.position[1]
+      && target.z === soldier.position[2];
+    assert(!sameTile, 'target must differ from actor position (facing bearing)');
+  }
+
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: 'TURN_FACE',
+    actor_unit_id: actorUnitId,
+    target: { x: target.x, y: target.y, z: target.z },
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
 function composeMoveCommand(binding, { commandId, actorUnitId, destination }) {
   const b = parseCommandBinding(binding);
   assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
@@ -626,6 +659,7 @@ module.exports = {
   composeMoveCommand,
   composeKneelCommand,
   composeStandCommand,
+  composeTurnFaceCommand,
   composeSnapShotCommand,
   composeAutoShotCommand,
   composeAimedShotCommand,

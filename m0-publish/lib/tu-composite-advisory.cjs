@@ -67,6 +67,24 @@ function buildMovePlanningHint(actor) {
   };
 }
 
+function buildTurnFacePlanningHint(actor, target) {
+  const facing = estimateDirectedFireFacing(actor, target);
+  const facingTu = facing.steps != null ? facing.steps : null;
+  let turnAffordableEstimate = null;
+  if (typeof actor?.timeUnits === 'number' && facingTu != null) {
+    turnAffordableEstimate = actor.timeUnits >= facingTu;
+  }
+  return {
+    advisory: true,
+    note: 'Non-authoritative; engine UnitTurnBState charges up to 1 TU per facing step. '
+      + 'Door open on turn-to-tile is engine-only (not modeled in Node).',
+    facingTuStepsEstimated: facing.steps,
+    facingTuEstimate: facingTu,
+    facingStepsUncertainty: facing.uncertainty,
+    turnAffordableEstimate,
+  };
+}
+
 function buildDirectedFireCompositeHint(actor, target, fireTuCost) {
   const facing = estimateDirectedFireFacing(actor, target);
   const fireTu = typeof fireTuCost === 'number' ? fireTuCost : null;
@@ -99,5 +117,6 @@ module.exports = {
   octagonalTurnSteps,
   estimateDirectedFireFacing,
   buildMovePlanningHint,
+  buildTurnFacePlanningHint,
   buildDirectedFireCompositeHint,
 };

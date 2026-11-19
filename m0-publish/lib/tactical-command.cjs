@@ -26,6 +26,7 @@ const { readSnapshotByteBuffer, sha256HexLower } = require('./briefing-snapshot.
 const {
   buildMovePlanningHint,
   buildDirectedFireCompositeHint,
+  buildTurnFacePlanningHint,
 } = require('./tu-composite-advisory.cjs');
 
 const COMMAND_SCHEMA_VERSION = 1;
@@ -50,6 +51,9 @@ const COMMAND_TYPE_PAINKILLER = 'PAINKILLER';
 const COMMAND_TYPE_PSI_PANIC = 'PSI_PANIC';
 const COMMAND_TYPE_PSI_MIND_CONTROL = 'PSI_MIND_CONTROL';
 const COMMAND_TYPE_MELEE_ATTACK = 'MELEE_ATTACK';
+const COMMAND_TYPE_TURN_FACE = 'TURN_FACE';
+
+const TURN_FACE_COMMAND_TYPES = new Set([COMMAND_TYPE_TURN_FACE]);
 
 const MEDIKIT_COMMAND_TYPES = new Set([
   COMMAND_TYPE_HEAL,
@@ -112,6 +116,7 @@ const COMMAND_KEYS_COMMON = new Set([
 const COMMAND_KEYS_MOVE = new Set([...COMMAND_KEYS_COMMON, 'destination']);
 const COMMAND_KEYS_KNEEL = new Set([...COMMAND_KEYS_COMMON]);
 const COMMAND_KEYS_STAND = new Set([...COMMAND_KEYS_COMMON]);
+const COMMAND_KEYS_TURN_FACE = new Set([...COMMAND_KEYS_COMMON, 'target']);
 const COMMAND_KEYS_DIRECTED_FIRE = new Set([...COMMAND_KEYS_COMMON, 'target', 'active_hand']);
 const COMMAND_KEYS_PRIME = new Set([...COMMAND_KEYS_COMMON, 'active_hand', 'fuse_timer']);
 const COMMAND_KEYS_THROW = new Set([...COMMAND_KEYS_COMMON, 'target', 'active_hand']);
@@ -284,6 +289,20 @@ function parseStandCommand(raw) {
   assert(raw.command_type === COMMAND_TYPE_STAND, 'unsupported command_type');
   assertAllowedCommandKeys(raw, COMMAND_KEYS_STAND);
   return parseBindingFields(raw);
+}
+
+function parseTurnFaceCommand(raw) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === COMMAND_TYPE_TURN_FACE, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, COMMAND_KEYS_TURN_FACE);
+  const target = parseCoordinateObject(raw.target, 'target');
+  const binding = parseBindingFields(raw);
+  return {
+    ...binding,
+    target,
+  };
 }
 
 function parseCoordinateObject(raw, fieldName) {
@@ -634,6 +653,10 @@ function parseMeleeTacticalCommand(raw) {
 
 function isMeleeTacticalCommandType(commandType) {
   return MELEE_TACTICAL_COMMAND_TYPES.has(commandType);
+}
+
+function isTurnFaceCommandType(commandType) {
+  return TURN_FACE_COMMAND_TYPES.has(commandType);
 }
 
 /**
@@ -1407,6 +1430,9 @@ function parseTacticalCommand(raw) {
   if (raw.command_type === COMMAND_TYPE_STAND) {
     return parseStandCommand(raw);
   }
+  if (raw.command_type === COMMAND_TYPE_TURN_FACE) {
+    return parseTurnFaceCommand(raw);
+  }
   if (raw.command_type === COMMAND_TYPE_SNAP_SHOT) {
     return parseSnapShotCommand(raw);
   }
@@ -1505,6 +1531,44 @@ function validateStandAgainstSnapshot(command, tactical, snapshotSha256Lower) {
   validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
   const actor = validateActorAgainstSnapshot(command, tactical);
   return { snapshotId: computeSnapshotId(tactical), actor };
+}
+
+function validateTurnFaceActorEligibility(actor) {
+  assert(isFriendlyRosterSoldier(actor), 'actor must be a friendly roster soldier in snapshot');
+  assert(isCommandApplicableForBinding(actor), 'actor is not command-applicable at export');
+}
+
+function validateTurnFaceTargetBounds(command, tactical) {
+  assert(command.target.x < tactical.map.width
+    && command.target.y < tactical.map.height
+    && command.target.z < tactical.map.depth, 'target out of map bounds');
+}
+
+function assertTurnFaceTargetDiffersFromActor(command, actor) {
+  if (!Array.isArray(actor.position) || actor.position.length < 3) {
+    return;
+  }
+  const sameTile = command.target.x === actor.position[0]
+    && command.target.y === actor.position[1]
+    && command.target.z === actor.position[2];
+  assert(!sameTile, 'target must differ from actor position (facing bearing)');
+}
+
+function validateTurnFaceAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  const parsed = parseTurnFaceCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  const actor = validateActorAgainstSnapshot(command, tactical);
+  validateTurnFaceActorEligibility(actor);
+  validateActorListedInPlayerSoldiers(command, options);
+  validateTurnFaceTargetBounds(command, tactical);
+  assertTurnFaceTargetDiffersFromActor(command, actor);
+  const planningHint = buildTurnFacePlanningHint(actor, parsed.target);
+  return {
+    snapshotId: computeSnapshotId(tactical),
+    actor,
+    target: parsed.target,
+    planningHint,
+  };
 }
 
 function handCostsKey(activeHand) {
@@ -1825,6 +1889,9 @@ function validateTacticalCommandAgainstSnapshot(command, tactical, snapshotSha25
   if (command && command.command_type === COMMAND_TYPE_STAND) {
     return validateStandAgainstSnapshot(command, tactical, snapshotSha256Lower);
   }
+  if (command && command.command_type === COMMAND_TYPE_TURN_FACE) {
+    return validateTurnFaceAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
   if (command && command.command_type === COMMAND_TYPE_SNAP_SHOT) {
     return validateSnapShotAgainstSnapshot(command, tactical, snapshotSha256Lower);
   }
@@ -1955,6 +2022,8 @@ module.exports = {
   COMMAND_TYPE_PSI_PANIC,
   COMMAND_TYPE_PSI_MIND_CONTROL,
   COMMAND_TYPE_MELEE_ATTACK,
+  COMMAND_TYPE_TURN_FACE,
+  TURN_FACE_COMMAND_TYPES,
   MEDIKIT_COMMAND_TYPES,
   MEDIKIT_USE_ACTION_ID,
   PSI_PANIC_COMMAND_TYPES,
@@ -1973,6 +2042,7 @@ module.exports = {
   parseMoveCommand,
   parseKneelCommand,
   parseStandCommand,
+  parseTurnFaceCommand,
   parseSnapShotCommand,
   parseAutoShotCommand,
   parseAimedShotCommand,
@@ -1998,11 +2068,13 @@ module.exports = {
   parseMeleeAttackCommand,
   parseMeleeTacticalCommand,
   isMeleeTacticalCommandType,
+  isTurnFaceCommandType,
   parseTacticalCommand,
   commandDigest,
   validateMoveAgainstSnapshot,
   validateKneelAgainstSnapshot,
   validateStandAgainstSnapshot,
+  validateTurnFaceAgainstSnapshot,
   validateSnapShotAgainstSnapshot,
   validateAutoShotAgainstSnapshot,
   validateAimedShotAgainstSnapshot,
