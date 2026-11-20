@@ -1,0 +1,69 @@
+# Regression: schema v5 live export nests actionCosts under xcomControlledHostileObservationV1 only.
+schemaVersion: 5
+turn: 3
+side: 0
+selectedUnitId: 1000042
+map:
+  width: 40
+  height: 40
+  depth: 1
+terrain:
+  memoryNote: MC sidecar actionCosts nested observation fixture.
+  tiles:
+    - p: [3, 10, 0]
+      disc: 4
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+    - p: [3, 12, 0]
+      disc: 4
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+units:
+  - id: 1000042
+    faction: 0
+    originalFaction: 1
+    position: [3, 12, 0]
+    kneeled: false
+    observedUnitType: STR_SECTOID_SOLDIER
+    displayLabel: Sectoid Soldier
+    xcomControlledHostileObservationV1:
+      schemaVersion: 1
+      unitId: 1000042
+      unitType: STR_SECTOID_SOLDIER
+      originalFaction: 1
+      faction: 0
+      position:
+        x: 3
+        y: 12
+        z: 0
+      health: 30
+      activeHand: STR_RIGHT_HAND
+      actionCosts:
+        hands:
+          right:
+            itemType: STR_HEAVY_PLASMA
+            actions:
+              - id: snap
+                tuCost: 16
+                usable: true
+                canAffordTu: true
+              - id: auto
+                tuCost: 18
+                usable: true
+                canAffordTu: true
+              - id: aimed
+                tuCost: 32
+                usable: true
+                canAffordTu: true
+eventLog:
+  sessionId: a1b2c3d4e5f6789012345678abcdef01
+  oldestSeq: 0
+  latestSeq: 0
+  droppedCount: 0
+  events: []

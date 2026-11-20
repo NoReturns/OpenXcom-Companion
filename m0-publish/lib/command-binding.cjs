@@ -524,6 +524,54 @@ function composeMcStandCommand(binding, { commandId, actorUnitId }) {
   };
 }
 
+function composeMcDirectedFireCommand(binding, commandType, { commandId, actorUnitId, target, activeHand }) {
+  const b = parseCommandBinding(binding);
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'MC fire actor must be a mind-controlled hostile unit id');
+  assert(typeof activeHand === 'string' && (activeHand === 'STR_LEFT_HAND' || activeHand === 'STR_RIGHT_HAND'),
+    'activeHand required');
+  assert(target && Number.isInteger(target.x), 'target required');
+  assert(!b.player_soldiers.some((s) => s.id === actorUnitId),
+    'MC fire actor must not be listed in player_soldiers');
+  const mc = findListedAiMcHostile(b, actorUnitId);
+  if (commandType === 'MC_SNAP_SHOT') {
+    assert(mc.mcSnapShotExecutionSupported === true, 'binding must report mcSnapShotExecutionSupported');
+  } else if (commandType === 'MC_AUTO_SHOT') {
+    assert(mc.mcAutoShotExecutionSupported === true, 'binding must report mcAutoShotExecutionSupported');
+  } else if (commandType === 'MC_AIMED_SHOT') {
+    assert(mc.mcAimedShotExecutionSupported === true, 'binding must report mcAimedShotExecutionSupported');
+  }
+  assert(target.x >= 0 && target.x < b.map.width, 'target.x out of map');
+  assert(target.y >= 0 && target.y < b.map.height, 'target.y out of map');
+  assert(target.z >= 0 && target.z < b.map.depth, 'target.z out of map');
+
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: commandType,
+    actor_unit_id: actorUnitId,
+    active_hand: activeHand,
+    target: { x: target.x, y: target.y, z: target.z },
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
+function composeMcSnapShotCommand(binding, options) {
+  return composeMcDirectedFireCommand(binding, 'MC_SNAP_SHOT', options);
+}
+
+function composeMcAutoShotCommand(binding, options) {
+  return composeMcDirectedFireCommand(binding, 'MC_AUTO_SHOT', options);
+}
+
+function composeMcAimedShotCommand(binding, options) {
+  return composeMcDirectedFireCommand(binding, 'MC_AIMED_SHOT', options);
+}
+
 function composeDirectedFireCommand(binding, commandType, { commandId, actorUnitId, target, activeHand }) {
   const b = parseCommandBinding(binding);
   assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
@@ -960,6 +1008,9 @@ module.exports = {
   composeMcTurnFaceCommand,
   composeMcKneelCommand,
   composeMcStandCommand,
+  composeMcSnapShotCommand,
+  composeMcAutoShotCommand,
+  composeMcAimedShotCommand,
   composeHwpTurnCommand,
   composeHwpFireCommand,
   composeHwpGuidedLaunchCommand,

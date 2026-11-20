@@ -46,6 +46,9 @@ const COMMAND_TYPE_MC_MOVE = 'MC_MOVE';
 const COMMAND_TYPE_MC_TURN_FACE = 'MC_TURN_FACE';
 const COMMAND_TYPE_MC_KNEEL = 'MC_KNEEL';
 const COMMAND_TYPE_MC_STAND = 'MC_STAND';
+const COMMAND_TYPE_MC_SNAP_SHOT = 'MC_SNAP_SHOT';
+const COMMAND_TYPE_MC_AUTO_SHOT = 'MC_AUTO_SHOT';
+const COMMAND_TYPE_MC_AIMED_SHOT = 'MC_AIMED_SHOT';
 const COMMAND_TYPE_KNEEL = 'KNEEL';
 const COMMAND_TYPE_STAND = 'STAND';
 const COMMAND_TYPE_SNAP_SHOT = 'SNAP_SHOT';
@@ -133,6 +136,13 @@ const COMMAND_KEYS_MC_MOVE = new Set([...COMMAND_KEYS_COMMON, 'destination']);
 const COMMAND_KEYS_MC_TURN_FACE = new Set([...COMMAND_KEYS_COMMON, 'target']);
 const COMMAND_KEYS_MC_KNEEL = new Set([...COMMAND_KEYS_COMMON]);
 const COMMAND_KEYS_MC_STAND = new Set([...COMMAND_KEYS_COMMON]);
+const COMMAND_KEYS_MC_DIRECTED_FIRE = new Set([...COMMAND_KEYS_COMMON, 'target', 'active_hand']);
+
+const MC_DIRECTED_FIRE_COMMAND_TYPES = new Set([
+  COMMAND_TYPE_MC_SNAP_SHOT,
+  COMMAND_TYPE_MC_AUTO_SHOT,
+  COMMAND_TYPE_MC_AIMED_SHOT,
+]);
 const COMMAND_KEYS_HWP_TURN = new Set([...COMMAND_KEYS_COMMON, 'target', 'turn_part']);
 const COMMAND_KEYS_HWP_FIRE = new Set([
   ...COMMAND_KEYS_COMMON,
@@ -232,6 +242,9 @@ const FIRE_ACTION_IDS = {
   [COMMAND_TYPE_SNAP_SHOT]: 'snap',
   [COMMAND_TYPE_AUTO_SHOT]: 'auto',
   [COMMAND_TYPE_AIMED_SHOT]: 'aimed',
+  [COMMAND_TYPE_MC_SNAP_SHOT]: 'snap',
+  [COMMAND_TYPE_MC_AUTO_SHOT]: 'auto',
+  [COMMAND_TYPE_MC_AIMED_SHOT]: 'aimed',
 };
 
 const GRENADE_ACTION_IDS = {
@@ -422,6 +435,32 @@ function parseMcStandCommand(raw) {
   assert(Number.isInteger(raw.actor_unit_id) && raw.actor_unit_id >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
     'MC_STAND actor must be a mind-controlled hostile unit id');
   return parseBindingFields(raw);
+}
+
+function parseMcDirectedFireCommand(raw, commandType) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === commandType, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, COMMAND_KEYS_MC_DIRECTED_FIRE);
+  assert(Number.isInteger(raw.actor_unit_id) && raw.actor_unit_id >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'MC fire actor must be a mind-controlled hostile unit id');
+  assert(typeof raw.active_hand === 'string' && VALID_ACTIVE_HANDS.has(raw.active_hand), 'invalid active_hand');
+  const target = parseCoordinateObject(raw.target, 'target');
+  const binding = parseBindingFields(raw);
+  return { ...binding, activeHand: raw.active_hand, target };
+}
+
+function parseMcSnapShotCommand(raw) {
+  return parseMcDirectedFireCommand(raw, COMMAND_TYPE_MC_SNAP_SHOT);
+}
+
+function parseMcAutoShotCommand(raw) {
+  return parseMcDirectedFireCommand(raw, COMMAND_TYPE_MC_AUTO_SHOT);
+}
+
+function parseMcAimedShotCommand(raw) {
+  return parseMcDirectedFireCommand(raw, COMMAND_TYPE_MC_AIMED_SHOT);
 }
 
 function parseMoveCommand(raw) {
@@ -1616,6 +1655,15 @@ function parseTacticalCommand(raw) {
   if (raw.command_type === COMMAND_TYPE_MC_STAND) {
     return parseMcStandCommand(raw);
   }
+  if (raw.command_type === COMMAND_TYPE_MC_SNAP_SHOT) {
+    return parseMcSnapShotCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_MC_AUTO_SHOT) {
+    return parseMcAutoShotCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_MC_AIMED_SHOT) {
+    return parseMcAimedShotCommand(raw);
+  }
   if (raw.command_type === COMMAND_TYPE_HWP_TURN) {
     return parseHwpTurnCommand(raw);
   }
@@ -1785,6 +1833,27 @@ function validateMcActorListedForTurnFace(command, options = {}) {
   assert(listed.controlMode === 'ai', 'MC hostile must be AI-owned in commandBinding for MC_TURN_FACE');
   assert(listed.mcTurnFaceExecutionSupported === true,
     'binding must report mcTurnFaceExecutionSupported for MC_TURN_FACE');
+}
+
+function validateMcActorListedForFire(command, commandType, options = {}) {
+  if (!options || !options.commandBinding) {
+    return;
+  }
+  const binding = options.commandBinding;
+  assert(Array.isArray(binding.player_mc_hostiles), 'commandBinding.player_mc_hostiles required for MC fire');
+  const listed = binding.player_mc_hostiles.find((h) => h && h.id === command.actor_unit_id);
+  assert(listed, 'actor_unit_id must be listed in commandBinding.player_mc_hostiles');
+  assert(listed.controlMode === 'ai', 'MC hostile must be AI-owned in commandBinding for MC fire');
+  if (commandType === COMMAND_TYPE_MC_SNAP_SHOT) {
+    assert(listed.mcSnapShotExecutionSupported === true,
+      'binding must report mcSnapShotExecutionSupported');
+  } else if (commandType === COMMAND_TYPE_MC_AUTO_SHOT) {
+    assert(listed.mcAutoShotExecutionSupported === true,
+      'binding must report mcAutoShotExecutionSupported');
+  } else if (commandType === COMMAND_TYPE_MC_AIMED_SHOT) {
+    assert(listed.mcAimedShotExecutionSupported === true,
+      'binding must report mcAimedShotExecutionSupported');
+  }
 }
 
 function validateMcActorListedForKneel(command, options = {}) {
@@ -2008,6 +2077,48 @@ function validateMcStandAgainstSnapshot(command, tactical, snapshotSha256Lower, 
   return { snapshotId: computeSnapshotId(tactical), actor };
 }
 
+function validateMcDirectedFireAgainstSnapshot(command, tactical, snapshotSha256Lower, commandType, options = {}) {
+  if (commandType === COMMAND_TYPE_MC_SNAP_SHOT) {
+    parseMcSnapShotCommand(command);
+  } else if (commandType === COMMAND_TYPE_MC_AUTO_SHOT) {
+    parseMcAutoShotCommand(command);
+  } else {
+    parseMcAimedShotCommand(command);
+  }
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  assert(command.target.x < tactical.map.width
+    && command.target.y < tactical.map.height
+    && command.target.z < tactical.map.depth, 'target out of map bounds');
+  const actor = validateMcActorAgainstSnapshot(command, tactical);
+  validateMcActorListedForFire(command, commandType, options);
+  const activeHand = command.active_hand || command.activeHand;
+  const actionId = FIRE_ACTION_IDS[commandType];
+  const fireAction = findFireActionOnActor(actor, activeHand, actionId);
+  assert(fireAction, `weapon in active_hand does not support ${actionId} fire mode`);
+  assert(fireAction.usable !== false, 'fire mode not usable for weapon or ammunition');
+  assert(fireAction.canAffordTu !== false, 'insufficient TU for fire mode (fire TU only)');
+  const planningHint = {
+    ...buildFirePlanningHint(actor, activeHand, commandType),
+    composite: buildDirectedFireCompositeHint(actor, command.target, fireAction.tuCost),
+  };
+  return { snapshotId: computeSnapshotId(tactical), actor, planningHint };
+}
+
+function validateMcSnapShotAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  return validateMcDirectedFireAgainstSnapshot(
+    command, tactical, snapshotSha256Lower, COMMAND_TYPE_MC_SNAP_SHOT, options);
+}
+
+function validateMcAutoShotAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  return validateMcDirectedFireAgainstSnapshot(
+    command, tactical, snapshotSha256Lower, COMMAND_TYPE_MC_AUTO_SHOT, options);
+}
+
+function validateMcAimedShotAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  return validateMcDirectedFireAgainstSnapshot(
+    command, tactical, snapshotSha256Lower, COMMAND_TYPE_MC_AIMED_SHOT, options);
+}
+
 function isHwpTurnCommandType(commandType) {
   return commandType === COMMAND_TYPE_HWP_TURN;
 }
@@ -2163,12 +2274,24 @@ function handCostsKey(activeHand) {
   return null;
 }
 
+function resolveActorActionCosts(actor) {
+  if (actor && actor.actionCosts && actor.actionCosts.hands) {
+    return actor.actionCosts;
+  }
+  const obs = actor && actor.xcomControlledHostileObservationV1;
+  if (obs && obs.actionCosts && obs.actionCosts.hands) {
+    return obs.actionCosts;
+  }
+  return actor ? actor.actionCosts : null;
+}
+
 function findFireActionOnActor(actor, activeHand, actionId) {
   const key = handCostsKey(activeHand);
-  if (!key || !actor.actionCosts || !actor.actionCosts.hands || !actor.actionCosts.hands[key]) {
+  const actionCosts = resolveActorActionCosts(actor);
+  if (!key || !actionCosts || !actionCosts.hands || !actionCosts.hands[key]) {
     return null;
   }
-  const actions = actor.actionCosts.hands[key].actions;
+  const actions = actionCosts.hands[key].actions;
   if (!Array.isArray(actions)) {
     return null;
   }
@@ -2484,6 +2607,15 @@ function validateTacticalCommandAgainstSnapshot(command, tactical, snapshotSha25
   if (command && command.command_type === COMMAND_TYPE_MC_STAND) {
     return validateMcStandAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
   }
+  if (command && command.command_type === COMMAND_TYPE_MC_SNAP_SHOT) {
+    return validateMcSnapShotAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
+  if (command && command.command_type === COMMAND_TYPE_MC_AUTO_SHOT) {
+    return validateMcAutoShotAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
+  if (command && command.command_type === COMMAND_TYPE_MC_AIMED_SHOT) {
+    return validateMcAimedShotAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
   if (command && command.command_type === COMMAND_TYPE_HWP_TURN) {
     return validateHwpTurnAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
   }
@@ -2692,10 +2824,17 @@ module.exports = {
   isMcMoveCommandType,
   isMcTurnFaceCommandType,
   isMcKneelCommandType,
+  MC_DIRECTED_FIRE_COMMAND_TYPES,
   parseMcMoveCommand,
   parseMcTurnFaceCommand,
   parseMcKneelCommand,
   parseMcStandCommand,
+  parseMcSnapShotCommand,
+  parseMcAutoShotCommand,
+  parseMcAimedShotCommand,
+  validateMcSnapShotAgainstSnapshot,
+  validateMcAutoShotAgainstSnapshot,
+  validateMcAimedShotAgainstSnapshot,
   isHwpTurnCommandType,
   isHwpFireCommandType,
   parseTacticalCommand,

@@ -37,6 +37,9 @@ function mapPlayerMcHostileBindingRow(unit, soldierControlMirror) {
     mcMoveExecutionSupported: executionReady,
     mcTurnFaceExecutionSupported: executionReady,
     mcKneelExecutionSupported: executionReady,
+    mcSnapShotExecutionSupported: executionReady,
+    mcAutoShotExecutionSupported: executionReady,
+    mcAimedShotExecutionSupported: executionReady,
     observationPresent: obs != null,
   };
   if (obs) {
