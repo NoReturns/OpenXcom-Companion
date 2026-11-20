@@ -28,7 +28,9 @@
 
 **Implemented, not live-accepted:** `MELEE_ATTACK` (S3 deployed tonight; gate off by default).
 
-**Major intentional gaps (P1):** standalone `BA_USE` (scanner, mind probe), reaction-shot mode / TU reserve settings, END_TURN, mind-controlled roster soldier orders, HWP-as-actor parity.
+**Major intentional gaps (P1):** standalone `BA_USE` (scanner, mind probe), reaction-shot mode / TU reserve settings, END_TURN, mind-controlled roster soldier orders.
+
+**Open gaps (not excluded):** post–mind-control **hostile** assignment / `xcom_controlled_hostile_unit` remote actor model (see [ASTER-M1-CLOSEOUT-HYGIENE-01](./ASTER-M1-CLOSEOUT-HYGIENE-01.md)). HWP remote control is **shipped** (Nov 2026 live acceptance recorded in playbook + closeout doc).
 
 ---
 
@@ -58,7 +60,7 @@ Node mirror: `companion/m0-publish/lib/tactical-command.cjs` constants + `parseT
 | Alien intrinsic melee | AI | **NOT APPLICABLE** for Aster orders |
 | HWP / tank movement & fire | same BA_* as units | **PARTIAL** — if listed in `commandBinding.player_soldiers` (uncommon); no HWP-specific command |
 | Order mind-controlled alien | faction flip | **MISSING** — MC roster in `exceptions`, not `player_soldiers` |
-| Order XCOM-controlled hostile (post-MC alien) | engine flag | **PARTIAL** — MC changes faction; follow-up fire may work **INFERRED**; squad assignment **MISSING** |
+| Order XCOM-controlled hostile (post-MC alien) | engine flag | **OPEN** — MC changes faction; remote actor / binding for `xcom_controlled_hostile_unit` not defined; not intentionally excluded |
 | Blaster non-guided misuse | blocked from directed fire | **VERIFIED** — waypoint weapons excluded from SNAP/AIM/AUTO commands |
 
 ---
@@ -116,7 +118,7 @@ Columns: **Native** | **Snapshot** | **Node** | **Engine** | **Relay** | **Teste
 | HEAL | COMPLETE | COMPLETE (`medikitCharges`, wounds) | COMPLETE | COMPLETE | COMPLETE (`target_revived`) | COMPLETE + live deploy |
 | STIMULANT | COMPLETE | COMPLETE | COMPLETE | COMPLETE | COMPLETE | COMPLETE |
 | PAINKILLER | COMPLETE | COMPLETE | COMPLETE | COMPLETE | COMPLETE | COMPLETE |
-| Adjacent facing-sensitive heal | COMPLETE | PARTIAL | PARTIAL (advisory) | COMPLETE | COMPLETE | PARTIAL (sparse-map gap documented) |
+| Adjacent facing-sensitive heal | COMPLETE | PARTIAL | PARTIAL (advisory) | COMPLETE | COMPLETE | **UNVERIFIED** live (harness inconclusive; not a confirmed production defect) |
 
 ### Psi-Amp (WP10)
 

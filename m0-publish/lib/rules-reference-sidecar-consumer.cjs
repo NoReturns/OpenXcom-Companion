@@ -10,6 +10,7 @@ const {
 const RULES_REFERENCE_FILENAME = 'companion-rules-reference.json';
 const SOLDIER_CONTROL_FILENAME = 'companion-soldier-control.json';
 const COMMAND_TYPE_GUIDED_LAUNCH = 'GUIDED_LAUNCH';
+const COMMAND_TYPE_HWP_GUIDED_LAUNCH = 'HWP_GUIDED_LAUNCH';
 
 const RULES_REFERENCE_STATUS = Object.freeze({
   OK: 'ok',
@@ -63,7 +64,7 @@ function loadCampaignBindingFromCompanionDir(companionDir, existsSync, readFileS
 function publicReasonForRulesReferenceStatus(status, detail = null) {
   switch (status) {
     case RULES_REFERENCE_STATUS.MISSING:
-      return 'Local rules reference required (export with Ctrl+Shift+R on Geoscape, Basescape, or Battlescape).';
+      return 'Local rules reference required (refresh with F6 tactical snapshot or Ctrl+Shift+R in the current campaign).';
     case RULES_REFERENCE_STATUS.CAMPAIGN_BINDING_UNAVAILABLE:
       return 'Active campaign binding unavailable; cannot verify rules reference for guided launch.';
     case RULES_REFERENCE_STATUS.CAMPAIGN_MISMATCH:
@@ -156,7 +157,10 @@ function resolveSidecarRulesReferenceValidation(snapshotPath, io = {}) {
 
 function buildSidecarTacticalValidationOptions(snapshotPath, command, io = {}) {
   const rules = resolveSidecarRulesReferenceValidation(snapshotPath, io);
-  const needsRules = command && command.command_type === COMMAND_TYPE_GUIDED_LAUNCH;
+  const needsRules = command && (
+    command.command_type === COMMAND_TYPE_GUIDED_LAUNCH
+    || command.command_type === COMMAND_TYPE_HWP_GUIDED_LAUNCH
+  );
   if (needsRules && rules.status !== RULES_REFERENCE_STATUS.OK) {
     return {
       blocked: true,
@@ -177,6 +181,7 @@ module.exports = {
   RULES_REFERENCE_FILENAME,
   SOLDIER_CONTROL_FILENAME,
   COMMAND_TYPE_GUIDED_LAUNCH,
+  COMMAND_TYPE_HWP_GUIDED_LAUNCH,
   RULES_REFERENCE_STATUS,
   resolveRulesReferencePath,
   resolveSidecarRulesReferenceValidation,

@@ -13,10 +13,10 @@ const SCHEMA_VERSION = 1;
  * `openxcom.exe` and commit together with any doc updates — do not deploy a build whose
  * hash is not reflected here.
  *
- * Verified Win32 Release build (ASTER-M1-HWP-S5-1CP: FIRE relay gate on; build-s4j-rc;
- * prior pin fcd5a82e… FIRE code present but gate off).
+ * Verified Win32 Release build (ASTER-M1-RULES-REFERENCE-AUTO: F6 co-exports rules reference;
+ * build-s4j-rc; prior pin ec53b68e… HWP S6 guided).
  */
-const VERIFIED_BUILD_SHA256 = '5b52f5388f80bec4e7ea69d683601084a61324e40568b12286c2ae2287e136bc';
+const VERIFIED_BUILD_SHA256 = '997a968b9b6407e6f0b0ff96d0d89399ddfc8896f63fc369d19603c90c4462dd';
 
 const TERMINAL_RESULT_STATUSES = new Set(['REJECTED', 'COMPLETED', 'INTERRUPTED', 'FAILED']);
 

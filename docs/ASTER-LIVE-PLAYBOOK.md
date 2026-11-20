@@ -18,10 +18,10 @@ Repeat after every terminal `m0/tactical-result.json`:
 | 4 | **Authority** — actor ∈ `commandBinding.player_soldiers` **and** `soldierControl` `controlMode: ai` when `availability === "available"` (else operator AI list). No human-owned, MC roster, or off-binding ids (§ [Ownership](#soldier-ownership-ai-vs-human)). |
 | 5 | **One active command** — empty inbox; prior result terminal for your `command_id` + `session_id`; fresh four binding fields (§ [One active command](#one-active-command)). |
 | 6 | **Plan** — terrain from export only; advisory MOVE exposure before publish (§ [MOVE](#move-publish-verify-replan)). |
-| 7 | **Compose** — one of **19** `command_type` values; unique `command_id` (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`); no extra JSON keys (§ [Command schema](#command-schema)). |
+| 7 | **Compose** — one of **25** `command_type` values; unique `command_id` (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`); no extra JSON keys (§ [Command schema](#command-schema)). |
 | 8 | **Publish** `m0/tactical-command.json` only when inbox absent (GitHub connector or operator CLI on PC). |
 | 9 | **RETRIEVE** — operator or **AUTO RETRIEVE** (battlescape timer; § [Relay lifecycle](#relay-lifecycle-send-retrieve-daemon)). |
-| 10 | **Verify** terminal result; type-specific checks (MOVE / fire / DROP § [Results](#terminal-results)). |
+| 10 | **Verify** terminal result; type-specific checks (MOVE / fire / melee / DROP § [Results](#terminal-results)). |
 | 11 | **Refresh** binding from post-command `m0/state.json` or operator **SEND (F6)** before the next publish. |
 
 **Operator only:** launcher, in-game AI assign, **SEND**, **RETRIEVE**, **END TURN**. **`END_TURN` is not a supported remote command.**
@@ -163,8 +163,11 @@ Prefer [command-binding.cjs](../m0-publish/lib/command-binding.cjs) composers �
 | Inventory | `composeReloadCommand`, `composeUnloadCommand`, `composeInventoryMoveCommand`, `composePickupCommand`, `composeDropCommand` |
 | Medikit | `composeHealCommand`, `composeStimulantCommand`, `composePainKillerCommand` |
 | Psionics | `composePsiPanicCommand`, `composePsiMindControlCommand` |
+| Melee | `composeMeleeAttackCommand` |
 
 Workflow: read `commandBinding` from fresh `m0/state.json` → `buildCommandBinding(tactical, snapshot_sha256)` if needed → compose → write draft → `publish-tactical-command-once.cjs --dry-run` then `--publish`.
+
+**Runtime:** Canonical launcher `runtime/m0/Start-CompanionOpenXcom.ps1` sets `OPENXCOM_COMPANION_MELEE_EXECUTION=1` for the game process (process-local only). Without that env var the engine rejects `MELEE_ATTACK` with `MELEE_EXECUTION_DISABLED`.
 
 ---
 
@@ -239,6 +242,12 @@ Mirror: [fire-result-consumer.cjs](../m0-publish/lib/fire-result-consumer.cjs).
 
 Mirror: [guided-launch-result-consumer.cjs](../m0-publish/lib/guided-launch-result-consumer.cjs); sidecar gate: [rules-reference-sidecar-consumer.cjs](../m0-publish/lib/rules-reference-sidecar-consumer.cjs).
 
+### HWP (`HWP_MOVE`, `HWP_TURN`, `HWP_FIRE`, `HWP_GUIDED_LAUNCH`)
+
+- **Actor:** AI-owned row in `commandBinding.player_hwps` (not `player_soldiers`). Snapshot `friendlyHwpObservationV1` supplies fixed weapon ids for fire/guided commands.
+- **Owner live acceptance (2026-11-19 / 2026-11-20):** movement and turning; cannon and laser direct fire; Rocket Tank `HWP_FIRE`; Fusion Hovertank `HWP_GUIDED_LAUNCH` — terminal `COMPLETED` in live Battle Mode on promoted runtime.
+- **`COMPLETED`** confirms relay execution and TU/ammo bookkeeping, not guaranteed kills. Refresh F6 before the next HWP command.
+
 ### DROP
 
 Terminal `COMPLETED` may include `ground_placement`. Confirm scavenge via refreshed snapshot / `lastDropOutcomeBrief.verification_class` — not result status alone.
@@ -250,7 +259,7 @@ Mirror: [drop-result-ground-placement.cjs](../m0-publish/lib/drop-result-ground-
 - **Actor:** AI-owned `player_soldiers` id with medikit in the declared `active_hand` (`STR_LEFT_HAND` \| `STR_RIGHT_HAND`). `medikit_battle_item_id` must match snapshot `hands` / `inventory` rows (dedupe across slots).
 - **Target:** `target_unit_id` must be a **friendly roster soldier** (same export conventions as `player_soldiers`, including unconscious co-tile patients). Do not target hostiles, HWPs, or mind-controlled roster shells.
 - **Engine parity:** At execution the engine resolves the **native medikit target** from actor position and facing (`resolveNativeMedikitTarget`). Requested `target_unit_id` must match that native id or the relay returns **`MEDIKIT_APPLICATION_FAILED`** (no charge/TU/wound mutation).
-- **Co-tile** unconscious patients are the **certified live path** for `HEAL`. **Adjacent** facing-correct `HEAL` on mission terrain is **not** universally certified — treat adjacent medikit as high-risk until snapshot proves native target resolution.
+- **Co-tile** unconscious patients are the **certified live path** for `HEAL`. **Adjacent** facing-correct `HEAL` (often **`TURN_FACE`** then `HEAL`) is **UNVERIFIED** on live mission terrain — engine/harness evidence is inconclusive, not a confirmed production defect. Use fresh F6, correct facing, and fail-closed **`MEDIKIT_APPLICATION_FAILED`** until a live drill proves `COMPLETED`.
 - **`HEAL` only:** `body_part` integer **0–5** (`UnitBodyPart` — head, torso, right arm, left arm, right leg, left leg). Other medikit types omit `body_part`.
 - **`COMPLETED`:** expect `target_unit_id`, `tu_spent`, charge consumption; `HEAL` may include `target_revived` when applicable. **`REJECTED`** = binding/validation; **`MEDIKIT_APPLICATION_FAILED`** = native application refused after accept.
 
@@ -261,6 +270,15 @@ Mirror: [drop-result-ground-placement.cjs](../m0-publish/lib/drop-result-ground-
 - **`PSI_PANIC`:** engine panic attempt; terminal `COMPLETED` confirms execution, not guaranteed panic outcome — confirm via refreshed snapshot / `perceptionLog` psych events (historical UI only unless readiness confirms).
 - **`PSI_MIND_CONTROL`:** live-certified on promoted runtime; `COMPLETED` confirms relay execution and TU spend — confirm faction/control on **next F6** (`tactical.units[]`, exceptions). Absent converted unit from `units[]` at export does not retroactively void a terminal `COMPLETED`.
 - **`PSI_ATTACK_FAILED`** / non-`COMPLETED` — no mutation; use new `command_id` after fresh binding.
+
+### Melee (`MELEE_ATTACK`)
+
+- **Actor:** AI-owned `player_soldiers` id with **`BT_MELEE`** weapon (e.g. stun rod) in `active_hand`. `melee_weapon_battle_item_id` must match snapshot `hands` / `inventory`.
+- **Target:** **Genuine hostile** with fair-play visibility (`target_unit_id` on a confirmed observation — same conventions as psi targeting). Adjacent/range geometry is validated in-engine (`BA_HIT`); Node may emit advisories only.
+- **Execution:** async (`EXECUTING` during swing). Requires `OPENXCOM_COMPANION_MELEE_EXECUTION=1` on the runtime (canonical launcher sets this).
+- **`COMPLETED`:** confirms native melee chain finished and TU spent — **not** guaranteed hit: read `melee_hit`, optional `target_status` (`active` / `unconscious` / `dead`), `tu_spent`, `target_incapacitated`, `target_killed`. A hit with `target_status: active` does **not** by itself prove unconsciousness; confirm stun/kill on a fresh F6.
+- **`FAILED`:** idle battlefield with unresolved strike (e.g. reload mid-animation) — no second strike from relay; refresh binding before retry.
+- **`MELEE_EXECUTION_DISABLED`:** gate off — zero mutation; enable via canonical launcher, not global Windows env.
 
 ---
 
@@ -337,13 +355,16 @@ Copy **`snapshot_sha256`**, **`session_id`**, **`turn`**, **`state_version`** fr
 
 For other types: swap `command_type` / `command_id`, remove `destination` when absent, add fields from the table only — no other keys.
 
-### Parameter reference (19 types)
+### Parameter reference (25 types)
+
+Roster soldiers use `player_soldiers` + `soldierControl` `ai`. HWP commands use `commandBinding.player_hwps` (schema v2), actor id **≥ 1_000_000**, `controlMode: ai` on the HWP row.
 
 | `command_type` | Extra fields | Execution |
 |----------------|--------------|-----------|
 | `MOVE` | `destination`: `{x,y,z}` integers 0–255 | async |
 | `KNEEL` | — | sync |
 | `STAND` | — | sync |
+| `TURN_FACE` | `target` `{x,y,z}` bearing (not same tile as actor) | sync |
 | `SNAP_SHOT` | `target` `{x,y,z}`, `active_hand`: `STR_LEFT_HAND` \| `STR_RIGHT_HAND` | async |
 | `AUTO_SHOT` | same as snap | async |
 | `AIMED_SHOT` | same as snap | async |
@@ -360,6 +381,11 @@ For other types: swap `command_type` / `command_id`, remove `destination` when a
 | `PAINKILLER` | `target_unit_id`, `medikit_battle_item_id`, `active_hand` | sync |
 | `PSI_PANIC` | `target_unit_id` (hostile), `psi_amp_battle_item_id`, `active_hand` | sync |
 | `PSI_MIND_CONTROL` | `target_unit_id` (hostile), `psi_amp_battle_item_id`, `active_hand` | sync |
+| `MELEE_ATTACK` | `target_unit_id` (hostile), `melee_weapon_battle_item_id`, `active_hand` | async |
+| `HWP_MOVE` | `destination` `{x,y,z}` | async |
+| `HWP_TURN` | `target` `{x,y,z}`, `turn_part`: `body` \| `turret` | sync |
+| `HWP_FIRE` | `target` `{x,y,z}`, `fire_mode`: `snap` \| `aimed`, `weapon_battle_item_id` (fixed weapon id) | async |
+| `HWP_GUIDED_LAUNCH` | `weapon_battle_item_id`, `waypoints`: ordered `{x,y,z}`[] | async |
 
 **Carried slots:** `STR_RIGHT_HAND`, `STR_LEFT_HAND`, `STR_BELT`, `STR_BACK_PACK`, `STR_RIGHT_SHOULDER`, `STR_LEFT_SHOULDER`, `STR_RIGHT_LEG`, `STR_LEFT_LEG`. Hands use grid `0,0` for PICKUP destination.
 
@@ -489,11 +515,34 @@ For other types: swap `command_type` / `command_id`, remove `destination` when a
 
 For mind control, set `"command_type": "PSI_MIND_CONTROL"` and a fresh `command_id`.
 
+**MELEE_ATTACK** (adjacent visible hostile; stun rod or any wielded `BT_MELEE` item):
+
+```json
+{
+  "schema_version": 1,
+  "command_id": "melee-example-001",
+  "command_type": "MELEE_ATTACK",
+  "actor_unit_id": 28,
+  "target_unit_id": 1000001,
+  "melee_weapon_battle_item_id": 515,
+  "active_hand": "STR_RIGHT_HAND",
+  "snapshot_sha256": "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+  "session_id": "a1b2c3d4e5f6789012345678abcdef01",
+  "turn": 1,
+  "state_version": 7
+}
+```
+
 **Node compose (operator PC draft):**
 
 ```javascript
-const { buildCommandBinding, composeHealCommand, composePsiPanicCommand, composePsiMindControlCommand } =
-  require('./m0-publish/lib/command-binding.cjs');
+const {
+  buildCommandBinding,
+  composeHealCommand,
+  composePsiPanicCommand,
+  composePsiMindControlCommand,
+  composeMeleeAttackCommand,
+} = require('./m0-publish/lib/command-binding.cjs');
 const binding = state.commandBinding; // from parsed m0/state.json
 const heal = composeHealCommand(binding, {
   commandId: 'heal-live-001',
@@ -509,6 +558,13 @@ const panic = composePsiPanicCommand(binding, {
   targetUnitId: 1000000,
   psiAmpBattleItemId: 16,
   activeHand: 'STR_LEFT_HAND',
+});
+const melee = composeMeleeAttackCommand(binding, {
+  commandId: 'melee-live-001',
+  actorUnitId: 28,
+  targetUnitId: 1000001,
+  meleeWeaponBattleItemId: 515,
+  activeHand: 'STR_RIGHT_HAND',
 });
 ```
 
@@ -532,6 +588,9 @@ const panic = composePsiPanicCommand(binding, {
 | `GUIDED_LAUNCH` reference missing/stale | Operator exports Ctrl+Shift+R in current campaign, checks local reference and sidecar, then resends with new binding/id after rejection is retired |
 | `MEDIKIT_APPLICATION_FAILED` | Native target mismatch, mis-aim, or unusable medikit — refresh F6; fix facing/position; new `command_id`; do not assume healing occurred |
 | `PSI_ATTACK_FAILED` / psi `REJECTED` | LOS, TU, wrong target faction, or stale binding — refresh; pick `confirmed_current_los` hostile; new binding + id |
+| `MELEE_EXECUTION_DISABLED` | Launch game via canonical launcher (melee gate off otherwise) |
+| `MELEE_ATTACK_FAILED` / melee `FAILED` | Range, LOS, TU, or interrupted animation — refresh F6; new `command_id`; do not assume hit or stun |
+| Stale `EXECUTING` melee after reload | Same session: monitor may `FAILED` idle orphan; cross-session: `INTERRUPTED` — refresh binding; never republish same id expecting a re-swing |
 | Medikit adjacent `HEAL` | If native target does not resolve, use co-tile or operator UI — not a relay bypass |
 
 ---
@@ -561,4 +620,4 @@ Index: [README.md](../README.md).
 
 ---
 
-*M1: **19** types in `parseTacticalCommand` (includes `STAND`, `GUIDED_LAUNCH`, medikit `HEAL`/`STIMULANT`/`PAINKILLER`, psi `PSI_PANIC`/`PSI_MIND_CONTROL`). Stale scope doc: `M1-battlescape-capability-audit.md` (MOVE/KNEEL/SNAP only).*
+*M1: **20** types in `parseTacticalCommand` (includes `STAND`, `GUIDED_LAUNCH`, medikit `HEAL`/`STIMULANT`/`PAINKILLER`, psi `PSI_PANIC`/`PSI_MIND_CONTROL`, `MELEE_ATTACK`). Coverage audit: `m0-publish/docs/audits/ASTER-M1-TACTICAL-COMMAND-COVERAGE-AUDIT-01.md`.*

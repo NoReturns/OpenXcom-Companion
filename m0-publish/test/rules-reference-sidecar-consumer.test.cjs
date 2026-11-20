@@ -134,6 +134,24 @@ describe('rules-reference-sidecar-consumer', () => {
     }
   });
 
+  it('rejects HWP_GUIDED_LAUNCH when rules file missing', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rules-sidecar-hwp-miss-'));
+    const snapshotPath = path.join(root, 'tactical-live.yaml');
+    fs.writeFileSync(snapshotPath, blasterSnapshotYaml(), 'utf8');
+    fs.writeFileSync(
+      path.join(root, 'companion-soldier-control.json'),
+      JSON.stringify({ campaign_id: CAMPAIGN }),
+      'utf8',
+    );
+    try {
+      const gate = buildSidecarTacticalValidationOptions(snapshotPath, { command_type: 'HWP_GUIDED_LAUNCH' });
+      assert.equal(gate.blocked, true);
+      assert.equal(gate.rules.status, RULES_REFERENCE_STATUS.MISSING);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('rejects campaign mismatch', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rules-sidecar-mismatch-'));
     const snapshotPath = path.join(root, 'tactical-live.yaml');

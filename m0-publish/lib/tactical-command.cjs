@@ -41,6 +41,7 @@ const COMMAND_TYPE_MOVE = 'MOVE';
 const COMMAND_TYPE_HWP_MOVE = 'HWP_MOVE';
 const COMMAND_TYPE_HWP_TURN = 'HWP_TURN';
 const COMMAND_TYPE_HWP_FIRE = 'HWP_FIRE';
+const COMMAND_TYPE_HWP_GUIDED_LAUNCH = 'HWP_GUIDED_LAUNCH';
 const COMMAND_TYPE_KNEEL = 'KNEEL';
 const COMMAND_TYPE_STAND = 'STAND';
 const COMMAND_TYPE_SNAP_SHOT = 'SNAP_SHOT';
@@ -129,6 +130,11 @@ const COMMAND_KEYS_HWP_FIRE = new Set([
   ...COMMAND_KEYS_COMMON,
   'target',
   'fire_mode',
+  'weapon_battle_item_id',
+]);
+const COMMAND_KEYS_HWP_GUIDED_LAUNCH = new Set([
+  ...COMMAND_KEYS_COMMON,
+  'waypoints',
   'weapon_battle_item_id',
 ]);
 const HWP_FIRE_MODES = new Set(['snap', 'aimed']);
@@ -305,6 +311,25 @@ function parseHwpFireCommand(raw) {
     fireMode: raw.fire_mode,
     weaponBattleItemId: raw.weapon_battle_item_id,
     target,
+  };
+}
+
+function parseHwpGuidedLaunchCommand(raw) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === COMMAND_TYPE_HWP_GUIDED_LAUNCH, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, COMMAND_KEYS_HWP_GUIDED_LAUNCH);
+  assert(
+    Number.isInteger(raw.weapon_battle_item_id) && raw.weapon_battle_item_id >= 0,
+    'weapon_battle_item_id must be a non-negative integer',
+  );
+  const waypoints = parseWaypointSequence(raw.waypoints);
+  const binding = parseBindingFields(raw);
+  return {
+    ...binding,
+    weaponBattleItemId: raw.weapon_battle_item_id,
+    waypoints,
   };
 }
 
@@ -1520,6 +1545,9 @@ function parseTacticalCommand(raw) {
   if (raw.command_type === COMMAND_TYPE_HWP_FIRE) {
     return parseHwpFireCommand(raw);
   }
+  if (raw.command_type === COMMAND_TYPE_HWP_GUIDED_LAUNCH) {
+    return parseHwpGuidedLaunchCommand(raw);
+  }
   if (raw.command_type === COMMAND_TYPE_KNEEL) {
     return parseKneelCommand(raw);
   }
@@ -1690,6 +1718,28 @@ function validateHwpActorListedForHwpFire(command, options = {}) {
     'binding must report hwpFireExecutionSupported for HWP_FIRE publish validation');
 }
 
+function validateHwpActorListedForHwpGuidedLaunch(command, options = {}) {
+  if (!options || !options.commandBinding) {
+    return;
+  }
+  const binding = options.commandBinding;
+  assert(Array.isArray(binding.player_hwps), 'commandBinding.player_hwps required for HWP_GUIDED_LAUNCH');
+  const listed = binding.player_hwps.find((h) => h && h.id === command.actor_unit_id);
+  assert(listed, 'actor_unit_id must be listed in commandBinding.player_hwps');
+  assert(listed.controlMode === 'ai', 'HWP must be AI-owned in commandBinding for HWP_GUIDED_LAUNCH');
+  assert(listed.commandExecutionSupported === false,
+    'binding must keep HWP commandExecutionSupported false');
+  assert(listed.hwpGuidedLaunchExecutionSupported === true,
+    'binding must report hwpGuidedLaunchExecutionSupported for HWP_GUIDED_LAUNCH publish validation');
+}
+
+function findHwpLaunchActionOnWeapon(weapon) {
+  if (!weapon || !Array.isArray(weapon.actionCosts)) {
+    return null;
+  }
+  return weapon.actionCosts.find((entry) => entry && entry.id === GUIDED_LAUNCH_ACTION_ID) || null;
+}
+
 function validateHwpActorListedForHwpTurn(command, options = {}) {
   if (!options || !options.commandBinding) {
     return;
@@ -1775,6 +1825,10 @@ function isHwpFireCommandType(commandType) {
   return commandType === COMMAND_TYPE_HWP_FIRE;
 }
 
+function isHwpGuidedLaunchCommandType(commandType) {
+  return commandType === COMMAND_TYPE_HWP_GUIDED_LAUNCH;
+}
+
 function validateHwpFireAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
   const parsed = parseHwpFireCommand(command);
   validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
@@ -1803,6 +1857,40 @@ function validateHwpFireAgainstSnapshot(command, tactical, snapshotSha256Lower, 
     weaponBattleItemId: parsed.weaponBattleItemId,
     weapon,
     planningHint,
+  };
+}
+
+function validateHwpGuidedLaunchAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  const parsed = parseHwpGuidedLaunchCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  validateWaypointMapBounds(parsed.waypoints, tactical);
+  const actor = validateHwpActorAgainstSnapshot(command, tactical);
+  validateHwpActorListedForHwpGuidedLaunch(command, options);
+  const weapon = findHwpFixedWeapon(actor, parsed.weaponBattleItemId);
+  assert(weapon, 'weapon_battle_item_id must match exactly one fixed weapon on HWP actor');
+  assertHwpFixedWeaponHasFireableAmmo(weapon);
+  const launchAction = findHwpLaunchActionOnWeapon(weapon);
+  assertLaunchActionAffordable(launchAction);
+  const limit = resolveGuidedWaypointLimit(weapon, options.rulesReference);
+  assertWaypointCountWithinRulesetLimit(
+    parsed.waypoints.length,
+    limit,
+    options.rulesReference != null,
+  );
+  const planningHint = {
+    advisory: true,
+    waypointCount: parsed.waypoints.length,
+    launchTuCost: typeof launchAction?.tuCost === 'number' ? launchAction.tuCost : null,
+    note: 'Non-authoritative; engine ruleset enforces waypoint cap and trajectory.',
+  };
+  return {
+    snapshotId: computeSnapshotId(tactical),
+    actor,
+    waypoints: parsed.waypoints,
+    weaponBattleItemId: parsed.weaponBattleItemId,
+    weapon,
+    planningHint,
+    waypointLimit: limit,
   };
 }
 
@@ -2199,6 +2287,9 @@ function validateTacticalCommandAgainstSnapshot(command, tactical, snapshotSha25
   if (command && command.command_type === COMMAND_TYPE_HWP_FIRE) {
     return validateHwpFireAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
   }
+  if (command && command.command_type === COMMAND_TYPE_HWP_GUIDED_LAUNCH) {
+    return validateHwpGuidedLaunchAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
   if (command && command.command_type === COMMAND_TYPE_KNEEL) {
     return validateKneelAgainstSnapshot(command, tactical, snapshotSha256Lower);
   }
@@ -2322,6 +2413,7 @@ module.exports = {
   COMMAND_TYPE_HWP_MOVE,
   COMMAND_TYPE_HWP_TURN,
   COMMAND_TYPE_HWP_FIRE,
+  COMMAND_TYPE_HWP_GUIDED_LAUNCH,
   HWP_FIRE_MODES,
   COMMAND_TYPE_KNEEL,
   COMMAND_TYPE_STAND,
@@ -2363,6 +2455,7 @@ module.exports = {
   parseHwpMoveCommand,
   parseHwpTurnCommand,
   parseHwpFireCommand,
+  parseHwpGuidedLaunchCommand,
   parseKneelCommand,
   parseStandCommand,
   parseTurnFaceCommand,
@@ -2401,6 +2494,7 @@ module.exports = {
   validateHwpMoveAgainstSnapshot,
   validateHwpTurnAgainstSnapshot,
   validateHwpFireAgainstSnapshot,
+  validateHwpGuidedLaunchAgainstSnapshot,
   validateKneelAgainstSnapshot,
   validateStandAgainstSnapshot,
   validateTurnFaceAgainstSnapshot,

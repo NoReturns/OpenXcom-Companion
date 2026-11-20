@@ -337,6 +337,46 @@ function composeHwpFireCommand(binding, { commandId, actorUnitId, target, fireMo
   };
 }
 
+function composeHwpGuidedLaunchCommand(binding, { commandId, actorUnitId, weaponBattleItemId, waypoints }) {
+  const b = parseCommandBinding(binding);
+  assert(b.schema_version >= 2, 'HWP_GUIDED_LAUNCH requires commandBinding schema v2 with player_hwps');
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'HWP_GUIDED_LAUNCH actor must be a friendly HWP unit id');
+  assert(Number.isInteger(weaponBattleItemId) && weaponBattleItemId >= 0, 'weaponBattleItemId required');
+  assert(Array.isArray(waypoints) && waypoints.length > 0, 'waypoints must be a non-empty array');
+  assert(!b.player_soldiers.some((s) => s.id === actorUnitId),
+    'HWP_GUIDED_LAUNCH actor must not be listed in player_soldiers');
+  const hwp = (b.player_hwps ?? []).find((h) => h.id === actorUnitId);
+  assert(hwp, 'actorUnitId must be a listed player_hwp');
+  assert(hwp.controlMode === 'ai', 'HWP must be AI-owned in binding for remote HWP_GUIDED_LAUNCH');
+  const normalized = waypoints.map((wp, index) => {
+    assert(wp && Number.isInteger(wp.x), `waypoints[${index}].x required`);
+    assert(Number.isInteger(wp.y), `waypoints[${index}].y required`);
+    assert(Number.isInteger(wp.z), `waypoints[${index}].z required`);
+    assert(wp.x >= 0 && wp.x < b.map.width, `waypoints[${index}].x out of map`);
+    assert(wp.y >= 0 && wp.y < b.map.height, `waypoints[${index}].y out of map`);
+    assert(wp.z >= 0 && wp.z < b.map.depth, `waypoints[${index}].z out of map`);
+    return { x: wp.x, y: wp.y, z: wp.z };
+  });
+  const fixedWeapons = hwp.friendlyHwpObservationV1?.fixedWeapons ?? [];
+  const matches = fixedWeapons.filter((w) => w && w.battleItemId === weaponBattleItemId);
+  assert(matches.length === 1, 'weapon_battle_item_id must match exactly one fixed weapon on HWP');
+
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: 'HWP_GUIDED_LAUNCH',
+    actor_unit_id: actorUnitId,
+    weapon_battle_item_id: weaponBattleItemId,
+    waypoints: normalized,
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
 function composeHwpMoveCommand(binding, { commandId, actorUnitId, destination }) {
   const b = parseCommandBinding(binding);
   assert(b.schema_version >= 2, 'HWP_MOVE requires commandBinding schema v2 with player_hwps');
@@ -800,6 +840,7 @@ module.exports = {
   composeHwpMoveCommand,
   composeHwpTurnCommand,
   composeHwpFireCommand,
+  composeHwpGuidedLaunchCommand,
   composeKneelCommand,
   composeStandCommand,
   composeTurnFaceCommand,

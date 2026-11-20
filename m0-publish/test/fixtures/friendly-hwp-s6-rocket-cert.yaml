@@ -1,0 +1,114 @@
+# S6-0: STR_TANK_ROCKET_LAUNCHER + STR_HWP_ROCKETS (8-round magazine) for HWP_FIRE Node cert.
+schemaVersion: 5
+turn: 1
+side: 0
+selectedUnitId: 1
+missionContext:
+  schemaVersion: 1
+  missionType: STR_BASE_DEFENSE
+  missionClass: base_defense
+  siteKind: xcom_base
+map:
+  width: 64
+  height: 64
+  depth: 3
+terrain:
+  memoryNote: S6 rocket HWP fire certification fixture.
+  tiles:
+    - p: [12, 10, 1]
+      disc: 4
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+units:
+  - id: 1
+    faction: 0
+    originalFaction: 0
+    position: [1, 1, 0]
+    name: Roster Anchor
+    health: 50
+    timeUnits: 60
+    kneeled: false
+    activeHand: STR_RIGHT_HAND
+    hands:
+      right:
+        itemType: STR_RIFLE
+        battleType: 1
+        loaded:
+          ammoType: STR_RIFLE_CLIP
+          rounds: 20
+      left: null
+    inventory: []
+  - id: 1000002
+    faction: 0
+    originalFaction: 0
+    position: [12, 10, 1]
+    friendlyHwpObservationV1:
+      schemaVersion: 1
+      unitId: 1000002
+      hwpUnitType: STR_TANK_ROCKET_LAUNCHER
+      displayLabel: Tank/Rocket Launcher
+      position:
+        x: 12
+        y: 10
+        z: 1
+      bodyFacing:
+        direction: 4
+        label: south
+        vector:
+          dx: 0
+          dy: 1
+      turretFacing:
+        direction: 6
+        label: west
+        vector:
+          dx: -1
+          dy: 0
+      turretTypeId: 1
+      timeUnits: 120
+      maxTimeUnits: 120
+      health: 90
+      maxHealth: 90
+      kneeled: false
+      movementType: walk
+      capabilities:
+        bodyTurn: true
+        turretTurn: true
+      fixedWeapons:
+        - battleItemId: 5
+          itemType: STR_TANK_ROCKET_LAUNCHER
+          battleType: 1
+          researchUsable: true
+          inventorySlotType: hand
+          slot: STR_RIGHT_HAND
+          nestedAmmo:
+            battleItemId: 6
+            ammoType: STR_HWP_ROCKETS
+            rounds: 8
+            researchUsable: true
+          loaded:
+            ammoType: STR_HWP_ROCKETS
+            rounds: 8
+            battleItemId: 6
+            researchUsable: true
+          actionCosts:
+            - id: snap
+              actionType: 6
+              tuCost: 54
+              canAffordTu: true
+              usable: true
+              canAffordTuWithCurrentReservation: true
+            - id: aimed
+              actionType: 7
+              tuCost: 90
+              canAffordTu: true
+              usable: true
+              canAffordTuWithCurrentReservation: true
+eventLog:
+  sessionId: a1b2c3d4e5f6789012345678901234cd
+  oldestSeq: 0
+  latestSeq: 0
+  droppedCount: 0
+  events: []
