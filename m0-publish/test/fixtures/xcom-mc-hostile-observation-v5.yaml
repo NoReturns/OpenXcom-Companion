@@ -1,0 +1,50 @@
+# MC-02A: snapshot validator must accept xcomControlledHostileObservationV1 on assigned MC hostile.
+schemaVersion: 5
+turn: 3
+side: 0
+selectedUnitId: 1000042
+map:
+  width: 10
+  height: 10
+  depth: 1
+terrain:
+  memoryNote: Pinned MC observation fixture (not live export).
+  tiles:
+    - p: [5, 5, 0]
+      disc: 4
+      inLos: true
+      body:
+        noFloor: false
+        elev: 0
+        walkF: 4
+units:
+  - id: 1000042
+    faction: 0
+    originalFaction: 1
+    position: [5, 5, 0]
+    kneeled: false
+    observedUnitType: STR_SECTOID
+    displayLabel: Sectoid
+    xcomControlledHostileObservationV1:
+      schemaVersion: 1
+      unitId: 1000042
+      unitType: STR_SECTOID
+      originalFaction: 1
+      faction: 0
+      position: [5, 5, 0]
+      kneeled: false
+      timeUnits: 60
+      health: 26
+      hands:
+        right: null
+        left: null
+      inventory: []
+      readiness:
+        xcomControlledHostileAssigned: true
+        commandExecutionSupported: false
+eventLog:
+  sessionId: a1b2c3d4e5f6789012345678abcdef01
+  oldestSeq: 0
+  latestSeq: 0
+  droppedCount: 0
+  events: []

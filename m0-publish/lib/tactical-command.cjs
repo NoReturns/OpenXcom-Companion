@@ -42,6 +42,10 @@ const COMMAND_TYPE_HWP_MOVE = 'HWP_MOVE';
 const COMMAND_TYPE_HWP_TURN = 'HWP_TURN';
 const COMMAND_TYPE_HWP_FIRE = 'HWP_FIRE';
 const COMMAND_TYPE_HWP_GUIDED_LAUNCH = 'HWP_GUIDED_LAUNCH';
+const COMMAND_TYPE_MC_MOVE = 'MC_MOVE';
+const COMMAND_TYPE_MC_TURN_FACE = 'MC_TURN_FACE';
+const COMMAND_TYPE_MC_KNEEL = 'MC_KNEEL';
+const COMMAND_TYPE_MC_STAND = 'MC_STAND';
 const COMMAND_TYPE_KNEEL = 'KNEEL';
 const COMMAND_TYPE_STAND = 'STAND';
 const COMMAND_TYPE_SNAP_SHOT = 'SNAP_SHOT';
@@ -125,6 +129,10 @@ const COMMAND_KEYS_COMMON = new Set([
 
 const COMMAND_KEYS_MOVE = new Set([...COMMAND_KEYS_COMMON, 'destination']);
 const COMMAND_KEYS_HWP_MOVE = new Set([...COMMAND_KEYS_COMMON, 'destination']);
+const COMMAND_KEYS_MC_MOVE = new Set([...COMMAND_KEYS_COMMON, 'destination']);
+const COMMAND_KEYS_MC_TURN_FACE = new Set([...COMMAND_KEYS_COMMON, 'target']);
+const COMMAND_KEYS_MC_KNEEL = new Set([...COMMAND_KEYS_COMMON]);
+const COMMAND_KEYS_MC_STAND = new Set([...COMMAND_KEYS_COMMON]);
 const COMMAND_KEYS_HWP_TURN = new Set([...COMMAND_KEYS_COMMON, 'target', 'turn_part']);
 const COMMAND_KEYS_HWP_FIRE = new Set([
   ...COMMAND_KEYS_COMMON,
@@ -357,6 +365,63 @@ function parseHwpMoveCommand(raw) {
     ...binding,
     destination: { x: raw.destination.x, y: raw.destination.y, z: raw.destination.z },
   };
+}
+
+function parseMcMoveCommand(raw) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === COMMAND_TYPE_MC_MOVE, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, COMMAND_KEYS_MC_MOVE);
+  if (raw.destination === undefined || raw.destination === null) {
+    throw new ValidationError('destination required');
+  }
+  assert(isPlainObject(raw.destination), 'destination must be object with x, y, z');
+  assert(Number.isInteger(raw.actor_unit_id) && raw.actor_unit_id >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'MC_MOVE actor must be a mind-controlled hostile unit id');
+  assert(Number.isInteger(raw.destination.x) && raw.destination.x >= 0 && raw.destination.x <= 255, 'destination.x');
+  assert(Number.isInteger(raw.destination.y) && raw.destination.y >= 0 && raw.destination.y <= 255, 'destination.y');
+  assert(Number.isInteger(raw.destination.z) && raw.destination.z >= 0 && raw.destination.z <= 255, 'destination.z');
+  const binding = parseBindingFields(raw);
+  return {
+    ...binding,
+    destination: { x: raw.destination.x, y: raw.destination.y, z: raw.destination.z },
+  };
+}
+
+function parseMcTurnFaceCommand(raw) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === COMMAND_TYPE_MC_TURN_FACE, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, COMMAND_KEYS_MC_TURN_FACE);
+  assert(Number.isInteger(raw.actor_unit_id) && raw.actor_unit_id >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'MC_TURN_FACE actor must be a mind-controlled hostile unit id');
+  const target = parseCoordinateObject(raw.target, 'target');
+  const binding = parseBindingFields(raw);
+  return { ...binding, target };
+}
+
+function parseMcKneelCommand(raw) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === COMMAND_TYPE_MC_KNEEL, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, COMMAND_KEYS_MC_KNEEL);
+  assert(Number.isInteger(raw.actor_unit_id) && raw.actor_unit_id >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'MC_KNEEL actor must be a mind-controlled hostile unit id');
+  return parseBindingFields(raw);
+}
+
+function parseMcStandCommand(raw) {
+  assert(isPlainObject(raw), 'command must be an object');
+  assert(raw.schema_version === COMMAND_SCHEMA_VERSION, 'unsupported command schema_version');
+  assert(typeof raw.command_id === 'string' && COMMAND_ID_PATTERN.test(raw.command_id), 'invalid command_id');
+  assert(raw.command_type === COMMAND_TYPE_MC_STAND, 'unsupported command_type');
+  assertAllowedCommandKeys(raw, COMMAND_KEYS_MC_STAND);
+  assert(Number.isInteger(raw.actor_unit_id) && raw.actor_unit_id >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'MC_STAND actor must be a mind-controlled hostile unit id');
+  return parseBindingFields(raw);
 }
 
 function parseMoveCommand(raw) {
@@ -1539,6 +1604,18 @@ function parseTacticalCommand(raw) {
   if (raw.command_type === COMMAND_TYPE_HWP_MOVE) {
     return parseHwpMoveCommand(raw);
   }
+  if (raw.command_type === COMMAND_TYPE_MC_MOVE) {
+    return parseMcMoveCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_MC_TURN_FACE) {
+    return parseMcTurnFaceCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_MC_KNEEL) {
+    return parseMcKneelCommand(raw);
+  }
+  if (raw.command_type === COMMAND_TYPE_MC_STAND) {
+    return parseMcStandCommand(raw);
+  }
   if (raw.command_type === COMMAND_TYPE_HWP_TURN) {
     return parseHwpTurnCommand(raw);
   }
@@ -1659,6 +1736,68 @@ function validateHwpActorListedInPlayerHwps(command, options = {}) {
     'binding must keep HWP commandExecutionSupported false for non-MOVE HWP types');
   assert(listed.hwpMoveExecutionSupported === true,
     'binding must report hwpMoveExecutionSupported for HWP_MOVE publish validation');
+}
+
+function isMcHostileOperationalInSnapshot(actor) {
+  if (actor.battlefieldPlacement === 'carried_in_inventory') {
+    return false;
+  }
+  const obs = actor.xcomControlledHostileObservationV1;
+  if (obs && typeof obs.health === 'number') {
+    return obs.health > 0;
+  }
+  if (actor.condition && actor.condition.alive === false) {
+    return false;
+  }
+  return true;
+}
+
+function validateMcActorAgainstSnapshot(command, tactical) {
+  const actor = tactical.units.find((u) => u.id === command.actor_unit_id);
+  assert(actor, 'actor_unit_id not in snapshot');
+  assert(isXcomControlledHostileUnit(actor), 'MC command actor must be xcom-controlled hostile in snapshot');
+  assert(command.actor_unit_id >= MAX_ROSTER_UNIT_ID_EXCLUSIVE, 'MC actor id out of band');
+  assert(isMcHostileOperationalInSnapshot(actor), 'MC actor is not operational at export');
+  return actor;
+}
+
+function validateMcActorListedForMove(command, options = {}) {
+  if (!options || !options.commandBinding) {
+    return;
+  }
+  const binding = options.commandBinding;
+  assert(Array.isArray(binding.player_mc_hostiles), 'commandBinding.player_mc_hostiles required for MC_MOVE');
+  const listed = binding.player_mc_hostiles.find((h) => h && h.id === command.actor_unit_id);
+  assert(listed, 'actor_unit_id must be listed in commandBinding.player_mc_hostiles');
+  assert(listed.controlMode === 'ai', 'MC hostile must be AI-owned in commandBinding for MC_MOVE');
+  assert(listed.mcMoveExecutionSupported === true,
+    'binding must report mcMoveExecutionSupported for MC_MOVE publish validation');
+}
+
+function validateMcActorListedForTurnFace(command, options = {}) {
+  if (!options || !options.commandBinding) {
+    return;
+  }
+  const binding = options.commandBinding;
+  assert(Array.isArray(binding.player_mc_hostiles), 'commandBinding.player_mc_hostiles required for MC_TURN_FACE');
+  const listed = binding.player_mc_hostiles.find((h) => h && h.id === command.actor_unit_id);
+  assert(listed, 'actor_unit_id must be listed in commandBinding.player_mc_hostiles');
+  assert(listed.controlMode === 'ai', 'MC hostile must be AI-owned in commandBinding for MC_TURN_FACE');
+  assert(listed.mcTurnFaceExecutionSupported === true,
+    'binding must report mcTurnFaceExecutionSupported for MC_TURN_FACE');
+}
+
+function validateMcActorListedForKneel(command, options = {}) {
+  if (!options || !options.commandBinding) {
+    return;
+  }
+  const binding = options.commandBinding;
+  assert(Array.isArray(binding.player_mc_hostiles), 'commandBinding.player_mc_hostiles required for MC kneel/stand');
+  const listed = binding.player_mc_hostiles.find((h) => h && h.id === command.actor_unit_id);
+  assert(listed, 'actor_unit_id must be listed in commandBinding.player_mc_hostiles');
+  assert(listed.controlMode === 'ai', 'MC hostile must be AI-owned in commandBinding');
+  assert(listed.mcKneelExecutionSupported === true,
+    'binding must report mcKneelExecutionSupported for MC kneel/stand');
 }
 
 function findHwpFixedWeapon(actor, weaponBattleItemId) {
@@ -1805,6 +1944,18 @@ function isHwpMoveCommandType(commandType) {
   return commandType === COMMAND_TYPE_HWP_MOVE;
 }
 
+function isMcMoveCommandType(commandType) {
+  return commandType === COMMAND_TYPE_MC_MOVE;
+}
+
+function isMcTurnFaceCommandType(commandType) {
+  return commandType === COMMAND_TYPE_MC_TURN_FACE;
+}
+
+function isMcKneelCommandType(commandType) {
+  return commandType === COMMAND_TYPE_MC_KNEEL || commandType === COMMAND_TYPE_MC_STAND;
+}
+
 function validateHwpMoveAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
   parseHwpMoveCommand(command);
   validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
@@ -1815,6 +1966,46 @@ function validateHwpMoveAgainstSnapshot(command, tactical, snapshotSha256Lower, 
   validateHwpActorListedInPlayerHwps(command, options);
   const planningHint = buildHwpMovePlanningHint(actor);
   return { snapshotId: computeSnapshotId(tactical), actor, planningHint };
+}
+
+function validateMcMoveAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  parseMcMoveCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  assert(command.destination.x < tactical.map.width
+    && command.destination.y < tactical.map.height
+    && command.destination.z < tactical.map.depth, 'destination out of map bounds');
+  const actor = validateMcActorAgainstSnapshot(command, tactical);
+  validateMcActorListedForMove(command, options);
+  const planningHint = buildMovePlanningHint(actor);
+  return { snapshotId: computeSnapshotId(tactical), actor, planningHint };
+}
+
+function validateMcTurnFaceAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  const parsed = parseMcTurnFaceCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  assert(command.target.x < tactical.map.width
+    && command.target.y < tactical.map.height
+    && command.target.z < tactical.map.depth, 'target out of map bounds');
+  const actor = validateMcActorAgainstSnapshot(command, tactical);
+  validateMcActorListedForTurnFace(command, options);
+  const planningHint = buildTurnFacePlanningHint(actor, parsed.target);
+  return { snapshotId: computeSnapshotId(tactical), actor, target: parsed.target, planningHint };
+}
+
+function validateMcKneelAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  parseMcKneelCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  const actor = validateMcActorAgainstSnapshot(command, tactical);
+  validateMcActorListedForKneel(command, options);
+  return { snapshotId: computeSnapshotId(tactical), actor };
+}
+
+function validateMcStandAgainstSnapshot(command, tactical, snapshotSha256Lower, options = {}) {
+  parseMcStandCommand(command);
+  validateBindingAgainstSnapshot(command, tactical, snapshotSha256Lower);
+  const actor = validateMcActorAgainstSnapshot(command, tactical);
+  validateMcActorListedForKneel(command, options);
+  return { snapshotId: computeSnapshotId(tactical), actor };
 }
 
 function isHwpTurnCommandType(commandType) {
@@ -2281,6 +2472,18 @@ function validateTacticalCommandAgainstSnapshot(command, tactical, snapshotSha25
   if (command && command.command_type === COMMAND_TYPE_HWP_MOVE) {
     return validateHwpMoveAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
   }
+  if (command && command.command_type === COMMAND_TYPE_MC_MOVE) {
+    return validateMcMoveAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
+  if (command && command.command_type === COMMAND_TYPE_MC_TURN_FACE) {
+    return validateMcTurnFaceAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
+  if (command && command.command_type === COMMAND_TYPE_MC_KNEEL) {
+    return validateMcKneelAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
+  if (command && command.command_type === COMMAND_TYPE_MC_STAND) {
+    return validateMcStandAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
+  }
   if (command && command.command_type === COMMAND_TYPE_HWP_TURN) {
     return validateHwpTurnAgainstSnapshot(command, tactical, snapshotSha256Lower, options);
   }
@@ -2486,12 +2689,23 @@ module.exports = {
   isMeleeTacticalCommandType,
   isTurnFaceCommandType,
   isHwpMoveCommandType,
+  isMcMoveCommandType,
+  isMcTurnFaceCommandType,
+  isMcKneelCommandType,
+  parseMcMoveCommand,
+  parseMcTurnFaceCommand,
+  parseMcKneelCommand,
+  parseMcStandCommand,
   isHwpTurnCommandType,
   isHwpFireCommandType,
   parseTacticalCommand,
   commandDigest,
   validateMoveAgainstSnapshot,
   validateHwpMoveAgainstSnapshot,
+  validateMcMoveAgainstSnapshot,
+  validateMcTurnFaceAgainstSnapshot,
+  validateMcKneelAgainstSnapshot,
+  validateMcStandAgainstSnapshot,
   validateHwpTurnAgainstSnapshot,
   validateHwpFireAgainstSnapshot,
   validateHwpGuidedLaunchAgainstSnapshot,

@@ -3,6 +3,7 @@
 const { SNAPSHOT_SHA256_RE } = require('./briefing-request.cjs');
 const { isFriendlyRosterSoldier } = require('./unit-state-brief.cjs');
 const { buildPlayerHwpBindingRows } = require('./hwp-command-binding.cjs');
+const { buildPlayerMcHostileBindingRows } = require('./mc-hostile-command-binding.cjs');
 
 const MAX_ROSTER_UNIT_ID_EXCLUSIVE = 1_000_000;
 
@@ -13,8 +14,8 @@ function isOnMapPlayerSoldierForBinding(unit) {
     && unit.position.length === 3;
 }
 
-const BINDING_SCHEMA_VERSION = 2;
-const BINDING_SCHEMA_VERSIONS = new Set([1, 2]);
+const BINDING_SCHEMA_VERSION = 1;
+const BINDING_SCHEMA_VERSIONS = new Set([1, 2, 3]);
 
 class CommandBindingError extends Error {
   constructor(message) {
@@ -97,9 +98,11 @@ function buildCommandBinding(tactical, snapshotSha256Lower, options = {}) {
     .map(mapPlayerSoldierBindingRow);
 
   const playerHwps = buildPlayerHwpBindingRows(tactical, options.soldierControl ?? null);
+  const playerMcHostiles = buildPlayerMcHostileBindingRows(tactical, options.soldierControl ?? null);
+  const bindingSchemaVersion = playerMcHostiles.length > 0 ? 3 : (playerHwps.length > 0 ? 2 : 1);
 
   return {
-    schema_version: BINDING_SCHEMA_VERSION,
+    schema_version: bindingSchemaVersion,
     move_command_schema_version: 1,
     snapshot_sha256: snapshotSha256Lower,
     state_version: tactical.eventLog.latestSeq,
@@ -114,7 +117,9 @@ function buildCommandBinding(tactical, snapshotSha256Lower, options = {}) {
     selected_unit_id: tactical.selectedUnitId ?? null,
     player_soldiers: playerSoldiers,
     player_hwps: playerHwps,
+    player_mc_hostiles: playerMcHostiles,
     hwp_binding_schema_version: 1,
+    mc_hostile_binding_schema_version: 1,
     ownership_note: 'All soldiers default to human control locally. Remote commands cannot assign AI; owner must set companion-soldier-control.json.',
     player_hwps_note:
       'Friendly HWPs are never listed in player_soldiers. '
@@ -124,6 +129,10 @@ function buildCommandBinding(tactical, snapshotSha256Lower, options = {}) {
       'timeUnits is command-spendable TU only when set to a non-negative integer. '
       + 'null with timeUnitsApplicability not_command_applicable means the soldier is listed for identity/position '
       + 'but not command-actionable; use tactical.units and engineReportedTimeUnits (when present) for casualty/residual TU.',
+    player_mc_hostiles_note:
+      'X-COM mind-controlled aliens are never listed in player_soldiers or player_hwps. '
+      + 'Detailed xcomControlledHostileObservationV1 is exported only when assigned to Aster at F6. '
+      + 'commandExecutionSupported remains false until MC command execution ships (MC-02B).',
     destination_note: 'Choose destination from terrainMapBrief, terrainBrief, terrain-query relay, or visible snapshot geometry only.',
   };
 }
@@ -143,6 +152,15 @@ function parseCommandBinding(raw) {
       if (Object.prototype.hasOwnProperty.call(hwp, 'hwpTurnExecutionSupported')) {
         assert(typeof hwp.hwpTurnExecutionSupported === 'boolean', 'hwpTurnExecutionSupported must be boolean when present');
       }
+    }
+  }
+  if (raw.schema_version >= 3) {
+    assert(Array.isArray(raw.player_mc_hostiles), 'commandBinding.player_mc_hostiles required for schema v3');
+    for (const row of raw.player_mc_hostiles) {
+      assert(row && typeof row === 'object', 'player_mc_hostiles row must be object');
+      assert(Number.isInteger(row.id) && row.id > 0, 'player_mc_hostiles id must be positive');
+      assert(row.commandExecutionSupported === false, 'MC hostile commandExecutionSupported must be false');
+      assert(row.originalFaction === 1 && row.faction === 0, 'player_mc_hostiles row must be xcom-controlled hostile at export');
     }
   }
   assert(typeof raw.snapshot_sha256 === 'string' && SNAPSHOT_SHA256_RE.test(raw.snapshot_sha256),
@@ -399,6 +417,106 @@ function composeHwpMoveCommand(binding, { commandId, actorUnitId, destination })
     command_type: 'HWP_MOVE',
     actor_unit_id: actorUnitId,
     destination: { x: destination.x, y: destination.y, z: destination.z },
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
+function findListedAiMcHostile(binding, actorUnitId) {
+  assert(binding.schema_version >= 3, 'MC commands require commandBinding schema v3 with player_mc_hostiles');
+  const mc = (binding.player_mc_hostiles ?? []).find((h) => h.id === actorUnitId);
+  assert(mc, 'actorUnitId must be a listed player_mc_hostile');
+  assert(mc.controlMode === 'ai', 'MC hostile must be AI-owned in binding');
+  return mc;
+}
+
+function composeMcMoveCommand(binding, { commandId, actorUnitId, destination }) {
+  const b = parseCommandBinding(binding);
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'MC_MOVE actor must be a mind-controlled hostile unit id');
+  assert(destination && Number.isInteger(destination.x), 'destination required');
+  assert(!b.player_soldiers.some((s) => s.id === actorUnitId),
+    'MC_MOVE actor must not be listed in player_soldiers');
+  const mc = findListedAiMcHostile(b, actorUnitId);
+  assert(mc.mcMoveExecutionSupported === true, 'binding must report mcMoveExecutionSupported for MC_MOVE');
+  assert(destination.x >= 0 && destination.x < b.map.width, 'destination.x out of map');
+  assert(destination.y >= 0 && destination.y < b.map.height, 'destination.y out of map');
+  assert(destination.z >= 0 && destination.z < b.map.depth, 'destination.z out of map');
+
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: 'MC_MOVE',
+    actor_unit_id: actorUnitId,
+    destination: { x: destination.x, y: destination.y, z: destination.z },
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
+function composeMcTurnFaceCommand(binding, { commandId, actorUnitId, target }) {
+  const b = parseCommandBinding(binding);
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'MC_TURN_FACE actor must be a mind-controlled hostile unit id');
+  assert(target && Number.isInteger(target.x), 'target required');
+  const mc = findListedAiMcHostile(b, actorUnitId);
+  assert(mc.mcTurnFaceExecutionSupported === true, 'binding must report mcTurnFaceExecutionSupported');
+  assert(target.x >= 0 && target.x < b.map.width, 'target.x out of map');
+  assert(target.y >= 0 && target.y < b.map.height, 'target.y out of map');
+  assert(target.z >= 0 && target.z < b.map.depth, 'target.z out of map');
+
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: 'MC_TURN_FACE',
+    actor_unit_id: actorUnitId,
+    target: { x: target.x, y: target.y, z: target.z },
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
+function composeMcKneelCommand(binding, { commandId, actorUnitId }) {
+  const b = parseCommandBinding(binding);
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'MC_KNEEL actor must be a mind-controlled hostile unit id');
+  const mc = findListedAiMcHostile(b, actorUnitId);
+  assert(mc.mcKneelExecutionSupported === true, 'binding must report mcKneelExecutionSupported');
+
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: 'MC_KNEEL',
+    actor_unit_id: actorUnitId,
+    snapshot_sha256: b.snapshot_sha256,
+    session_id: b.session_id,
+    turn: b.turn,
+    state_version: b.state_version,
+  };
+}
+
+function composeMcStandCommand(binding, { commandId, actorUnitId }) {
+  const b = parseCommandBinding(binding);
+  assert(typeof commandId === 'string' && commandId.length > 0, 'commandId required');
+  assert(Number.isInteger(actorUnitId) && actorUnitId >= MAX_ROSTER_UNIT_ID_EXCLUSIVE,
+    'MC_STAND actor must be a mind-controlled hostile unit id');
+  const mc = findListedAiMcHostile(b, actorUnitId);
+  assert(mc.mcKneelExecutionSupported === true, 'binding must report mcKneelExecutionSupported for MC_STAND');
+
+  return {
+    schema_version: 1,
+    command_id: commandId,
+    command_type: 'MC_STAND',
+    actor_unit_id: actorUnitId,
     snapshot_sha256: b.snapshot_sha256,
     session_id: b.session_id,
     turn: b.turn,
@@ -838,6 +956,10 @@ module.exports = {
   parseCommandBinding,
   composeMoveCommand,
   composeHwpMoveCommand,
+  composeMcMoveCommand,
+  composeMcTurnFaceCommand,
+  composeMcKneelCommand,
+  composeMcStandCommand,
   composeHwpTurnCommand,
   composeHwpFireCommand,
   composeHwpGuidedLaunchCommand,

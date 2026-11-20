@@ -70,6 +70,7 @@ function buildPlayerHwpBindingRows(tactical, soldierControlMirror) {
 function assertControlAssignmentsDisjoint(doc) {
   const soldierIds = Object.keys(doc.assignments ?? {}).map((k) => Number.parseInt(k, 10));
   const hwpIds = Object.keys(doc.hwp_assignments ?? {}).map((k) => Number.parseInt(k, 10));
+  const mcIds = Object.keys(doc.mc_hostile_assignments ?? {}).map((k) => Number.parseInt(k, 10));
   for (const id of soldierIds) {
     if (id >= MAX_ROSTER_UNIT_ID_EXCLUSIVE) {
       return 'roster_assignment_id_out_of_band';
@@ -80,8 +81,19 @@ function assertControlAssignmentsDisjoint(doc) {
       return 'hwp_assignment_id_out_of_band';
     }
   }
-  for (const id of hwpIds) {
+  for (const id of mcIds) {
+    if (id < MAX_ROSTER_UNIT_ID_EXCLUSIVE) {
+      return 'mc_assignment_id_out_of_band';
+    }
+  }
+  const bandHigh = [...hwpIds, ...mcIds];
+  for (const id of bandHigh) {
     if (soldierIds.includes(id)) {
+      return 'assignment_id_collision';
+    }
+  }
+  for (const id of hwpIds) {
+    if (mcIds.includes(id)) {
       return 'assignment_id_collision';
     }
   }

@@ -146,6 +146,7 @@ const UNIT_FRIENDLY_WP2_KEYS = new Set(['facing', 'condition', 'readiness', 'fat
 const FATAL_WOUND_PART_COUNT = 6;
 const UNIT_OBSERVATION_KEYS = new Set(['observedUnitType', 'displayLabel']);
 const FRIENDLY_HWP_SPARSE_EXTRA_KEYS = new Set(['friendlyHwpObservationV1']);
+const XCOM_MC_HOSTILE_SPARSE_EXTRA_KEYS = new Set(['xcomControlledHostileObservationV1']);
 const UNIT_FACING_KEYS = new Set(['direction', 'label', 'vector', 'turning']);
 const UNIT_FACING_VECTOR_KEYS = new Set(['dx', 'dy']);
 const ALLOWED_FACING_LABELS = new Set([
@@ -656,6 +657,7 @@ function allowedUnitKeys(schemaVersion) {
   for (const k of UNIT_FRIENDLY_V3_KEYS) keys.add(k);
   for (const k of UNIT_FRIENDLY_WP2_KEYS) keys.add(k);
   for (const k of FRIENDLY_HWP_SPARSE_EXTRA_KEYS) keys.add(k);
+  for (const k of XCOM_MC_HOSTILE_SPARSE_EXTRA_KEYS) keys.add(k);
   return keys;
 }
 
@@ -1607,6 +1609,27 @@ function validateUnit(raw, index, schemaVersion = 2) {
     }
   } else if (Object.prototype.hasOwnProperty.call(raw, 'friendlyHwpObservationV1')) {
     throw new ValidationError(`units[${index}] friendlyHwpObservationV1 is only allowed on friendly HWP units`);
+  }
+
+  if (xcomControlledHostile) {
+    const allowedMcKeys = new Set([...UNIT_BASE_KEYS, ...UNIT_OBSERVATION_KEYS, 'kneeled', 'facing', ...XCOM_MC_HOSTILE_SPARSE_EXTRA_KEYS]);
+    if (Object.prototype.hasOwnProperty.call(raw, 'xcomControlledHostileObservationV1')) {
+      const obs = raw.xcomControlledHostileObservationV1;
+      assert(isPlainObject(obs), `units[${index}].xcomControlledHostileObservationV1 must be an object`);
+      assert(obs.schemaVersion === 1, `units[${index}].xcomControlledHostileObservationV1.schemaVersion must be 1`);
+      assert(Number.isInteger(obs.unitId), `units[${index}].xcomControlledHostileObservationV1.unitId required`);
+      assert(obs.unitId === unit.id, `units[${index}].xcomControlledHostileObservationV1.unitId must match unit id`);
+      assert(obs.originalFaction === FACTION_HOSTILE && obs.faction === FACTION_PLAYER,
+        `units[${index}].xcomControlledHostileObservationV1 must reflect xcom-controlled hostile state`);
+      unit.xcomControlledHostileObservationV1 = obs;
+    }
+    for (const key of Object.keys(raw)) {
+      if (!allowedMcKeys.has(key)) {
+        throw new ValidationError(`units[${index}] xcom-controlled hostile unknown field: ${key}`);
+      }
+    }
+  } else if (Object.prototype.hasOwnProperty.call(raw, 'xcomControlledHostileObservationV1')) {
+    throw new ValidationError(`units[${index}] xcomControlledHostileObservationV1 is only allowed on X-COM-controlled hostile units assigned to Aster`);
   }
 
   return unit;

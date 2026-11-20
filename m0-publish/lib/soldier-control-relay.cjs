@@ -2,14 +2,15 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { isFriendlyRosterSoldier, isFriendlyHwpUnit } = require('./unit-state-brief.cjs');
+const { isFriendlyRosterSoldier, isFriendlyHwpUnit, isXcomControlledHostileUnit } = require('./unit-state-brief.cjs');
+const { listXcomControlledMcHostileIdsOnMap } = require('./mc-hostile-command-binding.cjs');
 const {
   assertControlAssignmentsDisjoint,
   isOnMapFriendlyHwpForBinding,
 } = require('./hwp-command-binding.cjs');
 
-const SOLDIER_CONTROL_SCHEMA_VERSION = 2;
-const SOLDIER_CONTROL_SCHEMA_VERSIONS = new Set([1, 2]);
+const SOLDIER_CONTROL_SCHEMA_VERSION = 3;
+const SOLDIER_CONTROL_SCHEMA_VERSIONS = new Set([1, 2, 3]);
 const MAX_ROSTER_UNIT_ID_EXCLUSIVE = 1_000_000;
 const SESSION_ID_RE = /^[a-f0-9]{32}$/;
 const DURABLE_ID_RE = /^[a-f0-9]{32}$/;
@@ -56,6 +57,7 @@ function parseSoldierControlDocument(jsonText) {
     }
     normalizedAssignments[id] = 'ai';
   }
+  const normalizedMcHostileAssignments = {};
   const normalizedHwpAssignments = {};
   if (Object.prototype.hasOwnProperty.call(value, 'hwp_assignments')) {
     if (value.schema_version < 2) {
@@ -74,6 +76,25 @@ function parseSoldierControlDocument(jsonText) {
         throw new SoldierControlParseError('invalid_assignment_mode');
       }
       normalizedHwpAssignments[id] = 'ai';
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(value, 'mc_hostile_assignments')) {
+    if (value.schema_version < 3) {
+      throw new SoldierControlParseError('mc_hostile_assignments_requires_schema_v3');
+    }
+    const mcAssignments = value.mc_hostile_assignments;
+    if (!mcAssignments || typeof mcAssignments !== 'object' || Array.isArray(mcAssignments)) {
+      throw new SoldierControlParseError('invalid_mc_hostile_assignments');
+    }
+    for (const [key, mode] of Object.entries(mcAssignments)) {
+      const id = Number.parseInt(String(key), 10);
+      if (!Number.isInteger(id) || id < MAX_ROSTER_UNIT_ID_EXCLUSIVE) {
+        throw new SoldierControlParseError('invalid_assignment_mc_hostile_id');
+      }
+      if (mode !== 'ai') {
+        throw new SoldierControlParseError('invalid_assignment_mode');
+      }
+      normalizedMcHostileAssignments[id] = 'ai';
     }
   }
   let campaignId;
@@ -97,6 +118,7 @@ function parseSoldierControlDocument(jsonText) {
     tactical_battle_id: tacticalBattleId,
     assignments: normalizedAssignments,
     hwp_assignments: normalizedHwpAssignments,
+    mc_hostile_assignments: normalizedMcHostileAssignments,
   };
 }
 
@@ -229,6 +251,7 @@ function buildSoldierControlMirror(tactical, options = {}) {
   }
 
   const hwpIds = new Set(listFriendlyHwpIdsOnMap(tactical));
+  const mcIds = new Set(listXcomControlledMcHostileIdsOnMap(tactical));
   for (const assignedId of Object.keys(doc.hwp_assignments ?? {})) {
     const id = Number(assignedId);
     const unit = tactical.units.find((u) => u.id === id);
@@ -236,6 +259,18 @@ function buildSoldierControlMirror(tactical, options = {}) {
       return buildUnavailableSoldierControl({
         capturedAt,
         reason: 'unknown_assignment_hwp_id',
+        sessionId: battleSessionId,
+      });
+    }
+  }
+
+  for (const assignedId of Object.keys(doc.mc_hostile_assignments ?? {})) {
+    const id = Number(assignedId);
+    const unit = tactical.units.find((u) => u.id === id);
+    if (!mcIds.has(id) || !unit || !isXcomControlledHostileUnit(unit)) {
+      return buildUnavailableSoldierControl({
+        capturedAt,
+        reason: 'unknown_assignment_mc_hostile_id',
         sessionId: battleSessionId,
       });
     }
@@ -277,6 +312,13 @@ function buildSoldierControlMirror(tactical, options = {}) {
       controlMode: doc.hwp_assignments?.[id] === 'ai' ? 'ai' : 'human',
     }));
 
+  const mcHostiles = [...mcIds]
+    .sort((a, b) => a - b)
+    .map((id) => ({
+      id,
+      controlMode: doc.mc_hostile_assignments?.[id] === 'ai' ? 'ai' : 'human',
+    }));
+
   const mirror = {
     schema_version: doc.schema_version,
     availability: 'available',
@@ -288,7 +330,8 @@ function buildSoldierControlMirror(tactical, options = {}) {
     snapshot_session_id: battleSessionId,
     soldiers,
     hwps,
-    note: 'Read-only mirror at publish time; remote relay cannot assign control. HWP defaults are human unless listed in hwp_assignments.',
+    mcHostiles,
+    note: 'Read-only mirror at publish time; remote relay cannot assign control. HWP defaults are human unless listed in hwp_assignments; MC hostiles unless mc_hostile_assignments.',
   };
   if (doc.campaign_id) {
     mirror.campaign_id = doc.campaign_id;

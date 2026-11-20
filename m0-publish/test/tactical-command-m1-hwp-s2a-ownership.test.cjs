@@ -92,7 +92,7 @@ describe('M1-HWP-S2a ownership and binding', () => {
     assert.equal(mirror.availability, 'available');
     assert.equal(mirror.hwps.find((h) => h.id === 1_000_000).controlMode, 'human');
     const binding = buildCommandBinding(tactical, DIGEST, { soldierControl: mirror });
-    assert.equal(binding.schema_version, BINDING_SCHEMA_VERSION);
+    assert.equal(binding.schema_version, 2);
     const hwp = binding.player_hwps.find((h) => h.id === 1_000_000);
     assert.equal(hwp.controlMode, 'human');
     assert.equal(hwp.commandExecutionSupported, false);
